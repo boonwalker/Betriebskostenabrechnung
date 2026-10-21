@@ -1,17 +1,22 @@
 # Betriebskostenabrechnung
 
-Web-App für private Vermieter: Mietobjekte und Mieter verwalten und die jährliche Betriebskostenabrechnung erstellen, inklusive Nachzahlung oder Guthaben je Mieter und druckfertigem Anschreiben.
+Web-App für private Vermieter: Mietobjekte wie ein Depot im Blick behalten, Mieter verwalten und die jährliche Betriebskostenabrechnung erstellen, inklusive Nachzahlung oder Guthaben je Mieter und druckfertigem Anschreiben.
 
 ## Funktionen
 
-- **Objekte & Wohneinheiten** mit Wohnflächen
-- **Mieter** mit Ein-/Auszug, Personenzahl und monatlicher Vorauszahlung (auch Mieterwechsel im Jahr)
+- **Portfolio-Startseite** mit einer Kachel je Objekt: Marktwert, Wertentwicklung seit Kauf, Wertverlauf, Mietrendite, monatlicher Cashflow und Vermietungsstand. Oben steht das Nettovermögen über alle Objekte.
+- **Objektdetailseite** mit Wertentwicklung (Bewertungen erfassen), Einheiten und Mietern, Wirtschaftlichkeitsrechnung, steuerlicher Schätzung (Anlage V mit AfA nach Baujahr), Finanzierung und Abrechnungen. Fehlende Angaben werden als Checkliste angezeigt.
+- **Objektdaten**: Art (Mehrfamilienhaus, Ein-/Zweifamilienhaus, Eigentumswohnung), Baujahr, Kaufpreis und Kaufnebenkosten, Anteil Grund und Boden, Darlehen, Hausgeld (Verwaltervergütung, Erhaltungsrücklage) und weitere nicht umlagefähige Kosten
+- **Mieter** mit Ein-/Auszug, Personenzahl, Kaution und Mietverlauf (Kaltmiete, Betriebs- und Heizkostenvorauszahlung, Warmmiete) – Mieterhöhungen und Anpassungen nach § 560 BGB werden monatsgenau berücksichtigt
 - **Abrechnung** mit allen 17 Kostenarten nach § 2 BetrKV und den Umlageschlüsseln Wohnfläche, Personen, Wohneinheiten, Verbrauch und direkte Zuordnung
   - tagesgenaue Aufteilung bei Ein- und Auszug
   - Leerstand bleibt beim Vermieter und wird nicht auf andere Mieter verteilt
   - Vorauszahlungen werden aus dem Mietvertrag berechnet und können durch tatsächlich gezahlte Beträge ersetzt werden
   - Hinweis auf die Abrechnungsfrist (§ 556 Abs. 3 BGB)
   - Kostenpositionen aus dem Vorjahr übernehmen
+  - Heizkosten nach HeizkostenV: Grundkosten nach Wohnfläche und 50–70 % nach Verbrauch
+  - CO2-Kostenaufteilung nach dem Stufenmodell des CO2KostAufG: Der Vermieteranteil wird abgezogen und im Anschreiben ausgewiesen
+  - Arbeitskosten nach § 35a EStG je Mieter (haushaltsnahe Dienstleistungen und Handwerkerleistungen)
 - **Belege hochladen** (PDF oder Foto): Claude liest Rechnungen und Bescheide aus, ordnet sie der Kostenart zu und trennt nicht umlagefähige Anteile ab (z. B. Reparaturen). Jede Position wird vor der Übernahme angezeigt und kann geändert werden. Dafür braucht man einen eigenen Anthropic-API-Schlüssel.
 - **Anschreiben je Mieter** zum Drucken oder als PDF, optional mit Anpassung der Vorauszahlung (§ 560 Abs. 4 BGB)
 - **Datenschutz**: Alle Daten bleiben lokal im Browser. Sicherung und Wiederherstellung über eine JSON-Datei.
@@ -25,8 +30,8 @@ npm test           # Tests der Abrechnungslogik
 npm run build      # Produktions-Build nach dist/
 ```
 
-Die Berechnung steckt in `src/lib/calc.ts` und ist von der Oberfläche getrennt. Das Auslesen der Belege steckt in `src/lib/extract.ts`.
+Die Abrechnung steckt in `src/lib/calc.ts`, die Renditeberechnung in `src/lib/finance.ts` – beide getrennt von der Oberfläche. Das Auslesen der Belege steckt in `src/lib/extract.ts`. Gespeicherte Daten älterer Versionen werden beim Laden automatisch übernommen (`migrate` in `src/lib/model.ts`).
 
 ## Hinweis
 
-Die App ist eine Hilfe beim Erstellen, aber keine Rechtsberatung. Prüfe Umlageschlüssel und Kostenarten anhand deines Mietvertrags. Heizkosten müssen nach der HeizkostenV zu 50–70 % nach Verbrauch verteilt werden. Dafür legst du zwei Positionen an, eine nach Wohnfläche und eine nach Verbrauch, oder übernimmst die Werte aus der Abrechnung deines Messdienstleisters.
+Die App ist eine Hilfe beim Erstellen, aber keine Rechts- oder Steuerberatung. Prüfe Umlageschlüssel und Kostenarten anhand deines Mietvertrags. Die steuerliche Betrachtung ist eine vereinfachte Jahresschätzung (z. B. ohne Sonder-AfA, Erhaltungsaufwand-Verteilung nach § 82b EStDV oder Zufluss-/Abflussprinzip).

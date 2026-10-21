@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { PageProps } from "../components/ui";
+import { NumberInput, type PageProps } from "../components/ui";
 import { demoData } from "../lib/demo";
 import { emptyData, exportData, parseBackup } from "../lib/store";
 import type { AppData, Landlord } from "../lib/types";
@@ -56,6 +56,21 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
           Anschrift
           <textarea rows={2} value={landlord.address} onChange={(e) => setLandlord({ address: e.target.value })} />
         </label>
+      </div>
+
+      <div className="card stack">
+        <h2>Steuern</h2>
+        <label className="field" style={{ maxWidth: 320 }}>
+          Persönlicher Grenzsteuersatz (%)
+          <NumberInput
+            value={data.settings.marginalTaxRate}
+            onChange={(v) => update((d) => ({ ...d, settings: { ...d.settings, marginalTaxRate: Math.min(50, Math.max(0, v)) } }))}
+          />
+        </label>
+        <p className="muted small">
+          Für die Rendite nach Steuern: Steuersatz auf den letzten verdienten Euro, inklusive Solidaritätszuschlag und Kirchensteuer (meist 30–47 %). Steht
+          sinngemäß in deinem letzten Steuerbescheid oder lässt sich mit dem Rechner des BMF ermitteln.
+        </p>
       </div>
 
       <div className="card stack">

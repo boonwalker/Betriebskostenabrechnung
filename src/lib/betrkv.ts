@@ -11,9 +11,9 @@ export const COST_CATEGORIES: CostCategory[] = [
   { no: 1, label: "Grundsteuer", defaultKey: "area" },
   { no: 2, label: "Wasserversorgung", defaultKey: "persons" },
   { no: 3, label: "Entwässerung (Abwasser, Niederschlagswasser)", defaultKey: "persons" },
-  { no: 4, label: "Heizung", defaultKey: "consumption" },
-  { no: 5, label: "Warmwasser", defaultKey: "consumption" },
-  { no: 6, label: "Verbundene Heizungs- und Warmwasserversorgung", defaultKey: "consumption" },
+  { no: 4, label: "Heizung", defaultKey: "heating" },
+  { no: 5, label: "Warmwasser", defaultKey: "heating" },
+  { no: 6, label: "Verbundene Heizungs- und Warmwasserversorgung", defaultKey: "heating" },
   { no: 7, label: "Aufzug", defaultKey: "area" },
   { no: 8, label: "Straßenreinigung und Müllbeseitigung", defaultKey: "persons" },
   { no: 9, label: "Gebäudereinigung und Ungezieferbekämpfung", defaultKey: "area" },
@@ -36,5 +36,9 @@ export const KEY_LABELS: Record<AllocationKey, string> = {
   persons: "Personen",
   units: "Wohneinheiten",
   consumption: "Verbrauch",
+  heating: "HeizkostenV (Grund-/Verbrauchskosten)",
   direct: "Direkt zugeordnet",
 };
+
+/** Kostenarten für Heizung und Warmwasser (HeizkostenV, CO2KostAufG) */
+export const isHeatingCategory = (no: number) => no >= 4 && no <= 6;

@@ -61,6 +61,8 @@ export default function ReceiptImport({
               amount: it.allocableAmount,
               key: it.recommendedKey,
               note: it.reasoning,
+              ...(it.laborKind !== "none" && it.laborCost > 0 ? { laborCost: it.laborCost, laborKind: it.laborKind } : {}),
+              ...(it.co2Cost > 0 ? { co2Cost: it.co2Cost, co2Kg: it.co2Kg || undefined } : {}),
               source: file.name,
             })),
           }),
@@ -79,7 +81,7 @@ export default function ReceiptImport({
     onAdd(
       selected.map(({ include: _include, ...item }) => ({
         ...item,
-        consumption: item.key === "consumption" ? {} : undefined,
+        consumption: item.key === "consumption" || item.key === "heating" ? {} : undefined,
         directUnitId: item.key === "direct" ? property.units[0]?.id : undefined,
       })),
     );
@@ -174,6 +176,8 @@ export default function ReceiptImport({
                               <div className="muted small">
                                 {raw.reasoning}
                                 {raw.nonAllocableAmount > 0 && ` · nicht umlagefähig: ${formatEUR(raw.nonAllocableAmount)}`}
+                                {raw.laborCost > 0 && ` · § 35a: ${formatEUR(raw.laborCost)}`}
+                                {raw.co2Cost > 0 && ` · CO2: ${formatEUR(raw.co2Cost)}`}
                               </div>
                             </td>
                             <td style={{ width: 120 }}>

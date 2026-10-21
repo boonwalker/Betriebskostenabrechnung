@@ -5,7 +5,7 @@ import { COST_CATEGORIES } from "./betrkv";
 import { isSupportedFile, type ImageType } from "./files";
 import type { AllocationKey } from "./types";
 
-const KEYS = ["area", "persons", "units", "consumption", "direct"] as const satisfies readonly AllocationKey[];
+const KEYS = ["area", "persons", "units", "consumption", "heating", "direct"] as const satisfies readonly AllocationKey[];
 
 const ExtractionSchema = z.object({
   vendor: z.string(),
@@ -20,6 +20,10 @@ const ExtractionSchema = z.object({
       allocableAmount: z.number(),
       nonAllocableAmount: z.number(),
       recommendedKey: z.enum(KEYS),
+      laborCost: z.number(),
+      laborKind: z.enum(["none", "service", "craftsman"]),
+      co2Cost: z.number(),
+      co2Kg: z.number(),
       reasoning: z.string(),
     }),
   ),
@@ -43,7 +47,18 @@ const JSON_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["description", "category", "allocableAmount", "nonAllocableAmount", "recommendedKey", "reasoning"],
+        required: [
+          "description",
+          "category",
+          "allocableAmount",
+          "nonAllocableAmount",
+          "recommendedKey",
+          "laborCost",
+          "laborKind",
+          "co2Cost",
+          "co2Kg",
+          "reasoning",
+        ],
         properties: {
           description: { type: "string" },
           category: { type: "integer", description: "Nummer der Kostenart nach § 2 BetrKV (1-17)" },
@@ -53,6 +68,17 @@ const JSON_SCHEMA = {
             description: "nicht umlagefähiger Bruttobetrag in Euro (z. B. Reparatur, Instandhaltung, Verwaltung)",
           },
           recommendedKey: { type: "string", enum: [...KEYS] },
+          laborCost: {
+            type: "number",
+            description: "im umlagefähigen Betrag enthaltene Arbeits-, Maschinen- und Fahrtkosten inkl. USt nach § 35a EStG, 0 wenn nicht ausgewiesen",
+          },
+          laborKind: {
+            type: "string",
+            enum: ["none", "service", "craftsman"],
+            description: "service = haushaltsnahe Dienstleistung (§ 35a Abs. 2), craftsman = Handwerkerleistung (§ 35a Abs. 3)",
+          },
+          co2Cost: { type: "number", description: "im Betrag enthaltene CO2-Kosten in Euro (nur Brennstoff/Wärme), sonst 0" },
+          co2Kg: { type: "number", description: "ausgewiesener CO2-Ausstoß in kg (nur Brennstoff/Wärme), sonst 0" },
           reasoning: { type: "string", description: "kurze Begründung auf Deutsch" },
         },
       },
@@ -67,7 +93,8 @@ Du bekommst einen Beleg (Rechnung, Abgabenbescheid, Versicherungspolice o. Ä.) 
 Kostenarten nach § 2 BetrKV:
 ${COST_CATEGORIES.map((c) => `${c.no}. ${c.label}`).join("\n")}
 
-Umlageschlüssel: area = Wohnfläche, persons = Personenzahl, units = Wohneinheiten, consumption = erfasster Verbrauch, direct = nur eine Wohnung betroffen.
+Umlageschlüssel: area = Wohnfläche, persons = Personenzahl, units = Wohneinheiten, consumption = erfasster Verbrauch,
+heating = Heiz-/Warmwasserkosten nach HeizkostenV (Grund- und Verbrauchskosten), direct = nur eine Wohnung betroffen.
 
 Regeln:
 - Trenne umlagefähige von nicht umlagefähigen Anteilen. Nicht umlagefähig sind u. a. Reparaturen, Instandhaltung, Instandsetzung, Verwaltungskosten, Bankgebühren, Mahngebühren, Rücklagen und Anschaffungen. Bei Hauswart-Rechnungen gehören Reparatur- und Verwaltungstätigkeiten nicht dazu.
@@ -75,6 +102,9 @@ Regeln:
 - Fasse gleichartige Positionen zu einer Kostenart zusammen; lege nur dann mehrere Positionen an, wenn verschiedene Kostenarten betroffen sind.
 - Wenn ein Abgabenbescheid mehrere Kostenarten enthält (z. B. Grundsteuer, Straßenreinigung, Müll), lege je Kostenart eine Position an.
 - Wenn der Leistungszeitraum nicht dem Abrechnungsjahr entspricht oder es sich um Abschlagszahlungen handelt, weise in notes darauf hin.
+- Bei einer Hausgeld-/Jahresabrechnung einer WEG übernimm nur den Anteil der Einheit (Einzelabrechnung), nicht die Gesamtkosten der Gemeinschaft. Verwaltervergütung, Erhaltungsrücklage und Instandhaltung sind nicht umlagefähig. Die Grundsteuer ist nicht im Hausgeld enthalten.
+- Wenn Arbeitskosten (Lohn, Maschinen, Fahrt) für § 35a EStG ausgewiesen sind, gib sie in laborCost an (sonst 0 und laborKind = none). Gartenpflege, Reinigung, Hauswart, Winterdienst sind haushaltsnahe Dienstleistungen; Wartungen, Reparaturen, Schornsteinfeger sind Handwerkerleistungen.
+- Brennstoff- und Wärmerechnungen müssen CO2-Kosten und CO2-Ausstoß ausweisen (§ 3 CO2KostAufG). Übernimm beide Werte, sonst 0.
 - Erfinde keine Werte. Wenn etwas nicht lesbar ist, schreibe es in notes.`;
 
 

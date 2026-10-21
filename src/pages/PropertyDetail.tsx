@@ -1,0 +1,330 @@
+import { useState } from "react";
+import Sparkline from "../components/Sparkline";
+import { Balance, Delta, Kpi, NumberInput, type PageProps } from "../components/ui";
+import { calculateStatement } from "../lib/calc";
+import { addMonths, formatDate, todayISO } from "../lib/dates";
+import { isCurrentTenant, propertyMetrics } from "../lib/finance";
+import { formatEUR, formatEUR0, formatNum, formatPct, formatSignedEUR0 } from "../lib/format";
+import { missingInfo, PROPERTY_TYPE_LABELS, rentAt, uid, warmRent } from "../lib/model";
+import type { Tenant } from "../lib/types";
+import { newTenant, saveTenant, TenantForm, TenantTable } from "./Tenants";
+
+export default function PropertyDetail({ data, update, propertyId }: PageProps & { propertyId: string }) {
+  const p = data.properties.find((x) => x.id === propertyId);
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [valDate, setValDate] = useState(todayISO());
+  const [valValue, setValValue] = useState(0);
+  const [valNote, setValNote] = useState("");
+  const [showFormer, setShowFormer] = useState(false);
+
+  if (!p) {
+    return (
+      <div className="card empty">
+        <p>Objekt nicht gefunden.</p>
+        <a className="btn" href="#/">Zum Portfolio</a>
+      </div>
+    );
+  }
+
+  const today = todayISO();
+  const taxRate = data.settings.marginalTaxRate;
+  const m = propertyMetrics(p, data.tenants, today, taxRate);
+  const missing = missingInfo(p, data.tenants);
+  const tenants = data.tenants.filter((t) => t.propertyId === p.id).sort((a, b) => a.moveIn.localeCompare(b.moveIn));
+  const shownTenants = tenants.filter((t) => showFormer || !t.moveOut || t.moveOut >= today);
+  const statements = data.statements.filter((s) => s.propertyId === p.id).sort((a, b) => b.periodStart.localeCompare(a.periodStart));
+
+  const remove = () => {
+    if (!confirm(`„${p.name}“ mit ${tenants.length} Mietern und ${statements.length} Abrechnungen löschen?`)) return;
+    update((d) => ({
+      ...d,
+      properties: d.properties.filter((x) => x.id !== p.id),
+      tenants: d.tenants.filter((t) => t.propertyId !== p.id),
+      statements: d.statements.filter((s) => s.propertyId !== p.id),
+    }));
+    window.location.hash = "#/";
+  };
+
+  const setValuations = (valuations: typeof p.valuations) =>
+    update((d) => ({ ...d, properties: d.properties.map((x) => (x.id === p.id ? { ...x, valuations } : x)) }));
+
+  const addValuation = () => {
+    if (!valValue || !valDate) return;
+    setValuations([...p.valuations, { id: uid(), date: valDate, value: valValue, note: valNote }]);
+    setValValue(0);
+    setValNote("");
+  };
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <a href="#/" className="small">← Portfolio</a>
+          <h1>{p.name}</h1>
+          <div className="muted small">
+            {p.address} · {PROPERTY_TYPE_LABELS[p.type]}
+            {p.yearBuilt ? ` · Baujahr ${p.yearBuilt}` : ""} · {formatNum(p.units.reduce((a, u) => a + u.area, 0))} m²
+          </div>
+        </div>
+        <div className="row">
+          <a className="btn" href={`#/objekte/${p.id}/bearbeiten`}>Objektdaten bearbeiten</a>
+          <button className="danger" onClick={remove}>Löschen</button>
+        </div>
+      </div>
+
+      {missing.length > 0 && (
+        <div className="alert info">
+          <strong>Für eine vollständige Auswertung fehlen noch:</strong>
+          <ul className="checklist">
+            {missing.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+          <a href={`#/objekte/${p.id}/bearbeiten`}>Objektdaten ergänzen</a> · Mietangaben über „Bearbeiten“ beim Mieter unten
+        </div>
+      )}
+
+      <div className="card portfolio-head">
+        <div>
+          <div className="muted small">Marktwert{m.marketValueDate ? ` (Stand ${formatDate(m.marketValueDate)})` : ""}</div>
+          <div className="hero">{formatEUR0(m.marketValue)}</div>
+          {m.invested > 0 && <Delta value={m.valueGain} pct={m.valueGainPct} suffix={`ggü. Einstand ${formatEUR0(m.invested)}`} />}
+          {m.appreciationPa !== null && <div className="muted small">Wertentwicklung {formatPct(m.appreciationPa)} pro Jahr seit Kauf</div>}
+        </div>
+        <div className="kpi-row">
+          <Kpi label="Eigenkapital im Objekt" value={formatEUR0(m.netWorth)} hint={`Restschuld ${formatEUR0(m.loanBalance)}`} />
+          <Kpi label="Mietrendite brutto / netto" value={`${formatPct(m.grossYield)} / ${formatPct(m.netYield)}`} hint={`Kaltmiete ${formatEUR0(m.annualColdRent)} p. a.`} />
+          <Kpi label="Cashflow / Monat nach Steuern" value={formatSignedEUR0(m.cashflowAfterTax / 12)} hint={`vor Steuern ${formatSignedEUR0(m.cashflowBeforeTax / 12)}`} />
+          <Kpi label="Eigenkapitalrendite p. a." value={formatPct(m.equityReturn)} hint="Cashflow n. St. + Tilgung, ohne Wertänderung" />
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Wertentwicklung</h2>
+        {m.history.length >= 2 ? (
+          <Sparkline points={m.history} height={110} label={`Wertverlauf ${p.name}`} />
+        ) : (
+          <p className="muted small">Erfasse den Kauf in den Objektdaten und mindestens eine Bewertung, um den Verlauf zu sehen.</p>
+        )}
+        <div className="table-wrap" style={{ marginTop: 12 }}>
+          <table className="compact">
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th className="num">Wert</th>
+                <th>Notiz</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {p.purchaseDate && p.purchasePrice > 0 && (
+                <tr>
+                  <td>{formatDate(p.purchaseDate)}</td>
+                  <td className="num">{formatEUR0(p.purchasePrice)}</td>
+                  <td className="muted">Kaufpreis</td>
+                  <td />
+                </tr>
+              )}
+              {[...p.valuations]
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .map((v) => (
+                  <tr key={v.id}>
+                    <td>{formatDate(v.date)}</td>
+                    <td className="num">{formatEUR0(v.value)}</td>
+                    <td>{v.note}</td>
+                    <td><button className="ghost" onClick={() => setValuations(p.valuations.filter((x) => x.id !== v.id))} aria-label="Bewertung löschen">✕</button></td>
+                  </tr>
+                ))}
+              <tr>
+                <td><input type="date" value={valDate} onChange={(e) => setValDate(e.target.value)} aria-label="Datum der Bewertung" /></td>
+                <td style={{ width: 150 }}><NumberInput value={valValue || undefined} onChange={setValValue} placeholder="Marktwert €" ariaLabel="Marktwert" /></td>
+                <td><input value={valNote} onChange={(e) => setValNote(e.target.value)} placeholder="z. B. Bodenrichtwert, Gutachten, Portal" aria-label="Notiz" /></td>
+                <td><button className="primary" disabled={!valValue} onClick={addValuation}>Erfassen</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="hint" style={{ marginTop: 8 }}>Aktualisiere den Marktwert z. B. einmal im Jahr – wie den Kurs einer Aktie im Depot.</p>
+      </div>
+
+      <div className="card">
+        <div className="row" style={{ marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Einheiten und Mieter</h2>
+          <span className="spacer" />
+          <label className="row small muted">
+            <input type="checkbox" checked={showFormer} onChange={(e) => setShowFormer(e.target.checked)} /> ehemalige anzeigen
+          </label>
+          <button className="primary" onClick={() => setEditingTenant(newTenant(data, p.id))}>+ Mieter</button>
+        </div>
+        <div className="table-wrap">
+          <table className="compact" style={{ marginBottom: 16 }}>
+            <thead>
+              <tr>
+                <th>Einheit</th>
+                <th className="num">Fläche</th>
+                <th>Aktueller Mieter</th>
+                <th className="num">Kaltmiete</th>
+                <th className="num">€/m²</th>
+                <th className="num">Warmmiete</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.units.map((u) => {
+                const t = tenants.find((x) => x.unitId === u.id && isCurrentTenant(x, today));
+                const r = t ? rentAt(t, today) : undefined;
+                return (
+                  <tr key={u.id}>
+                    <td>{u.name}</td>
+                    <td className="num">{formatNum(u.area)} m²</td>
+                    <td>
+                      {t ? (
+                        t.name
+                      ) : (
+                        <>
+                          <span className="badge neutral">frei</span>{" "}
+                          <button className="ghost small" onClick={() => setEditingTenant(newTenant(data, p.id, u.id))}>vermieten</button>
+                        </>
+                      )}
+                    </td>
+                    <td className="num">{r ? formatEUR(r.coldRent) : "–"}</td>
+                    <td className="num">{r && u.area ? formatEUR(r.coldRent / u.area) : "–"}</td>
+                    <td className="num">{r ? formatEUR(warmRent(r)) : "–"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {shownTenants.length > 0 && <TenantTable data={data} tenants={shownTenants} onEdit={(t) => setEditingTenant(structuredClone(t))} />}
+      </div>
+
+      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+        <div className="card" style={{ marginBottom: 0 }}>
+          <h2>Wirtschaftlichkeit p. a.</h2>
+          <table className="compact fin-table">
+            <tbody>
+              <Line label="Nettokaltmiete (aktuell × 12)" value={m.annualColdRent} />
+              <Line label="− nicht umlagefähige Kosten" value={-m.nonAllocableCosts} />
+              <Line label="= Reinertrag" value={m.annualColdRent - m.nonAllocableCosts} sum />
+              <Line label="− Zinsen" value={-m.annualInterest} />
+              <Line label="− Tilgung" value={-m.annualPrincipal} />
+              <Line label="= Cashflow vor Steuern" value={m.cashflowBeforeTax} sum />
+              <Line label={m.taxEffect >= 0 ? "− Einkommensteuer" : "+ Steuerersparnis"} value={-m.taxEffect} />
+              <Line label="= Cashflow nach Steuern" value={m.cashflowAfterTax} sum />
+            </tbody>
+          </table>
+          <p className="hint" style={{ marginTop: 8 }}>
+            Umlagefähige Betriebskosten sind durchlaufende Posten und hier nicht enthalten. Die Tilgung baut Vermögen auf und zählt zur Eigenkapitalrendite.
+          </p>
+        </div>
+
+        <div className="card" style={{ marginBottom: 0 }}>
+          <h2>Steuer – Anlage V (Schätzung)</h2>
+          <table className="compact fin-table">
+            <tbody>
+              <Line label="Mieteinnahmen (kalt)" value={m.annualColdRent} />
+              <Line label={`− AfA ${formatPct(m.depreciationRate)} auf Gebäudeanteil`} value={-m.annualDepreciation} />
+              <Line label="− Schuldzinsen" value={-m.annualInterest} />
+              <Line
+                label="− Verwaltung, Instandhaltung, Sonstiges"
+                value={-(m.nonAllocableCosts - p.hausgeldReserveMonthly * 12)}
+              />
+              <Line label={m.taxableResult >= 0 ? "= Überschuss" : "= Verlust (mindert dein Einkommen)"} value={m.taxableResult} sum />
+              <Line label={`Steuerwirkung bei ${formatNum(taxRate)} % Grenzsteuersatz`} value={-m.taxEffect} />
+            </tbody>
+          </table>
+          <p className="hint" style={{ marginTop: 8 }}>
+            Vereinfachte Jahresbetrachtung. Die Erhaltungsrücklage ist erst bei Verwendung abziehbar. Den Steuersatz änderst du in den{" "}
+            <a href="#/einstellungen">Einstellungen</a>. Keine Steuerberatung.
+          </p>
+        </div>
+      </div>
+
+      {p.loans.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h2>Finanzierung</h2>
+          <div className="table-wrap">
+            <table className="compact">
+              <thead>
+                <tr>
+                  <th>Bank</th>
+                  <th className="num">Restschuld</th>
+                  <th className="num">Zins</th>
+                  <th className="num">Rate / Monat</th>
+                  <th>Zinsbindung bis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {p.loans.map((l) => {
+                  const soon = l.fixedUntil && l.fixedUntil <= addMonths(today, 24);
+                  return (
+                    <tr key={l.id}>
+                      <td>{l.lender || "Darlehen"}</td>
+                      <td className="num">{formatEUR0(l.balance)}</td>
+                      <td className="num">{formatNum(l.interestRate)} %</td>
+                      <td className="num">{formatEUR(l.monthlyPayment)}</td>
+                      <td>
+                        {formatDate(l.fixedUntil) || "–"} {soon && <span className="badge warn">⚠ Anschlussfinanzierung planen</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="row" style={{ marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Betriebskostenabrechnungen</h2>
+          <span className="spacer" />
+          <a className="btn" href="#/abrechnungen">Neue Abrechnung</a>
+        </div>
+        {statements.length === 0 ? (
+          <p className="muted">Noch keine Abrechnung für dieses Objekt.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="compact">
+              <tbody>
+                {statements.map((s) => {
+                  const r = calculateStatement(s, p, data.tenants);
+                  const sum = r.tenants.reduce((a, t) => a + t.balance, 0);
+                  return (
+                    <tr key={s.id}>
+                      <td><a href={`#/abrechnungen/${s.id}`}>{formatDate(s.periodStart)} – {formatDate(s.periodEnd)}</a></td>
+                      <td className="num">{formatEUR(r.totalCosts)}</td>
+                      <td className="num"><Balance value={sum} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {editingTenant && (
+        <TenantForm
+          data={data}
+          initial={editingTenant}
+          onClose={() => setEditingTenant(null)}
+          onSave={(t) => {
+            saveTenant(update, t);
+            setEditingTenant(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+
+function Line({ label, value, sum }: { label: string; value: number; sum?: boolean }) {
+  return (
+    <tr className={sum ? "sum" : undefined}>
+      <td>{label}</td>
+      <td className="num">{formatEUR0(value)}</td>
+    </tr>
+  );
+}

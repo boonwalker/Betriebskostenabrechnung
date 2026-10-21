@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { KEY_LABELS } from "../lib/betrkv";
-import { calculateStatement, type ItemShare, type TenantResult } from "../lib/calc";
+import { calculateStatement, type Co2Result, type DistributionKey, type ItemShare, type TenantResult } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
-import type { AllocationKey, AppData, Property, Statement } from "../lib/types";
+import { rentAt } from "../lib/model";
+import type { AppData, Property, Statement } from "../lib/types";
 
-const BASIS_UNIT: Record<AllocationKey, string> = {
+const BASIS_UNIT: Record<DistributionKey, string> = {
   area: "m²",
   persons: "Pers.",
   units: "WE",
@@ -68,6 +69,7 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
           statement={statement}
           r={r}
           periodDays={result.periodDays}
+          co2={result.co2}
           suggestAdjustment={suggestAdjustment}
         />
       ))}
@@ -88,6 +90,7 @@ function Letter({
   statement,
   r,
   periodDays,
+  co2,
   suggestAdjustment,
 }: {
   data: AppData;
@@ -95,6 +98,7 @@ function Letter({
   statement: Statement;
   r: TenantResult;
   periodDays: number;
+  co2: Co2Result[];
   suggestAdjustment: boolean;
 }) {
   const { landlord } = data.settings;
@@ -102,6 +106,10 @@ function Letter({
   const stillLiving = !r.tenant.moveOut || r.tenant.moveOut > statement.periodEnd;
   // Hochrechnung auf 12 Monate, aufgerundet auf volle Euro
   const newMonthly = Math.ceil((r.totalCosts / r.days) * periodDays / 12);
+  const current = rentAt(r.tenant, statement.periodEnd);
+  const currentMonthly = (current?.prepaymentOperating ?? 0) + (current?.prepaymentHeating ?? 0);
+  const overridden = statement.prepaymentOverrides[r.tenant.id] !== undefined;
+  const labor = r.labor35a.service + r.labor35a.craftsman;
 
   return (
     <div className="letter">
@@ -135,7 +143,7 @@ function Letter({
         </thead>
         <tbody>
           {r.items.map((item) => (
-            <tr key={item.costId}>
+            <tr key={item.costId + item.label}>
               <td>{item.label}</td>
               <td className="num">{formatEUR(item.total)}</td>
               <td>{KEY_LABELS[item.key]}</td>
@@ -150,15 +158,47 @@ function Letter({
             <td colSpan={5}>Summe Ihrer Betriebskosten</td>
             <td className="num">{formatEUR(r.totalCosts)}</td>
           </tr>
-          <tr>
-            <td colSpan={5} style={{ fontWeight: 400 }}>abzüglich Ihrer geleisteten Vorauszahlungen</td>
-            <td className="num" style={{ fontWeight: 400 }}>− {formatEUR(r.prepayments)}</td>
-          </tr>
+          {overridden || !r.prepaymentsCalculated.heating ? (
+            <tr>
+              <td colSpan={5} style={{ fontWeight: 400 }}>abzüglich Ihrer geleisteten Vorauszahlungen</td>
+              <td className="num" style={{ fontWeight: 400 }}>− {formatEUR(r.prepayments)}</td>
+            </tr>
+          ) : (
+            <>
+              <tr>
+                <td colSpan={5} style={{ fontWeight: 400 }}>abzüglich Ihrer Vorauszahlungen auf die Betriebskosten</td>
+                <td className="num" style={{ fontWeight: 400 }}>− {formatEUR(r.prepaymentsCalculated.operating)}</td>
+              </tr>
+              <tr>
+                <td colSpan={5} style={{ fontWeight: 400 }}>abzüglich Ihrer Vorauszahlungen auf die Heizkosten</td>
+                <td className="num" style={{ fontWeight: 400 }}>− {formatEUR(r.prepaymentsCalculated.heating)}</td>
+              </tr>
+            </>
+          )}
         </tfoot>
       </table>
       {r.items.some((i) => i.key === "persons") && (
         <p className="small" style={{ marginTop: "2mm" }}>
           Bei der Verteilung nach Personen ist „Gesamt“ die zeitanteilige Personenzahl im Abrechnungszeitraum (Personentage ÷ {periodDays}).
+        </p>
+      )}
+
+      {co2.map((c) => {
+        const tenantCo2 = r.items.filter((i) => i.costId === c.costId).reduce((a, i) => a + i.co2Amount, 0);
+        return (
+          <p className="small" key={c.costId}>
+            <strong>CO2-Kosten ({c.label}):</strong> Im Abrechnungszeitraum sind CO2-Kosten von {formatEUR(c.co2Cost)} bei einem Ausstoß von{" "}
+            {formatNum(c.co2Kg)} kg CO2 angefallen ({formatNum(c.kgPerM2Year)} kg je m² Wohnfläche und Jahr). Nach dem Stufenmodell des CO2KostAufG
+            (Stufe {c.stage}) trägt der Vermieter {c.landlordPct} % ({formatEUR(c.landlordAmount)}); dieser Anteil ist oben bereits abgezogen. Ihr Anteil an
+            den CO2-Kosten beträgt {formatEUR(tenantCo2)}.
+          </p>
+        );
+      })}
+      {labor > 0 && (
+        <p className="small">
+          <strong>Steuerermäßigung nach § 35a EStG:</strong> In Ihren Kosten sind Arbeitskosten enthalten für haushaltsnahe Dienstleistungen (Abs. 2){" "}
+          {formatEUR(r.labor35a.service)} und für Handwerkerleistungen (Abs. 3) {formatEUR(r.labor35a.craftsman)}. Sie können 20 % davon in Ihrer
+          Einkommensteuererklärung geltend machen.
         </p>
       )}
 
@@ -172,10 +212,10 @@ function Letter({
         </p>
       )}
       {r.balance < 0 && <p>Das Guthaben überweisen wir Ihnen in den nächsten Tagen auf Ihr bekanntes Konto.</p>}
-      {suggestAdjustment && stillLiving && newMonthly !== r.tenant.monthlyPrepayment && (
+      {suggestAdjustment && stillLiving && newMonthly !== currentMonthly && (
         <p>
-          Auf Grundlage dieser Abrechnung wird die monatliche Betriebskostenvorauszahlung gemäß § 560 Abs. 4 BGB ab dem übernächsten Monat
-          nach Zugang dieses Schreibens von {formatEUR(r.tenant.monthlyPrepayment)} auf {formatEUR(newMonthly)} angepasst.
+          Auf Grundlage dieser Abrechnung werden Ihre monatlichen Vorauszahlungen auf die Betriebs- und Heizkosten gemäß § 560 Abs. 4 BGB ab dem
+          übernächsten Monat nach Zugang dieses Schreibens von insgesamt {formatEUR(currentMonthly)} auf {formatEUR(newMonthly)} angepasst.
         </p>
       )}
       <p className="small">

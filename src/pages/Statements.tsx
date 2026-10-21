@@ -112,7 +112,16 @@ function NewStatement({ data, onClose, onCreate }: { data: AppData; onClose: () 
       periodEnd: `${year}-12-31`,
       costs:
         copy && previous
-          ? previous.costs.map((c) => ({ ...c, id: uid(), amount: 0, source: undefined, consumption: c.key === "consumption" ? {} : c.consumption }))
+          ? previous.costs.map((c) => ({
+              ...c,
+              id: uid(),
+              amount: 0,
+              source: undefined,
+              consumption: c.key === "consumption" || c.key === "heating" ? {} : c.consumption,
+              co2Cost: undefined,
+              co2Kg: undefined,
+              laborCost: undefined,
+            }))
           : [],
       prepaymentOverrides: {},
       createdAt: new Date().toISOString(),

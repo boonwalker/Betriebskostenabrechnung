@@ -1,32 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
+import { emptyData, migrate } from "./model";
 import type { AppData } from "./types";
 
-const STORAGE_KEY = "betriebskosten-app-v1";
+export { emptyData, uid } from "./model";
 
-export function emptyData(): AppData {
-  return {
-    version: 1,
-    properties: [],
-    tenants: [],
-    statements: [],
-    settings: { landlord: { name: "", address: "", iban: "" }, anthropicApiKey: "" },
-  };
-}
+const STORAGE_KEY = "betriebskosten-app-v1";
 
 export function loadData(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyData();
-    return { ...emptyData(), ...JSON.parse(raw) };
+    return raw ? migrate(JSON.parse(raw)) : emptyData();
   } catch {
     return emptyData();
   }
 }
 
 export function parseBackup(json: string): AppData {
-  const data = JSON.parse(json);
-  if (data?.version !== 1 || !Array.isArray(data.properties)) throw new Error("Keine gültige Sicherungsdatei.");
-  return { ...emptyData(), ...data };
+  try {
+    return migrate(JSON.parse(json));
+  } catch {
+    throw new Error("Keine gültige Sicherungsdatei.");
+  }
 }
 
 /** Sicherung ohne API-Schlüssel */
@@ -46,5 +40,3 @@ export function useAppData() {
   const update = useCallback((fn: (d: AppData) => AppData) => setData((d) => fn(d)), []);
   return [data, update, setData] as const;
 }
-
-export const uid = () => crypto.randomUUID();

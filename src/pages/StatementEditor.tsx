@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { Balance, NumberInput, type PageProps } from "../components/ui";
 import ReceiptImport from "../components/ReceiptImport";
-import { COST_CATEGORIES, KEY_LABELS } from "../lib/betrkv";
+import { COST_CATEGORIES, isHeatingCategory, KEY_LABELS } from "../lib/betrkv";
+import { co2Stage } from "../lib/co2";
 import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
 import { uid } from "../lib/store";
-import type { AllocationKey, CostItem, Property, Statement } from "../lib/types";
+import type { AllocationKey, CostItem, Property, Section35aKind, Statement } from "../lib/types";
 
 export default function StatementEditor({ data, update, statementId }: PageProps & { statementId: string }) {
   const statement = data.statements.find((s) => s.id === statementId);
@@ -80,7 +81,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
             <div className="stat">{formatEUR(result.totalCosts)}</div>
           </div>
           <div>
-            <div className="muted small">davon Leerstand / Vermieter</div>
+            <div className="muted small">davon trägst du (Leerstand, CO2)</div>
             <div className="stat">{formatEUR(result.landlordShare)}</div>
           </div>
         </div>
@@ -166,10 +167,10 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                         <div className="muted small">
                           {overridden ? (
                             <button className="ghost small" onClick={() => setOverride(r.tenant.id, null)}>
-                              Soll: {formatEUR(r.prepaymentsCalculated)} übernehmen
+                              Soll: {formatEUR(r.prepaymentsCalculated.total)} übernehmen
                             </button>
                           ) : (
-                            "laut Mietvertrag"
+                            <>BK {formatEUR(r.prepaymentsCalculated.operating)} + HK {formatEUR(r.prepaymentsCalculated.heating)}</>
                           )}
                         </div>
                       </td>
@@ -184,16 +185,25 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         <p className="muted small" style={{ marginTop: 12 }}>
           Trage bei den Vorauszahlungen den tatsächlich gezahlten Betrag ein, falls er vom Mietvertrag abweicht (z. B. Zahlungsrückstände oder Anpassungen im Jahr).
         </p>
-        {result.vacancies.length > 0 && (
+        {(result.vacancies.length > 0 || result.co2.length > 0) && (
           <>
-            <h3 style={{ marginTop: 16 }}>Leerstand (trägt der Vermieter)</h3>
+            <h3 style={{ marginTop: 16 }}>Trägst du als Vermieter</h3>
             <table className="compact">
               <tbody>
                 {result.vacancies.map((v) => (
                   <tr key={v.unit.id + v.start}>
-                    <td>{v.unit.name}</td>
+                    <td>Leerstand {v.unit.name}</td>
                     <td>{formatDate(v.start)} – {formatDate(v.end)} ({v.days} Tage)</td>
                     <td className="num">{formatEUR(v.amount)}</td>
+                  </tr>
+                ))}
+                {result.co2.map((c) => (
+                  <tr key={c.costId}>
+                    <td>CO2-Kosten {c.label}</td>
+                    <td>
+                      {formatNum(c.kgPerM2Year)} kg CO2/m²/Jahr → Stufe {c.stage}: {c.landlordPct} % Vermieter (CO2KostAufG)
+                    </td>
+                    <td className="num">{formatEUR(c.landlordAmount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -218,6 +228,12 @@ export default function StatementEditor({ data, update, statementId }: PageProps
 }
 
 function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; property: Property; onChange: (p: Partial<CostItem>) => void; onRemove: () => void }) {
+  const heating = isHeatingCategory(cost.category);
+  const [open, setOpen] = useState(!!(cost.laborCost || cost.co2Cost));
+  const totalArea = property.units.reduce((a, u) => a + u.area, 0);
+  const stage = cost.co2Kg && totalArea ? co2Stage(cost.co2Kg / totalArea) : null;
+  const needsConsumption = cost.key === "consumption" || cost.key === "heating";
+
   return (
     <>
       <tr>
@@ -250,7 +266,10 @@ function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; prope
             ))}
           </select>
         </td>
-        <td>
+        <td className="num" style={{ whiteSpace: "nowrap" }}>
+          <button className="ghost" onClick={() => setOpen(!open)} aria-expanded={open} title="§ 35a, CO2, Notiz">
+            {open ? "▾" : "▸"} Details
+          </button>
           <button className="ghost" onClick={onRemove} aria-label="Position entfernen">✕</button>
         </td>
       </tr>
@@ -270,25 +289,73 @@ function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; prope
           </td>
         </tr>
       )}
-      {cost.key === "consumption" && (
+      {needsConsumption && (
         <tr>
           <td />
           <td colSpan={4}>
-            <div className="small muted" style={{ marginBottom: 4 }}>Verbrauch je Einheit (z. B. kWh, m³ oder Einheiten laut Heizkostenverteiler):</div>
+            {cost.key === "heating" && (
+              <label className="row small muted" style={{ marginBottom: 6 }}>
+                Verbrauchsanteil (HeizkostenV 50–70 %):
+                <NumberInput
+                  value={cost.consumptionShare ?? 70}
+                  onChange={(v) => onChange({ consumptionShare: v })}
+                  style={{ width: 70 }}
+                  ariaLabel="Verbrauchsanteil in Prozent"
+                />
+                % · Rest als Grundkosten nach Wohnfläche
+              </label>
+            )}
+            <div className="small muted" style={{ marginBottom: 4 }}>Verbrauch je Einheit (kWh, m³ oder Einheiten laut Heizkostenverteiler bzw. Messdienst):</div>
             <div className="row">
               {property.units.map((u) => (
                 <label key={u.id} className="field" style={{ width: 130 }}>
                   {u.name}
-                  <NumberInput
-                    value={cost.consumption?.[u.id]}
-                    onChange={(v) => onChange({ consumption: { ...cost.consumption, [u.id]: v } })}
-                  />
+                  <NumberInput value={cost.consumption?.[u.id]} onChange={(v) => onChange({ consumption: { ...cost.consumption, [u.id]: v } })} />
                 </label>
               ))}
-              <span className="small muted">
-                Summe: {formatNum(property.units.reduce((a, u) => a + (cost.consumption?.[u.id] ?? 0), 0))}
-              </span>
+              <span className="small muted">Summe: {formatNum(property.units.reduce((a, u) => a + (cost.consumption?.[u.id] ?? 0), 0))}</span>
             </div>
+          </td>
+        </tr>
+      )}
+      {open && (
+        <tr>
+          <td />
+          <td colSpan={4}>
+            <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
+              <label className="field">
+                Arbeitskosten § 35a EStG (€)
+                <NumberInput value={cost.laborCost} onChange={(laborCost) => onChange({ laborCost, laborKind: cost.laborKind ?? "service" })} />
+              </label>
+              <label className="field">
+                Art der Leistung
+                <select value={cost.laborKind ?? "service"} onChange={(e) => onChange({ laborKind: e.target.value as Section35aKind })}>
+                  <option value="service">haushaltsnahe Dienstleistung</option>
+                  <option value="craftsman">Handwerkerleistung</option>
+                </select>
+              </label>
+              {heating && (
+                <>
+                  <label className="field">
+                    darin CO2-Kosten (€)
+                    <NumberInput value={cost.co2Cost} onChange={(co2Cost) => onChange({ co2Cost })} />
+                  </label>
+                  <label className="field">
+                    CO2-Ausstoß des Gebäudes (kg)
+                    <NumberInput value={cost.co2Kg} onChange={(co2Kg) => onChange({ co2Kg })} />
+                  </label>
+                </>
+              )}
+            </div>
+            <p className="hint" style={{ marginTop: 6, marginBottom: 0 }}>
+              § 35a: Nur Lohn-, Maschinen- und Fahrtkosten (ohne Material) – deine Mieter können 20 % davon von der Steuer abziehen.
+              {heating && " CO2-Kosten und Ausstoß stehen auf der Brennstoff- bzw. Wärmerechnung (Pflichtangabe)."}
+              {stage && ` → ${formatNum(cost.co2Kg! / totalArea)} kg/m²: Stufe ${stage.stage}, du trägst ${stage.landlordPct} % der CO2-Kosten.`}
+            </p>
+            <label className="field" style={{ marginTop: 8 }}>
+              Notiz
+              <input value={cost.note ?? ""} onChange={(e) => onChange({ note: e.target.value })} />
+            </label>
           </td>
         </tr>
       )}

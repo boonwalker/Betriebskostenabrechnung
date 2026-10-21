@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildSegments, calcPrepayments, calculateStatement } from "./calc";
+import { newProperty } from "./model";
 import type { Property, Statement, Tenant } from "./types";
 
 const property: Property = {
+  ...newProperty(),
   id: "p1",
   name: "Musterstraße 1",
   address: "Musterstraße 1, 12345 Musterstadt",
@@ -12,15 +14,19 @@ const property: Property = {
   ],
 };
 
-function tenant(partial: Partial<Tenant> & Pick<Tenant, "id" | "unitId" | "moveIn">): Tenant {
+function tenant(
+  partial: Partial<Tenant> & Pick<Tenant, "id" | "unitId" | "moveIn"> & { monthlyPrepayment?: number },
+): Tenant {
+  const { monthlyPrepayment = 100, ...rest } = partial;
   return {
     name: partial.id,
     mailingAddress: "",
     propertyId: "p1",
     moveOut: null,
     persons: 1,
-    monthlyPrepayment: 100,
-    ...partial,
+    deposit: 0,
+    rentHistory: [{ id: "r", validFrom: partial.moveIn, coldRent: 500, prepaymentOperating: monthlyPrepayment, prepaymentHeating: 0 }],
+    ...rest,
   };
 }
 
@@ -54,12 +60,20 @@ describe("buildSegments", () => {
 
 describe("calcPrepayments", () => {
   it("rechnet volle Monate", () => {
-    expect(calcPrepayments(tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" }), "2025-01-01", "2025-12-31")).toBe(1200);
-    expect(calcPrepayments(tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" }), "2025-04-01", "2025-06-30")).toBe(300);
+    expect(calcPrepayments(tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" }), "2025-01-01", "2025-12-31").total).toBe(1200);
+    expect(calcPrepayments(tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" }), "2025-04-01", "2025-06-30").total).toBe(300);
   });
   it("rechnet angebrochene Monate tagesgenau", () => {
     // 16 von 30 Tagen im April
-    expect(calcPrepayments(tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" }), "2025-04-15", "2025-04-30")).toBe(53.33);
+    expect(calcPrepayments(tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" }), "2025-04-15", "2025-04-30").total).toBe(53.33);
+  });
+  it("berücksichtigt Anpassungen im Mietverlauf", () => {
+    const t = tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" });
+    t.rentHistory = [
+      { id: "r1", validFrom: "2020-01-01", coldRent: 500, prepaymentOperating: 100, prepaymentHeating: 50 },
+      { id: "r2", validFrom: "2025-07-01", coldRent: 520, prepaymentOperating: 120, prepaymentHeating: 60 },
+    ];
+    expect(calcPrepayments(t, "2025-01-01", "2025-12-31")).toEqual({ operating: 1320, heating: 660, total: 1980 });
   });
 });
 
@@ -135,13 +149,68 @@ describe("calculateStatement", () => {
     const tenants = [tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" })];
     const r = calculateStatement(statement([], { a: 1000 }), property, tenants);
     expect(r.tenants[0].prepayments).toBe(1000);
-    expect(r.tenants[0].prepaymentsCalculated).toBe(1200);
+    expect(r.tenants[0].prepaymentsCalculated.total).toBe(1200);
     expect(r.tenants[0].balance).toBe(-1000);
   });
 
   it("berechnet die Abrechnungsfrist", () => {
     const r = calculateStatement(statement([]), property, []);
     expect(r.deadline).toBe("2026-12-31");
+  });
+});
+
+describe("Heizkosten, CO2 und § 35a", () => {
+  const tenants = [
+    tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" }),
+    tenant({ id: "b", unitId: "u2", moveIn: "2020-01-01" }),
+  ];
+
+  it("verteilt Heizkosten nach HeizkostenV in Grund- und Verbrauchskosten", () => {
+    const r = calculateStatement(
+      statement([{ id: "h", category: 6, label: "Heizung", amount: 1000, key: "heating", consumptionShare: 70, consumption: { u1: 20, u2: 80 } }]),
+      property,
+      tenants,
+    );
+    const a = r.tenants.find((t) => t.tenant.id === "a")!;
+    // Grundkosten 300 € nach Fläche (60 %) = 180 €, Verbrauch 700 € nach 20 % = 140 €
+    expect(a.items.map((i) => i.amount)).toEqual([180, 140]);
+    expect(a.totalCosts).toBe(320);
+  });
+
+  it("begrenzt den Verbrauchsanteil auf 50–70 %", () => {
+    const r = calculateStatement(
+      statement([{ id: "h", category: 6, label: "Heizung", amount: 1000, key: "heating", consumptionShare: 90, consumption: { u1: 0, u2: 100 } }]),
+      property,
+      tenants,
+    );
+    expect(r.tenants.find((t) => t.tenant.id === "a")!.totalCosts).toBe(180);
+  });
+
+  it("zieht den Vermieteranteil an den CO2-Kosten nach Stufenmodell ab", () => {
+    // 3.000 kg / 100 m² = 30 kg/m² → Stufe 5: Vermieter 40 %
+    const r = calculateStatement(
+      statement([{ id: "h", category: 6, label: "Heizung", amount: 1000, key: "area", co2Cost: 200, co2Kg: 3000 }]),
+      property,
+      tenants,
+    );
+    expect(r.co2[0]).toMatchObject({ stage: 5, landlordPct: 40, landlordAmount: 80 });
+    expect(r.landlordShare).toBe(80);
+    const a = r.tenants.find((t) => t.tenant.id === "a")!;
+    expect(a.totalCosts).toBe(552);
+    expect(a.items[0].co2Amount).toBe(72);
+  });
+
+  it("weist Arbeitskosten nach § 35a anteilig aus", () => {
+    const r = calculateStatement(
+      statement([
+        { id: "g", category: 10, label: "Gartenpflege", amount: 500, key: "area", laborCost: 400, laborKind: "service" },
+        { id: "w", category: 17, label: "Wartung", amount: 100, key: "units", laborCost: 80, laborKind: "craftsman" },
+      ]),
+      property,
+      tenants,
+    );
+    const a = r.tenants.find((t) => t.tenant.id === "a")!;
+    expect(a.labor35a).toEqual({ service: 240, craftsman: 40 });
   });
 });
 

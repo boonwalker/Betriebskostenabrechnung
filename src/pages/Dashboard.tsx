@@ -1,48 +1,70 @@
+import Sparkline from "../components/Sparkline";
+import { Delta, Kpi } from "../components/ui";
 import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
-import type { AppData } from "../lib/types";
+import { portfolioMetrics, propertyMetrics, type PropertyMetrics } from "../lib/finance";
+import { formatEUR0, formatPct, formatSignedEUR0 } from "../lib/format";
+import { missingInfo, PROPERTY_TYPE_LABELS } from "../lib/model";
+import type { AppData, Property } from "../lib/types";
 
 export default function Dashboard({ data }: { data: AppData }) {
   const today = todayISO();
-  const activeTenants = data.tenants.filter((t) => !t.moveOut || t.moveOut >= today);
-  const unitCount = data.properties.reduce((a, p) => a + p.units.length, 0);
   const lastYear = String(new Date().getFullYear() - 1);
+  const metrics = data.properties.map((p) => ({ p, m: propertyMetrics(p, data.tenants, today, data.settings.marginalTaxRate) }));
+  const portfolio = portfolioMetrics(
+    metrics.map((x) => x.m),
+    data.properties.reduce((a, p) => a + p.purchasePrice, 0),
+  );
 
   const steps = [
     { done: !!data.settings.landlord.name, label: <>Deine Vermieterdaten in den <a href="#/einstellungen">Einstellungen</a> hinterlegen</> },
-    { done: data.properties.length > 0, label: <>Ein <a href="#/objekte">Objekt</a> mit seinen Wohnungen und Wohnflächen anlegen</> },
-    { done: data.tenants.length > 0, label: <><a href="#/mieter">Mieter</a> mit Einzugsdatum, Personenzahl und Vorauszahlung erfassen</> },
+    { done: data.properties.length > 0, label: <>Ein <a href="#/objekte/neu">Objekt</a> mit Wohnungen, Kaufdaten und Finanzierung anlegen</> },
+    { done: data.tenants.length > 0, label: <><a href="#/mieter">Mieter</a> mit Kaltmiete, Vorauszahlungen und Personenzahl erfassen</> },
     { done: data.statements.length > 0, label: <>Eine <a href="#/abrechnungen">Abrechnung</a> anlegen und die Belege des Jahres hochladen</> },
   ];
 
-  const missingLastYear = data.properties.filter(
-    (p) => !data.statements.some((s) => s.propertyId === p.id && s.periodStart.startsWith(lastYear)),
-  );
+  const openStatement = (p: Property) =>
+    data.tenants.some((t) => t.propertyId === p.id) && !data.statements.some((s) => s.propertyId === p.id && s.periodStart.startsWith(lastYear));
 
   return (
     <>
-      <h1>Übersicht</h1>
-      <div className="grid" style={{ marginBottom: 16 }}>
-        <div className="card" style={{ marginBottom: 0 }}>
-          <div className="muted small">Objekte</div>
-          <div className="stat">{data.properties.length}</div>
+      <div className="page-head">
+        <h1>Mein Immobilien-Portfolio</h1>
+        <a className="btn primary" href="#/objekte/neu">+ Objekt hinzufügen</a>
+      </div>
+
+      {data.properties.length > 0 && (
+        <div className="card portfolio-head">
+          <div>
+            <div className="muted small">Nettovermögen (Marktwert − Restschuld)</div>
+            <div className="hero">{formatEUR0(portfolio.netWorth)}</div>
+            <Delta value={portfolio.valueGain} pct={portfolio.valueGainPct} suffix="Wertentwicklung seit Kauf" />
+          </div>
+          <div className="kpi-row">
+            <Kpi label="Marktwert gesamt" value={formatEUR0(portfolio.marketValue)} />
+            <Kpi label="Restschuld" value={formatEUR0(portfolio.loanBalance)} hint={`Beleihung ${formatPct(portfolio.loanToValue)}`} />
+            <Kpi label="Kaltmiete p. a." value={formatEUR0(portfolio.annualColdRent)} hint={`Mietrendite ${formatPct(portfolio.grossYield)}`} />
+            <Kpi
+              label="Cashflow / Monat"
+              value={formatSignedEUR0(portfolio.cashflowAfterTax / 12)}
+              hint={`vor Steuern ${formatSignedEUR0(portfolio.cashflowBeforeTax / 12)}`}
+            />
+          </div>
         </div>
-        <div className="card" style={{ marginBottom: 0 }}>
-          <div className="muted small">Wohneinheiten</div>
-          <div className="stat">{unitCount}</div>
-        </div>
-        <div className="card" style={{ marginBottom: 0 }}>
-          <div className="muted small">Aktuelle Mieter</div>
-          <div className="stat">{activeTenants.length}</div>
-        </div>
-        <div className="card" style={{ marginBottom: 0 }}>
-          <div className="muted small">Abrechnungen</div>
-          <div className="stat">{data.statements.length}</div>
-        </div>
+      )}
+
+      <div className="tiles">
+        {metrics.map(({ p, m }) => (
+          <PropertyTile key={p.id} p={p} m={m} missing={missingInfo(p, data.tenants).length} needsStatement={openStatement(p)} lastYear={lastYear} />
+        ))}
+        <a className="tile tile-add" href="#/objekte/neu">
+          <span className="tile-add-plus">+</span>
+          <span>Objekt hinzufügen</span>
+        </a>
       </div>
 
       {steps.some((s) => !s.done) && (
-        <div className="card">
+        <div className="card" style={{ marginTop: 16 }}>
           <h2>Erste Schritte</h2>
           <ol className="steps">
             {steps.map((s, i) => (
@@ -57,43 +79,80 @@ export default function Dashboard({ data }: { data: AppData }) {
         </div>
       )}
 
-      {missingLastYear.length > 0 && data.tenants.length > 0 && (
-        <div className="card">
-          <h2>Offene Abrechnungen {lastYear}</h2>
-          <p>Für folgende Objekte gibt es noch keine Abrechnung für {lastYear}. Sie muss den Mietern bis spätestens 31.12.{Number(lastYear) + 1} zugehen:</p>
-          <ul>
-            {missingLastYear.map((p) => (
-              <li key={p.id}>{p.name}</li>
-            ))}
-          </ul>
-          <a className="btn primary" href="#/abrechnungen">Abrechnung erstellen</a>
-        </div>
-      )}
-
       {data.statements.length > 0 && (
-        <div className="card">
+        <div className="card" style={{ marginTop: 16 }}>
           <h2>Letzte Abrechnungen</h2>
-          <table>
-            <tbody>
-              {[...data.statements]
-                .sort((a, b) => b.periodStart.localeCompare(a.periodStart))
-                .slice(0, 5)
-                .map((s) => {
-                  const p = data.properties.find((x) => x.id === s.propertyId);
-                  if (!p) return null;
-                  const r = calculateStatement(s, p, data.tenants);
-                  return (
-                    <tr key={s.id}>
-                      <td><a href={`#/abrechnungen/${s.id}`}>{p.name}</a></td>
-                      <td>{formatDate(s.periodStart)} – {formatDate(s.periodEnd)}</td>
-                      <td className="muted small">Frist: {formatDate(r.deadline)}</td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
+          <div className="table-wrap">
+            <table>
+              <tbody>
+                {[...data.statements]
+                  .sort((a, b) => b.periodStart.localeCompare(a.periodStart))
+                  .slice(0, 5)
+                  .map((s) => {
+                    const p = data.properties.find((x) => x.id === s.propertyId);
+                    if (!p) return null;
+                    const r = calculateStatement(s, p, data.tenants);
+                    return (
+                      <tr key={s.id}>
+                        <td><a href={`#/abrechnungen/${s.id}`}>{p.name}</a></td>
+                        <td>{formatDate(s.periodStart)} – {formatDate(s.periodEnd)}</td>
+                        <td className="muted small">Frist: {formatDate(r.deadline)}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </>
+  );
+}
+
+
+function PropertyTile({ p, m, missing, needsStatement, lastYear }: { p: Property; m: PropertyMetrics; missing: number; needsStatement: boolean; lastYear: string }) {
+  return (
+    <a className="tile" href={`#/objekte/${p.id}`}>
+      <div className="row" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="tile-title">{p.name}</div>
+          <div className="muted small ellipsis">{p.address || "Keine Anschrift"}</div>
+        </div>
+        <span className="spacer" />
+        <span className="badge neutral">{PROPERTY_TYPE_LABELS[p.type]}</span>
+      </div>
+
+      <div className="tile-value">{formatEUR0(m.marketValue)}</div>
+      {m.invested > 0 ? <Delta value={m.valueGain} pct={m.valueGainPct} /> : <div className="muted small">Kaufpreis fehlt</div>}
+      <div className="tile-chart">
+        {m.history.length >= 2 ? (
+          <Sparkline points={m.history} label={`Wertverlauf ${p.name}`} />
+        ) : (
+          <div className="muted small">Wertverlauf erscheint, sobald du eine Bewertung erfasst.</div>
+        )}
+      </div>
+
+      <div className="tile-stats">
+        <div>
+          <span className="muted small">Mietrendite</span>
+          <strong>{formatPct(m.grossYield)}</strong>
+        </div>
+        <div>
+          <span className="muted small">Cashflow / Monat</span>
+          <strong>{formatSignedEUR0(m.cashflowAfterTax / 12)}</strong>
+        </div>
+        <div>
+          <span className="muted small">Vermietet</span>
+          <strong>{m.unitsLet} / {m.unitsTotal}</strong>
+        </div>
+      </div>
+
+      {(needsStatement || missing > 0) && (
+        <div className="row" style={{ marginTop: 10, gap: 6 }}>
+          {needsStatement && <span className="badge warn">⚠ Abrechnung {lastYear} offen</span>}
+          {missing > 0 && <span className="badge neutral">ⓘ {missing} Angabe{missing === 1 ? "" : "n"} fehlen</span>}
+        </div>
+      )}
+    </a>
   );
 }

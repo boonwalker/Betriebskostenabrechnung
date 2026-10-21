@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { formatNum, parseNumber } from "../lib/format";
+import { formatNum, formatSignedEUR0, formatSignedPct, parseNumber } from "../lib/format";
 import type { AppData } from "../lib/types";
 
 export interface PageProps {
@@ -73,4 +73,26 @@ export function Balance({ value }: { value: number }) {
   if (value > 0) return <span className="balance-pos">Nachzahlung {fmt.format(value)}</span>;
   if (value < 0) return <span className="balance-neg">Guthaben {fmt.format(-value)}</span>;
   return <span className="muted">ausgeglichen</span>;
+}
+
+/** Gewinn/Verlust mit Pfeil und Vorzeichen – die Richtung ist nie nur an der Farbe erkennbar */
+export function Delta({ value, pct, suffix }: { value: number; pct: number | null; suffix?: string }) {
+  const dir = value > 0 ? "up" : value < 0 ? "down" : "flat";
+  const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "■";
+  return (
+    <div className={`delta ${dir}`}>
+      <span aria-hidden="true">{arrow}</span> {formatSignedEUR0(value)} ({formatSignedPct(pct)})
+      {suffix && <span className="muted"> {suffix}</span>}
+    </div>
+  );
+}
+
+export function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="kpi">
+      <div className="muted small">{label}</div>
+      <div className="kpi-value">{value}</div>
+      {hint && <div className="muted small">{hint}</div>}
+    </div>
+  );
 }

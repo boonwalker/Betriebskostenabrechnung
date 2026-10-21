@@ -119,6 +119,7 @@ Grundregeln:
 | 1.10 Vorauszahlungen bestätigen | ✅ einfache Form (Gesamtbetrag + Bestätigung) | `StatementEditor.tsx` |
 | Mieterwechsel: Vermieter je Mieter, Vertragsmaßstab je Mieter, § 9b HeizkostenV | ✅ | `calc.ts`, `degreeDays.ts`, `Tenants.tsx` |
 | Freigabe je Mietverhältnis (allgemeine und eigene Blocker, eingefrorenes Ergebnis je Mieter) | ✅ | `release.ts`, `StatementEditor.tsx`, `PrintView.tsx` |
+| Erwerb per Kauf, Schenkung oder Erbschaft, Assistent für neue Objekte, monatliche Vermögensentwicklung | ✅ | `wealth.ts`, `PropertyWizard.tsx` |
 | 2.1–2.4 Wirtschaftsplan, Plan-Ist, Prognose, Vorauszahlungsempfehlung | ✅ Grundversion | `weg.ts`, `WegEditor.tsx` |
 
 ### Akzeptanztests (automatisiert, `src/lib/we09.test.ts`)

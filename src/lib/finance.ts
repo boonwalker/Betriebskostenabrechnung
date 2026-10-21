@@ -102,13 +102,25 @@ export function propertyMetrics(property: Property, allTenants: Tenant[], today:
   const annualInterest = property.loans.reduce((a, l) => a + (l.balance * l.interestRate) / 100, 0);
   const annualDebtService = property.loans.reduce((a, l) => a + l.monthlyPayment * 12, 0);
   const annualPrincipal = Math.max(0, annualDebtService - annualInterest);
-  const equityInvested = Math.max(0, invested - property.loans.reduce((a, l) => a + l.principal, 0));
+  const isPurchase = (property.acquisitionType ?? "purchase") === "purchase";
+  // Kauf: eigenes Geld = Einstand − Darlehen. Schenkung/Erbschaft: eigenes Geld sind nur die Erwerbsnebenkosten
+  const equityInvested = isPurchase ? Math.max(0, invested - property.loans.reduce((a, l) => a + l.principal, 0)) : acquisitionCosts;
 
   const cashflowBeforeTax = annualColdRent - nonAllocableCosts - annualDebtService;
 
   const rate = depreciationRate(property.yearBuilt);
-  // Kaufnebenkosten werden anteilig dem Gebäude zugerechnet; Grund und Boden ist nicht abschreibbar
-  const annualDepreciation = invested * (1 - property.landShare / 100) * rate;
+  const buildingShare = 1 - property.landShare / 100;
+  let annualDepreciation: number;
+  if (isPurchase) {
+    // Kaufnebenkosten werden anteilig dem Gebäude zugerechnet; Grund und Boden ist nicht abschreibbar
+    annualDepreciation = invested * buildingShare * rate;
+  } else {
+    // Unentgeltlicher Erwerb: AfA des Rechtsvorgängers wird fortgeführt (§ 11d EStDV), bis das Gebäude
+    // abgeschrieben ist; eigene Erwerbsnebenkosten (z. B. Notar, Grundbuch) kommen hinzu
+    const yearsSoFar = property.predecessorYear ? Number(today.slice(0, 4)) - property.predecessorYear : 0;
+    const predecessorLeft = yearsSoFar * rate < 1;
+    annualDepreciation = ((predecessorLeft ? property.predecessorCost ?? 0 : 0) + acquisitionCosts) * buildingShare * rate;
+  }
   // Die Zuführung zur Erhaltungsrücklage ist erst bei Verwendung abziehbar (BFH IX R 19/19)
   const taxableResult = annualColdRent - deductibleRunning - annualInterest - annualDepreciation;
   const taxEffect = (taxableResult * marginalTaxRate) / 100;
@@ -141,7 +153,8 @@ export function propertyMetrics(property: Property, allTenants: Tenant[], today:
     taxableResult,
     taxEffect,
     cashflowAfterTax,
-    equityReturn: ratio(cashflowAfterTax + annualPrincipal, equityInvested),
+    // Schenkung/Erbschaft: bezogen auf das im Objekt gebundene Eigenkapital statt auf eigenes eingesetztes Geld
+    equityReturn: ratio(cashflowAfterTax + annualPrincipal, isPurchase ? equityInvested : marketValue - loanBalance),
   };
 }
 

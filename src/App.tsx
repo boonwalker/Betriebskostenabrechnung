@@ -3,6 +3,7 @@ import { useAppData } from "./lib/store";
 import Dashboard from "./pages/Dashboard";
 import PropertyDetail from "./pages/PropertyDetail";
 import PropertyEditor from "./pages/PropertyEditor";
+import PropertyWizard from "./pages/PropertyWizard";
 import WegEditor from "./pages/WegEditor";
 import Tenants from "./pages/Tenants";
 import Statements from "./pages/Statements";
@@ -36,7 +37,7 @@ export default function App() {
   const [section = "", id, sub] = useHashRoute();
 
   let page;
-  if (section === "objekte" && id === "neu") page = <PropertyEditor key="neu" data={data} update={update} propertyId={null} />;
+  if (section === "objekte" && id === "neu") page = <PropertyWizard key="neu" data={data} update={update} />;
   else if (section === "objekte" && id && sub === "bearbeiten") page = <PropertyEditor key={id} data={data} update={update} propertyId={id} />;
   else if (section === "objekte" && id) page = <PropertyDetail key={id} data={data} update={update} propertyId={id} />;
   else if (section === "weg" && (id === "jahresabrechnung" || id === "wirtschaftsplan") && sub)

@@ -114,8 +114,11 @@ export const PROPERTY_TYPE_LABELS: Record<Property["type"], string> = {
 /** Angaben, die für Abrechnung und Rendite noch fehlen */
 export function missingInfo(p: Property, tenants: Tenant[]): string[] {
   const out: string[] = [];
-  if (!p.purchasePrice) out.push("Kaufpreis (für Rendite und Abschreibung)");
-  if (!p.purchaseDate) out.push("Kaufdatum (für die Wertentwicklung pro Jahr)");
+  const free = (p.acquisitionType ?? "purchase") !== "purchase";
+  if (!p.purchasePrice) out.push(free ? "Verkehrswert bei Schenkung bzw. Erbschaft (für die Vermögensentwicklung)" : "Kaufpreis (für Rendite und Abschreibung)");
+  if (!p.purchaseDate) out.push("Erwerbsdatum (für die Vermögensentwicklung)");
+  if (free && !p.predecessorCost) out.push("Anschaffungskosten des Rechtsvorgängers (für die fortgeführte Abschreibung)");
+  if (p.loans.some((l) => !l.startDate)) out.push("Auszahlungsdatum der Darlehen (für den Tilgungsverlauf)");
   if (!p.yearBuilt) out.push("Baujahr (bestimmt den Abschreibungssatz)");
   if (p.valuations.length === 0) out.push("Aktueller Marktwert (Schätzung)");
   if (p.units.some((u) => !u.area)) out.push("Wohnfläche aller Einheiten (Umlageschlüssel)");

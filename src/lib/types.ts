@@ -25,7 +25,12 @@ export interface Loan {
   /** monatliche Rate (Zins + Tilgung) */
   monthlyPayment: number;
   fixedUntil: ISODate | null;
+  /** Auszahlung bzw. Übernahme des Darlehens – ab dann laufen Rate und Tilgung */
+  startDate?: ISODate | null;
 }
+
+/** Art des Erwerbs: bestimmt Einstand, eingesetztes Eigenkapital und Abschreibung */
+export type AcquisitionType = "purchase" | "gift" | "inheritance";
 
 export interface Valuation {
   id: string;
@@ -42,14 +47,21 @@ export interface Property {
   units: Unit[];
   /** Baujahr (Fertigstellung) – bestimmt den AfA-Satz */
   yearBuilt: number | null;
+  acquisitionType?: AcquisitionType;
+  /** Erwerbsdatum (Übergang von Nutzen und Lasten) */
   purchaseDate: ISODate | null;
+  /** Kaufpreis bzw. bei Schenkung/Erbschaft der Verkehrswert zum Erwerbszeitpunkt */
   purchasePrice: number;
-  /** Grunderwerbsteuer, Notar und Grundbuch, Makler */
+  /** Kauf: Grunderwerbsteuer; Schenkung/Erbschaft: Schenkung- bzw. Erbschaftsteuer */
   transferTax: number;
   notaryCosts: number;
   brokerFee: number;
   /** Anteil des Grund und Bodens am Kaufpreis in % (nicht abschreibbar) */
   landShare: number;
+  /** Schenkung/Erbschaft: Anschaffungskosten des Rechtsvorgängers (inkl. Nebenkosten) – die AfA wird fortgeführt (§ 11d EStDV) */
+  predecessorCost?: number | null;
+  /** Schenkung/Erbschaft: Jahr, in dem der Rechtsvorgänger erworben hat */
+  predecessorYear?: number | null;
   loans: Loan[];
   /** Verkehrswertschätzungen im Zeitverlauf */
   valuations: Valuation[];

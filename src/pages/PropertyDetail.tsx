@@ -6,7 +6,8 @@ import { addMonths, formatDate, todayISO } from "../lib/dates";
 import { isCurrentTenant, propertyMetrics } from "../lib/finance";
 import { formatEUR, formatEUR0, formatNum, formatPct, formatSignedEUR0 } from "../lib/format";
 import { missingInfo, PROPERTY_TYPE_LABELS, rentAt, uid, warmRent } from "../lib/model";
-import type { EconomicPlan, Tenant, WegAnnualStatement } from "../lib/types";
+import type { EconomicPlan, Property, Tenant, WegAnnualStatement } from "../lib/types";
+import { wealthSeries, type WealthSeries } from "../lib/wealth";
 import { summarizeAnnual, summarizePlan } from "../lib/weg";
 import WegImport from "../components/WegImport";
 import { newTenant, saveTenant, TenantForm, TenantTable } from "./Tenants";
@@ -32,6 +33,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
   const today = todayISO();
   const taxRate = data.settings.marginalTaxRate;
   const m = propertyMetrics(p, data.tenants, today, taxRate);
+  const w = wealthSeries(p, data, today);
   const missing = missingInfo(p, data.tenants);
   const tenants = data.tenants.filter((t) => t.propertyId === p.id).sort((a, b) => a.moveIn.localeCompare(b.moveIn));
   const shownTenants = tenants.filter((t) => showFormer || !t.moveOut || t.moveOut >= today);
@@ -104,6 +106,62 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
           <Kpi label="Eigenkapitalrendite p. a." value={formatPct(m.equityReturn)} hint="Cashflow n. St. + Tilgung, ohne Wertänderung" />
         </div>
       </div>
+
+      {w ? (
+        <div className="card">
+          <h2>Vermögensentwicklung seit {ACQ_LABEL[p.acquisitionType ?? "purchase"]} ({formatDate(p.purchaseDate)})</h2>
+          <div className="kpi-row" style={{ marginBottom: 12 }}>
+            <Kpi label="Vermögenswert heute" value={formatEUR0(w.current.wealth)} hint="Marktwert − Restschuld + Cashflow" />
+            <Kpi
+              label="Einstand"
+              value={formatEUR0(w.baseline)}
+              hint={p.acquisitionType && p.acquisitionType !== "purchase" ? "Wert bei Erwerb + Nebenkosten − Darlehen" : "Kaufpreis + Nebenkosten − Darlehen"}
+            />
+            <Kpi label="Cashflow seit Erwerb" value={formatSignedEUR0(w.current.cumulative)} hint="Miete + Vorauszahlungen − Hausgeld − Kosten − Raten" />
+            <Kpi label="Zuwachs" value={formatSignedEUR0(w.gain)} hint={w.baseline > 0 ? formatPct(w.gain / w.baseline) : undefined} />
+          </div>
+          {w.points.length >= 2 && <Sparkline points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} height={110} label={`Vermögensentwicklung ${p.name}`} />}
+          <div className="table-wrap" style={{ marginTop: 12 }}>
+            <table className="compact">
+              <thead>
+                <tr>
+                  <th>Jahr</th>
+                  <th className="num">Marktwert</th>
+                  <th className="num">Restschuld</th>
+                  <th className="num">Cashflow im Jahr</th>
+                  <th className="num">Vermögenswert</th>
+                </tr>
+              </thead>
+              <tbody>
+                {yearRows(w).map((y) => (
+                  <tr key={y.year}>
+                    <td>{y.year}{y.partial ? " (bis heute)" : ""}</td>
+                    <td className="num">{formatEUR0(y.value)}</td>
+                    <td className="num">{formatEUR0(y.debt)}</td>
+                    <td className="num">{formatSignedEUR0(y.cashflow)}</td>
+                    <td className="num"><strong>{formatEUR0(y.wealth)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {w.loanDeviation !== null && (
+            <div className="alert warn small" style={{ marginTop: 10 }}>
+              Die eingetragene Restschuld weicht um {formatEUR0(w.loanDeviation)} vom berechneten Tilgungsplan ab (z. B. Sondertilgung oder geänderte Rate). Für heute gilt die
+              eingetragene Restschuld.
+            </div>
+          )}
+          <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
+            Monatlich: Miete{p.type === "etw" ? " und Betriebskostenvorauszahlungen" : ""} wie vereinbart
+            {p.type === "etw" ? ", abzüglich Hausgeld (laut Wirtschaftsplan des Jahres) und Grundsteuer" : ""}, eigener Kosten und Kreditraten; Ergebnisse freigegebener
+            Abrechnungen im Monat der Freigabe. Marktwert linear zwischen den Bewertungen. Vor Steuern.
+          </p>
+        </div>
+      ) : (
+        <div className="alert info">
+          Für die Vermögensentwicklung fehlen Erwerbsdatum und Kaufpreis bzw. Wert bei Schenkung. <a href={`#/objekte/${p.id}/bearbeiten`}>Erwerb erfassen</a>
+        </div>
+      )}
 
       <div className="card">
         <h2>Wertentwicklung</h2>
@@ -395,4 +453,22 @@ function Line({ label, value, sum }: { label: string; value: number; sum?: boole
       <td className="num">{formatEUR0(value === 0 ? 0 : value) /* kein „-0 €“ */}</td>
     </tr>
   );
+}
+
+const ACQ_LABEL: Record<NonNullable<Property["acquisitionType"]>, string> = { purchase: "Kauf", gift: "Schenkung", inheritance: "Erbschaft" };
+
+/** Jahresübersicht: Stand am Jahresende bzw. heute, Cashflow des Jahres */
+function yearRows(w: WealthSeries) {
+  const years = new Map<number, { year: number; value: number; debt: number; wealth: number; cashflow: number; partial: boolean }>();
+  for (const pt of w.points) {
+    const year = Number(pt.date.slice(0, 4));
+    const row = years.get(year) ?? { year, value: 0, debt: 0, wealth: 0, cashflow: 0, partial: false };
+    row.value = pt.value;
+    row.debt = pt.debt;
+    row.wealth = pt.wealth;
+    row.cashflow += pt.cashflow;
+    row.partial = !pt.date.endsWith("-12-31");
+    years.set(year, row);
+  }
+  return [...years.values()];
 }

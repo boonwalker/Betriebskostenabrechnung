@@ -4,7 +4,8 @@ Web-App für private Vermieter: Mietobjekte wie ein Depot im Blick behalten, Mie
 
 ## Funktionen
 
-- **Portfolio-Startseite** mit einer Kachel je Objekt: Marktwert, Wertentwicklung seit Kauf, Wertverlauf, Mietrendite, monatlicher Cashflow und Vermietungsstand. Oben steht das Nettovermögen über alle Objekte.
+- **Portfolio-Startseite** mit einer Kachel je Objekt: Vermögenswert (Marktwert − Restschuld + Cashflow seit Erwerb) mit monatlichem Verlauf, Zuwachs gegenüber dem Einstand, Mietrendite, monatlicher Cashflow und Vermietungsstand. Oben steht der Vermögenswert über alle Objekte.
+- **Assistent für neue Objekte**: fragt Art, Erwerb (Kauf, Schenkung oder Erbschaft), Darlehen mit Konditionen und Auszahlung, Wohnungen, laufende Kosten und den aktuellen Wert ab. Bei Schenkung/Erbschaft wird die Abschreibung des Rechtsvorgängers fortgeführt (§ 11d EStDV).
 - **Objektdetailseite** mit Wertentwicklung (Bewertungen erfassen), Einheiten und Mietern, Wirtschaftlichkeitsrechnung, steuerlicher Schätzung (Anlage V mit AfA nach Baujahr), Finanzierung und Abrechnungen. Fehlende Angaben werden als Checkliste angezeigt.
 - **Objektdaten**: Art (Mehrfamilienhaus, Ein-/Zweifamilienhaus, Eigentumswohnung), Baujahr, Kaufpreis und Kaufnebenkosten, Anteil Grund und Boden, Darlehen, Hausgeld (Verwaltervergütung, Erhaltungsrücklage) und weitere nicht umlagefähige Kosten
 - **Mieter** mit Ein-/Auszug, Personenzahl, Kaution und Mietverlauf (Kaltmiete, Betriebs- und Heizkostenvorauszahlung, Warmmiete) – Mieterhöhungen und Anpassungen nach § 560 BGB werden monatsgenau berücksichtigt

@@ -4,9 +4,9 @@ import { depreciationRate } from "../lib/finance";
 import { estimatePropertyTax } from "../lib/propertyTax";
 import { formatEUR, formatNum, formatPct } from "../lib/format";
 import { newProperty, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
-import type { Loan, Property, PropertyType, Unit } from "../lib/types";
+import type { AcquisitionType, Loan, Property, PropertyType, Unit } from "../lib/types";
 
-function Field({ label, hint, children, wide }: { label: string; hint?: string; children: ReactNode; wide?: boolean }) {
+export function Field({ label, hint, children, wide }: { label: string; hint?: string; children: ReactNode; wide?: boolean }) {
   return (
     <label className="field" style={wide ? { gridColumn: "1 / -1" } : undefined}>
       {label}
@@ -154,24 +154,10 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
       </div>
 
       <div className="card">
-        <h2>Kauf</h2>
-        <p className="hint">Grundlage für Wertentwicklung, Rendite und Abschreibung. Die Beträge findest du im Kaufvertrag, im Grunderwerbsteuerbescheid und in den Notarrechnungen.</p>
-        <div className="grid">
-          <Field label="Kaufdatum (Übergang Nutzen/Lasten)">
-            <input type="date" value={p.purchaseDate ?? ""} onChange={(e) => set({ purchaseDate: e.target.value || null })} />
-          </Field>
-          <Field label="Kaufpreis (€)">
-            <NumberInput value={p.purchasePrice} onChange={(purchasePrice) => set({ purchasePrice })} />
-          </Field>
-          <Field label="Grunderwerbsteuer (€)" hint="3,5–6,5 % je nach Bundesland">
-            <NumberInput value={p.transferTax} onChange={(transferTax) => set({ transferTax })} />
-          </Field>
-          <Field label="Notar und Grundbuch (€)" hint="nur Eigentumserwerb, ohne Grundschuld">
-            <NumberInput value={p.notaryCosts} onChange={(notaryCosts) => set({ notaryCosts })} />
-          </Field>
-          <Field label="Maklerprovision (€)">
-            <NumberInput value={p.brokerFee} onChange={(brokerFee) => set({ brokerFee })} />
-          </Field>
+        <h2>Erwerb</h2>
+        <p className="hint">Grundlage für Vermögensentwicklung, Rendite und Abschreibung.</p>
+        <AcquisitionFields p={p} set={set} />
+        <div className="grid" style={{ marginTop: 12 }}>
           <Field label="Anteil Grund und Boden (%)" hint="Nicht abschreibbar. Steht im Kaufvertrag oder lässt sich mit der Arbeitshilfe des BMF ermitteln.">
             <NumberInput value={p.landShare} onChange={(landShare) => set({ landShare: Math.min(100, Math.max(0, landShare)) })} />
           </Field>
@@ -218,6 +204,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
                   <th className="num">Zins (% p. a.)</th>
                   <th className="num">Rate / Monat (€)</th>
                   <th>Zinsbindung bis</th>
+                  <th>Auszahlung</th>
                   <th />
                 </tr>
               </thead>
@@ -230,6 +217,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
                     <td style={{ minWidth: 80 }}><NumberInput value={l.interestRate} onChange={(interestRate) => setLoan(l.id, { interestRate })} ariaLabel="Zinssatz" /></td>
                     <td style={{ minWidth: 100 }}><NumberInput value={l.monthlyPayment} onChange={(monthlyPayment) => setLoan(l.id, { monthlyPayment })} ariaLabel="Monatsrate" /></td>
                     <td><input type="date" value={l.fixedUntil ?? ""} onChange={(e) => setLoan(l.id, { fixedUntil: e.target.value || null })} aria-label="Zinsbindung bis" /></td>
+                    <td><input type="date" value={l.startDate ?? ""} onChange={(e) => setLoan(l.id, { startDate: e.target.value || null })} aria-label="Auszahlung bzw. Übernahme" /></td>
                     <td><button className="ghost" onClick={() => set({ loans: p.loans.filter((x) => x.id !== l.id) })} aria-label="Darlehen entfernen">✕</button></td>
                   </tr>
                 ))}
@@ -239,7 +227,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         )}
         <button
           onClick={() =>
-            set({ loans: [...p.loans, { id: uid(), lender: "", principal: 0, balance: 0, interestRate: 0, monthlyPayment: 0, fixedUntil: null }] })
+            set({ loans: [...p.loans, { id: uid(), lender: "", principal: 0, balance: 0, interestRate: 0, monthlyPayment: 0, fixedUntil: null, startDate: p.purchaseDate }] })
           }
         >
           + Darlehen
@@ -281,5 +269,69 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         <button className="primary" disabled={!valid} onClick={save}>Speichern</button>
       </div>
     </>
+  );
+}
+
+export const ACQUISITION_OPTIONS: { value: AcquisitionType; label: string; text: string }[] = [
+  { value: "purchase", label: "Kauf", text: "Du hast das Objekt gekauft." },
+  { value: "gift", label: "Schenkung", text: "Du hast das Objekt geschenkt bekommen, z. B. von den Eltern." },
+  { value: "inheritance", label: "Erbschaft", text: "Du hast das Objekt geerbt." },
+];
+
+/** Angaben zum Erwerb – je nach Art (Kauf, Schenkung, Erbschaft) */
+export function AcquisitionFields({ p, set }: { p: Property; set: (patch: Partial<Property>) => void }) {
+  const type = p.acquisitionType ?? "purchase";
+  const free = type !== "purchase";
+  return (
+    <div className="stack">
+      <div className="choice-row">
+        {ACQUISITION_OPTIONS.map((o) => (
+          <button key={o.value} type="button" className={`choice ${type === o.value ? "selected" : ""}`} onClick={() => set({ acquisitionType: o.value })}>
+            <strong>{o.label}</strong>
+            <span className="small muted">{o.text}</span>
+          </button>
+        ))}
+      </div>
+      <div className="grid">
+        <Field label={free ? `Datum der ${type === "gift" ? "Schenkung" : "Erbschaft"} (Übergang Nutzen/Lasten)` : "Kaufdatum (Übergang Nutzen/Lasten)"}>
+          <input type="date" value={p.purchaseDate ?? ""} onChange={(e) => set({ purchaseDate: e.target.value || null })} />
+        </Field>
+        <Field
+          label={free ? "Verkehrswert zum Erwerbszeitpunkt (€)" : "Kaufpreis (€)"}
+          hint={free ? "z. B. Wert laut Schenkungsvertrag, Gutachten oder Bewertung fürs Finanzamt" : undefined}
+        >
+          <NumberInput value={p.purchasePrice || undefined} onChange={(purchasePrice) => set({ purchasePrice })} />
+        </Field>
+        <Field label={free ? `${type === "gift" ? "Schenkung" : "Erbschaft"}steuer (€)` : "Grunderwerbsteuer (€)"} hint={free ? "oft 0 € dank Freibetrag (Kinder: 400.000 €)" : "3,5–6,5 % je nach Bundesland"}>
+          <NumberInput value={p.transferTax} onChange={(transferTax) => set({ transferTax })} />
+        </Field>
+        <Field label="Notar und Grundbuch (€)" hint="nur Eigentumserwerb, ohne Grundschuld">
+          <NumberInput value={p.notaryCosts} onChange={(notaryCosts) => set({ notaryCosts })} />
+        </Field>
+        {!free && (
+          <Field label="Maklerprovision (€)">
+            <NumberInput value={p.brokerFee} onChange={(brokerFee) => set({ brokerFee })} />
+          </Field>
+        )}
+      </div>
+      {free && (
+        <div className="grid">
+          <Field
+            label={`Anschaffungskosten ${type === "gift" ? "des Schenkers" : "des Erblassers"} (€)`}
+            hint="Kaufpreis + Nebenkosten bei deren Erwerb. Du führst deren Abschreibung fort (§ 11d EStDV) – der Wert bei Schenkung zählt steuerlich nicht."
+          >
+            <NumberInput value={p.predecessorCost ?? undefined} onChange={(v) => set({ predecessorCost: v || null })} />
+          </Field>
+          <Field label="deren Erwerbsjahr" hint="bestimmt, wie lange die Abschreibung noch läuft">
+            <input
+              type="number"
+              value={p.predecessorYear ?? ""}
+              onChange={(e) => set({ predecessorYear: e.target.value ? Math.round(Number(e.target.value)) : null })}
+              placeholder="z. B. 2009"
+            />
+          </Field>
+        </div>
+      )}
+    </div>
   );
 }

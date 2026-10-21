@@ -26,6 +26,7 @@ export function demoData(): AppData {
         name: "Lindenstraße 5",
         address: "Lindenstraße 5, 12345 Musterstadt",
         type: "mfh",
+        acquisitionType: "purchase",
         units: [
           { id: "demo-u1", name: "EG links", area: 72 },
           { id: "demo-u2", name: "EG rechts", area: 58 },
@@ -39,7 +40,7 @@ export function demoData(): AppData {
         brokerFee: 14_990,
         landShare: 30,
         loans: [
-          { id: "demo-l1", lender: "Sparkasse Musterstadt", principal: 360_000, balance: 241_500, interestRate: 1.65, monthlyPayment: 1_350, fixedUntil: `${year + 2}-06-30` },
+          { id: "demo-l1", lender: "Sparkasse Musterstadt", principal: 360_000, balance: 241_500, interestRate: 1.65, monthlyPayment: 1_350, fixedUntil: `${year + 2}-06-30`, startDate: "2016-07-01" },
         ],
         valuations: [
           { id: "demo-v1", date: "2019-12-31", value: 470_000, note: "Bankbewertung" },
@@ -57,6 +58,7 @@ export function demoData(): AppData {
         name: "ETW Am Stadtpark",
         address: "Am Stadtpark 12, 12345 Musterstadt",
         type: "etw",
+        acquisitionType: "purchase",
         units: [{ id: "demo-u4", name: "3. OG rechts", area: 64 }],
         yearBuilt: 2008,
         purchaseDate: "2021-03-01",
@@ -66,7 +68,7 @@ export function demoData(): AppData {
         brokerFee: 10_315,
         landShare: 20,
         loans: [
-          { id: "demo-l2", lender: "Musterbank", principal: 260_000, balance: 231_800, interestRate: 1.05, monthlyPayment: 880, fixedUntil: "2036-02-28" },
+          { id: "demo-l2", lender: "Musterbank", principal: 260_000, balance: 231_800, interestRate: 1.05, monthlyPayment: 880, fixedUntil: "2036-02-28", startDate: "2021-03-01" },
         ],
         valuations: [
           { id: "demo-v5", date: "2022-12-31", value: 305_000, note: "Immobilienportal" },

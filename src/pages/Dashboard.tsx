@@ -3,6 +3,7 @@ import { Delta, Kpi } from "../components/ui";
 import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { portfolioMetrics, propertyMetrics, type PropertyMetrics } from "../lib/finance";
+import { wealthSeries, type WealthSeries } from "../lib/wealth";
 import { formatEUR0, formatPct, formatSignedEUR0 } from "../lib/format";
 import { missingInfo, PROPERTY_TYPE_LABELS } from "../lib/model";
 import type { AppData, Property } from "../lib/types";
@@ -10,7 +11,18 @@ import type { AppData, Property } from "../lib/types";
 export default function Dashboard({ data }: { data: AppData }) {
   const today = todayISO();
   const lastYear = String(new Date().getFullYear() - 1);
-  const metrics = data.properties.map((p) => ({ p, m: propertyMetrics(p, data.tenants, today, data.settings.marginalTaxRate) }));
+  const metrics = data.properties.map((p) => ({
+    p,
+    m: propertyMetrics(p, data.tenants, today, data.settings.marginalTaxRate),
+    w: wealthSeries(p, data, today),
+  }));
+  // Vermögenswert je Objekt: Marktwert − Restschuld + aufsummierter Cashflow (ohne Erwerbsdaten nur Marktwert − Restschuld)
+  const wealthOf = (x: (typeof metrics)[number]) => x.w?.current.wealth ?? x.m.netWorth;
+  const totalWealth = metrics.reduce((a, x) => a + wealthOf(x), 0);
+  const withSeries = metrics.filter((x) => x.w);
+  const totalGain = withSeries.reduce((a, x) => a + x.w!.gain, 0);
+  const totalBaseline = withSeries.reduce((a, x) => a + x.w!.baseline, 0);
+  const totalCumulative = withSeries.reduce((a, x) => a + x.w!.current.cumulative, 0);
   const portfolio = portfolioMetrics(
     metrics.map((x) => x.m),
     data.properties.reduce((a, p) => a + p.purchasePrice, 0),
@@ -36,9 +48,11 @@ export default function Dashboard({ data }: { data: AppData }) {
       {data.properties.length > 0 && (
         <div className="card portfolio-head">
           <div>
-            <div className="muted small">Nettovermögen (Marktwert − Restschuld)</div>
-            <div className="hero">{formatEUR0(portfolio.netWorth)}</div>
-            <Delta value={portfolio.valueGain} pct={portfolio.valueGainPct} suffix="Wertentwicklung seit Kauf" />
+            <div className="muted small">Vermögenswert (Marktwert − Restschuld + Cashflow seit Erwerb)</div>
+            <div className="hero">{formatEUR0(totalWealth)}</div>
+            {withSeries.length > 0 && (
+              <Delta value={totalGain} pct={totalBaseline > 0 ? totalGain / totalBaseline : null} suffix={`ggü. Einstand · Cashflow bisher ${formatSignedEUR0(totalCumulative)}`} />
+            )}
           </div>
           <div className="kpi-row">
             <Kpi label="Marktwert gesamt" value={formatEUR0(portfolio.marketValue)} />
@@ -54,8 +68,8 @@ export default function Dashboard({ data }: { data: AppData }) {
       )}
 
       <div className="tiles">
-        {metrics.map(({ p, m }) => (
-          <PropertyTile key={p.id} p={p} m={m} missing={missingInfo(p, data.tenants).length} needsStatement={openStatement(p)} lastYear={lastYear} />
+        {metrics.map(({ p, m, w }) => (
+          <PropertyTile key={p.id} p={p} m={m} w={w} missing={missingInfo(p, data.tenants).length} needsStatement={openStatement(p)} lastYear={lastYear} />
         ))}
         <a className="tile tile-add" href="#/objekte/neu">
           <span className="tile-add-plus">+</span>
@@ -110,7 +124,21 @@ export default function Dashboard({ data }: { data: AppData }) {
 }
 
 
-function PropertyTile({ p, m, missing, needsStatement, lastYear }: { p: Property; m: PropertyMetrics; missing: number; needsStatement: boolean; lastYear: string }) {
+function PropertyTile({
+  p,
+  m,
+  w,
+  missing,
+  needsStatement,
+  lastYear,
+}: {
+  p: Property;
+  m: PropertyMetrics;
+  w: WealthSeries | null;
+  missing: number;
+  needsStatement: boolean;
+  lastYear: string;
+}) {
   return (
     <a className="tile" href={`#/objekte/${p.id}`}>
       <div className="row" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
@@ -122,13 +150,23 @@ function PropertyTile({ p, m, missing, needsStatement, lastYear }: { p: Property
         <span className="badge neutral">{PROPERTY_TYPE_LABELS[p.type]}</span>
       </div>
 
-      <div className="tile-value">{formatEUR0(m.marketValue)}</div>
-      {m.invested > 0 ? <Delta value={m.valueGain} pct={m.valueGainPct} /> : <div className="muted small">Kaufpreis fehlt</div>}
+      <div className="muted small" style={{ marginTop: 12 }}>Vermögenswert</div>
+      <div className="tile-value" style={{ marginTop: 0 }}>{formatEUR0(w?.current.wealth ?? m.netWorth)}</div>
+      {w ? (
+        <Delta value={w.gain} pct={w.baseline > 0 ? w.gain / w.baseline : null} />
+      ) : (
+        <div className="muted small">Erwerbsdatum und -wert fehlen</div>
+      )}
+      <div className="muted small">
+        Marktwert {formatEUR0(m.marketValue)}
+        {m.loanBalance > 0 && ` · Restschuld ${formatEUR0(m.loanBalance)}`}
+        {w && ` · Cashflow ${formatSignedEUR0(w.current.cumulative)}`}
+      </div>
       <div className="tile-chart">
-        {m.history.length >= 2 ? (
-          <Sparkline points={m.history} label={`Wertverlauf ${p.name}`} />
+        {w && w.points.length >= 2 ? (
+          <Sparkline points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />
         ) : (
-          <div className="muted small">Wertverlauf erscheint, sobald du eine Bewertung erfasst.</div>
+          <div className="muted small">Der Verlauf erscheint ab dem zweiten Monat nach Erwerb.</div>
         )}
       </div>
 

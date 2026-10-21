@@ -120,7 +120,12 @@ export function missingInfo(p: Property, tenants: Tenant[]): string[] {
   if (free && !p.predecessorCost) out.push("Anschaffungskosten des Rechtsvorgängers (für die fortgeführte Abschreibung)");
   if (p.loans.some((l) => !l.startDate)) out.push("Auszahlungsdatum der Darlehen (für den Tilgungsverlauf)");
   if (!p.yearBuilt) out.push("Baujahr (bestimmt den Abschreibungssatz)");
-  if (p.valuations.length === 0) out.push("Aktueller Marktwert (Schätzung)");
+  if (p.valuations.length === 0)
+    out.push(
+      free && p.purchasePrice > 0 && p.purchasePrice === p.propertyTaxValue
+        ? "Aktueller Marktwert (bisher nur Grundsteuerwert als Untergrenze)"
+        : "Aktueller Marktwert (Schätzung)",
+    );
   if (p.units.some((u) => !u.area)) out.push("Wohnfläche aller Einheiten (Umlageschlüssel)");
   if (p.type === "etw" && !p.hausgeldMonthly) out.push("Hausgeld laut Wirtschaftsplan der WEG");
   const today = new Date().toISOString().slice(0, 10);

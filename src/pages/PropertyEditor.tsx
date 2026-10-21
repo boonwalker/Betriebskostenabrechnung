@@ -298,7 +298,7 @@ export function AcquisitionFields({ p, set }: { p: Property; set: (patch: Partia
         </Field>
         <Field
           label={free ? "Verkehrswert zum Erwerbszeitpunkt (€)" : "Kaufpreis (€)"}
-          hint={free ? "z. B. Wert laut Schenkungsvertrag, Gutachten oder Bewertung fürs Finanzamt" : undefined}
+          hint={free ? "z. B. Wert laut Schenkungsvertrag oder Gutachten; ersatzweise der Grundsteuerwert als Untergrenze" : undefined}
         >
           <NumberInput value={p.purchasePrice || undefined} onChange={(purchasePrice) => set({ purchasePrice })} />
         </Field>
@@ -317,8 +317,31 @@ export function AcquisitionFields({ p, set }: { p: Property; set: (patch: Partia
       {free && (
         <div className="grid">
           <Field
+            label="Grundsteuerwert (€)"
+            hint="aus dem Feststellungsbescheid des Finanzamts (Stichtag 01.01.2022) – auch für die Grundsteuer-Kontrolle"
+          >
+            <NumberInput value={p.propertyTaxValue ?? undefined} onChange={(v) => set({ propertyTaxValue: v || null })} />
+          </Field>
+          <div className="stack">
+            {!!p.propertyTaxValue && p.purchasePrice !== p.propertyTaxValue && (
+              <button type="button" className="btn" onClick={() => set({ purchasePrice: p.propertyTaxValue! })}>
+                Grundsteuerwert als Verkehrswert übernehmen
+              </button>
+            )}
+            {!!p.propertyTaxValue && p.purchasePrice === p.propertyTaxValue && (
+              <p className="hint">
+                Als Startwert wird der Grundsteuerwert verwendet. Er ist ein pauschal ermittelter Wert und liegt meist unter dem Marktwert – trage unter „Aktueller Wert“
+                eine realistische Schätzung ein, sobald du eine hast.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      {free && (
+        <div className="grid">
+          <Field
             label={`Anschaffungskosten ${type === "gift" ? "des Schenkers" : "des Erblassers"} (€)`}
-            hint="Kaufpreis + Nebenkosten bei deren Erwerb. Du führst deren Abschreibung fort (§ 11d EStDV) – der Wert bei Schenkung zählt steuerlich nicht."
+            hint="Kaufpreis + Nebenkosten bei deren Erwerb. Du führst deren Abschreibung fort (§ 11d EStDV) – weder der Wert bei Schenkung noch der Grundsteuerwert zählen dafür."
           >
             <NumberInput value={p.predecessorCost ?? undefined} onChange={(v) => set({ predecessorCost: v || null })} />
           </Field>

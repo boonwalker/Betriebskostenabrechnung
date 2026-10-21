@@ -1,0 +1,94 @@
+import { applyRules } from "./classify";
+import type { WegExtraction } from "./extract";
+import { uid } from "./model";
+import type { EconomicPlan, LedgerPosition, WegAnnualStatement } from "./types";
+
+interface Context {
+  propertyId: string;
+  unitId: string;
+  documents: string[];
+  fallbackYear: number;
+}
+
+function toPositions(x: WegExtraction, year: number, document: string): LedgerPosition[] {
+  return x.positions.map((p) =>
+    applyRules(
+      {
+        id: uid(),
+        label: p.label,
+        amount: p.unitAmount,
+        totalAmount: p.totalAmount,
+        wegKey: p.wegKey || undefined,
+        category: null,
+        classification: "review",
+        reason: "",
+        origin: "rule",
+        // Automatisch erkannte Werte gelten erst nach Bestätigung durch den Vermieter als geprüft
+        reviewed: false,
+        declaredAllocable: p.declaredAllocable === "unknown" ? null : p.declaredAllocable === "yes",
+        provenance: { document, page: p.page ?? undefined, row: p.sourceText || undefined },
+        confidence: p.confidence,
+      },
+      year,
+    ),
+  );
+}
+
+/** Wandelt das Ausleseergebnis in eine WEG-Jahresabrechnung (Ist) um */
+export function annualFromExtraction(x: WegExtraction, ctx: Context): WegAnnualStatement {
+  const year = x.year ?? ctx.fallbackYear;
+  const document = ctx.documents.join(", ");
+  const all = toPositions(x, year, document);
+  // Rücklage gehört zur Eigentümer-Ebene und nicht zu den Bewirtschaftungskosten
+  const reservePositions = all.filter((_, i) => x.positions[i].isReserve);
+  const positions = all.filter((_, i) => !x.positions[i].isReserve);
+  const reserveFromPositions = reservePositions.reduce((a, p) => a + Math.round(p.amount * 100), 0) / 100;
+  const h = x.heating;
+  return {
+    kind: "annual",
+    id: uid(),
+    propertyId: ctx.propertyId,
+    unitId: ctx.unitId,
+    year,
+    managementCostsActual: x.managementCostsActual,
+    managementCostsPlan: x.managementCostsPlan,
+    reserveContribution: x.reserveContribution ?? reserveFromPositions,
+    positions,
+    heating: h
+      ? {
+          heatSource: h.heatSource,
+          buildingTotal: h.buildingTotal,
+          unitShare: h.unitShare,
+          baseSharePct: h.baseSharePct,
+          areaTotal: h.areaTotal,
+          consumptionHeatingKwh: h.consumptionHeatingKwh,
+          consumptionWaterKwh: h.consumptionWaterKwh,
+          components: h.components.map((c) => ({ id: uid(), ...c })),
+          // CO2-Preis nur auf fossile Brennstoffe und Fernwärme, nicht auf Strom für Wärmepumpen
+          co2Applicable: !!h.co2Cost || !/w(ä|ae)rmepumpe|strom/i.test(h.heatSource),
+          co2Cost: h.co2Cost,
+          co2Kg: h.co2Kg,
+          provenance: { document, page: h.page ?? undefined },
+        }
+      : null,
+    documents: ctx.documents,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/** Wandelt das Ausleseergebnis in einen Wirtschaftsplan (Prognose) um */
+export function planFromExtraction(x: WegExtraction, ctx: Context): EconomicPlan {
+  const year = x.year ?? ctx.fallbackYear;
+  return {
+    kind: "plan",
+    id: uid(),
+    propertyId: ctx.propertyId,
+    unitId: ctx.unitId,
+    year,
+    annualHausgeld: x.annualHausgeld,
+    monthlyHausgeld: x.monthlyHausgeld,
+    positions: toPositions(x, year, ctx.documents.join(", ")),
+    documents: ctx.documents,
+    createdAt: new Date().toISOString(),
+  };
+}

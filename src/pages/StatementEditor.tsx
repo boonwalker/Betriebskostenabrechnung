@@ -6,7 +6,9 @@ import { co2Stage } from "../lib/co2";
 import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
+import { changedSinceRelease, releaseStatement, statementReadiness } from "../lib/release";
 import { uid } from "../lib/store";
+import { transferToStatement } from "../lib/weg";
 import type { AllocationKey, CostItem, Property, Section35aKind, Statement } from "../lib/types";
 
 export default function StatementEditor({ data, update, statementId }: PageProps & { statementId: string }) {
@@ -40,6 +42,35 @@ export default function StatementEditor({ data, update, statementId }: PageProps
     set({ prepaymentOverrides: next });
   };
 
+  const readiness = statementReadiness(statement, data);
+  const released = statement.status === "released";
+  const changed = changedSinceRelease(statement, data);
+  const year = Number(statement.periodStart.slice(0, 4));
+  const annuals = data.wegAnnuals.filter((a) => a.propertyId === property.id && a.year === year);
+
+  const takeOverWeg = () => {
+    let costs = statement.costs;
+    const notes: string[] = [];
+    let added = 0;
+    for (const a of annuals) {
+      const { items, skipped } = transferToStatement(a, { ...statement, costs });
+      costs = [...costs, ...items];
+      added += items.length;
+      for (const sk of skipped) if (sk.reason !== "bereits übernommen" && sk.reason !== "nicht umlagefähig") notes.push(`• ${sk.position.label}: ${sk.reason}`);
+    }
+    set({ costs });
+    alert(`${added} Position(en) übernommen.` + (notes.length ? `\n\nNicht übernommen:\n${notes.join("\n")}` : ""));
+  };
+
+  const release = () => {
+    try {
+      const next = releaseStatement(statement, data);
+      update((d) => ({ ...d, statements: d.statements.map((s) => (s.id === next.id ? next : s)) }));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const today = todayISO();
   const daysLeft = Math.round((Date.parse(result.deadline) - Date.parse(today)) / 86_400_000);
 
@@ -49,10 +80,58 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         <div>
           <a href="#/abrechnungen" className="small">← Abrechnungen</a>
           <h1>Betriebskostenabrechnung {property.name}</h1>
+          <span className={`badge ${released ? "status-released" : "status-draft"}`}>
+            {released ? `✓ freigegeben am ${formatDate(statement.release!.releasedAt.slice(0, 10))}` : "Entwurf"}
+          </span>
         </div>
         <a className="btn primary" href={`#/abrechnungen/${statement.id}/druck`}>Abrechnungen drucken / PDF</a>
       </div>
 
+      {released ? (
+        <div className={`alert ${changed ? "danger" : "info"}`}>
+          {changed ? (
+            <>
+              <strong>Daten wurden nach der Freigabe geändert.</strong> Die Druckansicht zeigt weiterhin den freigegebenen Stand. Hebe die Freigabe auf, um die Abrechnung neu
+              zu berechnen und erneut freizugeben.
+            </>
+          ) : (
+            <>Die Abrechnung ist freigegeben und gesperrt. Die Druckansicht zeigt den eingefrorenen Stand.</>
+          )}{" "}
+          <button
+            className="ghost"
+            onClick={() => confirm("Freigabe aufheben? Die Abrechnung wird wieder zum Entwurf.") && set({ status: "draft", release: null })}
+          >
+            Freigabe aufheben
+          </button>
+        </div>
+      ) : (
+        <div className="card">
+          <div className="row" style={{ marginBottom: readiness.blockers.length || readiness.hints.length ? 8 : 0 }}>
+            <h2 style={{ margin: 0 }}>{readiness.ready ? "Bereit zur Freigabe" : "Was noch fehlt"}</h2>
+            <span className="spacer" />
+            <button className="primary" disabled={!readiness.ready} onClick={release} title={readiness.ready ? "Ergebnis einfrieren und als versandfertig markieren" : "Erst alle offenen Punkte klären"}>
+              Freigeben
+            </button>
+          </div>
+          {(readiness.blockers.length > 0 || readiness.hints.length > 0) && (
+            <ul className="findings">
+              {readiness.blockers.map((b) => (
+                <li key={b} className="error">✗ {b}</li>
+              ))}
+              {readiness.hints.map((h) => (
+                <li key={h} className="warning">⚠ {h}</li>
+              ))}
+            </ul>
+          )}
+          {!readiness.ready && (
+            <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
+              Solange Punkte offen sind, ist das Ergebnis vorläufig. Gedruckt wird es nur als gekennzeichneter Entwurf.
+            </p>
+          )}
+        </div>
+      )}
+
+      <fieldset className="plain-fieldset" disabled={released}>
       {daysLeft < 0 ? (
         <div className="alert danger">
           Die Abrechnungsfrist ist am {formatDate(result.deadline)} abgelaufen. Nachforderungen sind in der Regel ausgeschlossen (§ 556 Abs. 3 BGB), Guthaben müssen trotzdem ausgezahlt werden.
@@ -62,9 +141,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
           Noch {daysLeft} Tage: Die Abrechnung muss den Mietern spätestens am {formatDate(result.deadline)} zugehen.
         </div>
       ) : null}
-      {result.warnings.map((w) => (
-        <div className="alert warn" key={w}>{w}</div>
-      ))}
+
 
       <div className="card">
         <div className="grid">
@@ -91,6 +168,9 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         <div className="row" style={{ marginBottom: 12 }}>
           <h2 style={{ margin: 0 }}>Kostenpositionen</h2>
           <span className="spacer" />
+          {annuals.length > 0 && (
+            <button onClick={takeOverWeg} title="Geprüfte, umlagefähige Positionen der WEG-Jahresabrechnung übernehmen">Aus WEG-Jahresabrechnung {year} übernehmen</button>
+          )}
           <button onClick={() => setImporting(true)}>📄 Belege hochladen</button>
           <button className="primary" onClick={addCost}>+ Position</button>
         </div>
@@ -140,6 +220,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                   <th>Zeitraum</th>
                   <th className="num">Kostenanteil</th>
                   <th className="num">Vorauszahlungen</th>
+                  <th>tatsächlich gezahlt?</th>
                   <th className="num">Ergebnis</th>
                 </tr>
               </thead>
@@ -174,7 +255,20 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                           )}
                         </div>
                       </td>
-                      <td className="num"><Balance value={r.balance} /></td>
+                      <td>
+                        <label className="row small" style={{ flexWrap: "nowrap" }}>
+                          <input
+                            type="checkbox"
+                            checked={statement.prepaymentsConfirmed[r.tenant.id] === true}
+                            onChange={(e) => set({ prepaymentsConfirmed: { ...statement.prepaymentsConfirmed, [r.tenant.id]: e.target.checked } })}
+                          />
+                          bestätigt
+                        </label>
+                      </td>
+                      <td className="num">
+                        {!readiness.ready && !released && <div className="small muted">vorläufig</div>}
+                        <Balance value={r.balance} />
+                      </td>
                     </tr>
                   );
                 })}
@@ -183,7 +277,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
           </div>
         )}
         <p className="muted small" style={{ marginTop: 12 }}>
-          Trage bei den Vorauszahlungen den tatsächlich gezahlten Betrag ein, falls er vom Mietvertrag abweicht (z. B. Zahlungsrückstände oder Anpassungen im Jahr).
+          Vergleiche die Vorauszahlungen mit deinen Kontoauszügen. Weicht der gezahlte Betrag vom Mietvertrag ab (z. B. Rückstände), trage ihn ein und bestätige ihn erst dann.
         </p>
         {(result.vacancies.length > 0 || result.co2.length > 0) && (
           <>
@@ -211,6 +305,8 @@ export default function StatementEditor({ data, update, statementId }: PageProps
           </>
         )}
       </div>
+
+      </fieldset>
 
       {importing && (
         <ReceiptImport
@@ -254,7 +350,13 @@ function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; prope
         </td>
         <td>
           <input value={cost.label} onChange={(e) => onChange({ label: e.target.value })} aria-label="Bezeichnung" />
-          {cost.source && <div className="muted small" title={cost.note}>aus Beleg: {cost.source}</div>}
+          {cost.sourceAnnualId ? (
+            <div className="muted small" title={cost.note}>
+              aus <a href={`#/weg/jahresabrechnung/${cost.sourceAnnualId}`}>WEG-Jahresabrechnung</a>, Anteil der Wohnung
+            </div>
+          ) : (
+            cost.source && <div className="muted small" title={cost.note}>aus Beleg: {cost.source}</div>
+          )}
         </td>
         <td>
           <NumberInput value={cost.amount} onChange={(amount) => onChange({ amount })} ariaLabel="Betrag" />

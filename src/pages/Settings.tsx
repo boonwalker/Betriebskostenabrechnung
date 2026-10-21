@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { NumberInput, type PageProps } from "../components/ui";
 import { demoData } from "../lib/demo";
+import { we09Annual2024, we09Plan2025, we09Property, we09Tenant } from "../lib/fixtures/we09";
 import { emptyData, exportData, parseBackup } from "../lib/store";
 import type { AppData, Landlord } from "../lib/types";
 
@@ -128,6 +129,24 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
             }}
           >
             Beispieldaten laden
+          </button>
+          <button
+            onClick={() => {
+              if (data.properties.some((p) => p.id === "we09-p")) {
+                setMessage("Der Testfall WE 09 ist bereits geladen.");
+                return;
+              }
+              update((d) => ({
+                ...d,
+                properties: [...d.properties, we09Property()],
+                tenants: [...d.tenants, we09Tenant()],
+                wegAnnuals: [...d.wegAnnuals, we09Annual2024()],
+                economicPlans: [...d.economicPlans, we09Plan2025()],
+              }));
+              setMessage("Testfall WE 09 (Jahresabrechnung 2024, Wirtschaftsplan 2025) wurde ergänzt.");
+            }}
+          >
+            Testfall WE 09 hinzufügen
           </button>
           <button
             className="danger"

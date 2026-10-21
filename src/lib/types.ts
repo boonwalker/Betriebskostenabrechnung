@@ -6,6 +6,8 @@ export interface Unit {
   name: string;
   /** Wohnfläche in m² */
   area: number;
+  /** Miteigentumsanteil (Zähler, z. B. 49 bei 49/1.000) – nur Wohnungseigentum */
+  mea?: number;
 }
 
 /** mfh = Mehrfamilienhaus, efh = Ein-/Zweifamilienhaus, etw = Eigentumswohnung (WEG) */
@@ -63,6 +65,11 @@ export interface Property {
   managementAnnual: number;
   /** sonstige nicht umlagefähige Kosten p. a. */
   otherCostsAnnual: number;
+  /** WEG-Daten (nur Eigentumswohnung): Hausverwaltung, Anzahl Einheiten, Gesamt-MEA (Nenner), Gesamtwohnfläche */
+  wegManager: string;
+  wegUnitsCount: number | null;
+  wegMeaTotal: number | null;
+  wegAreaTotal: number | null;
 }
 
 /** Mietstand ab einem Stichtag (Mietvertrag, Mieterhöhung, Anpassung der Vorauszahlung) */
@@ -130,6 +137,9 @@ export interface CostItem {
   note?: string;
   /** Dateiname des Belegs, aus dem die Position übernommen wurde */
   source?: string;
+  /** Herkunft aus einer WEG-Jahresabrechnung (nie aus einem Wirtschaftsplan) */
+  sourceAnnualId?: string;
+  sourcePositionId?: string;
 }
 
 export interface Statement {
@@ -140,6 +150,122 @@ export interface Statement {
   costs: CostItem[];
   /** tatsächlich geleistete Vorauszahlungen je Mieter (überschreibt die Berechnung) */
   prepaymentOverrides: Record<string, number>;
+  /** Vermieter hat die Vorauszahlungen des Mieters anhand der Zahlungseingänge bestätigt */
+  prepaymentsConfirmed: Record<string, boolean>;
+  status: "draft" | "released";
+  /** eingefrorener Stand bei Freigabe – spätere Änderungen an Daten ändern ihn nicht */
+  release: StatementRelease | null;
+  createdAt: string;
+}
+
+export interface StatementRelease {
+  releasedAt: string;
+  /** Prüfsumme der Eingangsdaten zum Zeitpunkt der Freigabe */
+  fingerprint: string;
+  /** JSON des Berechnungsergebnisses (StatementResult) */
+  resultJson: string;
+}
+
+/* ---------- WEG-Ebene: Jahresabrechnung (Ist) und Wirtschaftsplan (Plan) ---------- */
+
+/** Bewertung einer Kostenposition für die Mieterabrechnung */
+export type Classification = "allocable" | "non_allocable" | "review";
+
+/** Wer die Bewertung getroffen hat */
+export type ClassificationOrigin = "rule" | "ai" | "user";
+
+/** Woher ein Wert stammt */
+export interface Provenance {
+  document: string;
+  page?: number;
+  /** Tabellenzeile bzw. Originaltext */
+  row?: string;
+}
+
+export interface LedgerPosition {
+  id: string;
+  /** Bezeichnung wie im Dokument */
+  label: string;
+  /** Anteil der Wohnung in € */
+  amount: number;
+  /** Gesamtkosten der WEG in € (falls ausgewiesen) */
+  totalAmount?: number | null;
+  /** Verteilerschlüssel der Verwaltung, z. B. „MEA“, „Wohnfläche“, „Einheiten“, „HKA“ */
+  wegKey?: string;
+  /** Kostenart nach § 2 BetrKV (null = keine) */
+  category: number | null;
+  classification: Classification;
+  reason: string;
+  origin: ClassificationOrigin;
+  /** vom Vermieter geprüft und bestätigt */
+  reviewed: boolean;
+  /** Kennzeichnung im Dokument selbst (z. B. Spalte „umlagefähig“ der Verwaltung), null = keine Angabe */
+  declaredAllocable: boolean | null;
+  /** "total" = Heizkosten laut Heizkostenabrechnung, "component" = darin enthaltene Energie-/Wartungskosten */
+  heating?: "total" | "component";
+  provenance?: Provenance;
+  /** Sicherheit der automatischen Erkennung 0–1 */
+  confidence?: number;
+  /** ursprünglich ausgelesener Betrag, falls manuell korrigiert */
+  extractedAmount?: number;
+}
+
+export interface HeatingComponent {
+  id: string;
+  label: string;
+  amount: number;
+}
+
+/** Heiz- und Warmwasserkostenabrechnung des Messdienstes für die Wohnung */
+export interface HeatingBill {
+  heatSource: string;
+  /** Gesamtheizkosten der Liegenschaft */
+  buildingTotal: number | null;
+  /** Anteil der Wohnung laut Abrechnung */
+  unitShare: number;
+  /** Grundkostenanteil in % (HeizkostenV: 30–50) */
+  baseSharePct: number | null;
+  areaTotal: number | null;
+  consumptionHeatingKwh: number | null;
+  consumptionWaterKwh: number | null;
+  components: HeatingComponent[];
+  /** CO2KostAufG nur bei Brennstoffen mit CO2-Preis (Öl, Gas, Fernwärme …), nicht bei Wärmepumpen-Strom */
+  co2Applicable: boolean;
+  co2Cost: number | null;
+  co2Kg: number | null;
+  provenance?: Provenance;
+}
+
+export interface WegAnnualStatement {
+  kind: "annual";
+  id: string;
+  propertyId: string;
+  unitId: string;
+  year: number;
+  /** Bewirtschaftungskosten Ist laut Einzelabrechnung (ohne Rücklage) */
+  managementCostsActual: number | null;
+  /** Bewirtschaftungskosten Soll laut Wirtschaftsplan */
+  managementCostsPlan: number | null;
+  /** Zuführung zur Erhaltungsrücklage – nur Eigentümer-Ebene */
+  reserveContribution: number;
+  positions: LedgerPosition[];
+  heating: HeatingBill | null;
+  documents: string[];
+  createdAt: string;
+}
+
+export interface EconomicPlan {
+  kind: "plan";
+  id: string;
+  propertyId: string;
+  unitId: string;
+  year: number;
+  /** Hausgeld laut Plan */
+  annualHausgeld: number | null;
+  monthlyHausgeld: number | null;
+  /** Positionen inkl. Zuführung zur Erhaltungsrücklage */
+  positions: LedgerPosition[];
+  documents: string[];
   createdAt: string;
 }
 
@@ -157,9 +283,11 @@ export interface Settings {
 }
 
 export interface AppData {
-  version: 2;
+  version: 3;
   properties: Property[];
   tenants: Tenant[];
   statements: Statement[];
+  wegAnnuals: WegAnnualStatement[];
+  economicPlans: EconomicPlan[];
   settings: Settings;
 }

@@ -82,6 +82,27 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         </div>
       </div>
 
+      {p.type === "etw" && (
+        <div className="card">
+          <h2>Wohnungseigentümergemeinschaft</h2>
+          <p className="hint">Steht in der Teilungserklärung und auf jeder Jahresabrechnung. Ohne abweichende Vereinbarung im Mietvertrag gilt für die Umlage der Schlüssel der WEG (§ 556a Abs. 3 BGB).</p>
+          <div className="grid">
+            <Field label="Hausverwaltung">
+              <input value={p.wegManager} onChange={(e) => set({ wegManager: e.target.value })} />
+            </Field>
+            <Field label="Anzahl Einheiten der WEG">
+              <NumberInput value={p.wegUnitsCount ?? undefined} onChange={(n) => set({ wegUnitsCount: n || null })} />
+            </Field>
+            <Field label="Miteigentumsanteile gesamt (Nenner)" hint="z. B. 1.000 oder 10.000">
+              <NumberInput value={p.wegMeaTotal ?? undefined} onChange={(n) => set({ wegMeaTotal: n || null })} />
+            </Field>
+            <Field label="Wohnfläche der WEG gesamt (m²)" hint="für die CO2-Einstufung und Plausibilitätsprüfungen">
+              <NumberInput value={p.wegAreaTotal ?? undefined} onChange={(n) => set({ wegAreaTotal: n || null })} />
+            </Field>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h2>Wohneinheiten</h2>
         <p className="hint">Die Wohnfläche ist der Regel-Umlageschlüssel (§ 556a BGB). Lege auch selbst genutzte Wohnungen an, damit ihr Kostenanteil bei dir bleibt.</p>
@@ -91,6 +112,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
               <tr>
                 <th>Bezeichnung</th>
                 <th className="num">Wohnfläche (m²)</th>
+                {p.type === "etw" && <th className="num">MEA</th>}
                 <th />
               </tr>
             </thead>
@@ -99,6 +121,11 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
                 <tr key={u.id}>
                   <td><input value={u.name} onChange={(e) => setUnit(u.id, { name: e.target.value })} aria-label="Bezeichnung der Einheit" /></td>
                   <td style={{ width: 170 }}><NumberInput value={u.area} onChange={(area) => setUnit(u.id, { area })} ariaLabel="Wohnfläche" /></td>
+                  {p.type === "etw" && (
+                    <td style={{ width: 120 }}>
+                      <NumberInput value={u.mea} onChange={(mea) => setUnit(u.id, { mea: mea || undefined })} ariaLabel="Miteigentumsanteil" />
+                    </td>
+                  )}
                   <td style={{ width: 40 }}>
                     <button
                       className="ghost"
@@ -116,6 +143,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
               <tr>
                 <td>{p.units.length} Einheiten</td>
                 <td className="num">{formatNum(totalArea)} m²</td>
+                {p.type === "etw" && <td className="num">{p.wegMeaTotal ? `von ${formatNum(p.wegMeaTotal)}` : ""}</td>}
                 <td />
               </tr>
             </tfoot>

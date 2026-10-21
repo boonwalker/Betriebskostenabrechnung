@@ -6,7 +6,9 @@ import { addMonths, formatDate, todayISO } from "../lib/dates";
 import { isCurrentTenant, propertyMetrics } from "../lib/finance";
 import { formatEUR, formatEUR0, formatNum, formatPct, formatSignedEUR0 } from "../lib/format";
 import { missingInfo, PROPERTY_TYPE_LABELS, rentAt, uid, warmRent } from "../lib/model";
-import type { Tenant } from "../lib/types";
+import type { EconomicPlan, Tenant, WegAnnualStatement } from "../lib/types";
+import { summarizeAnnual, summarizePlan } from "../lib/weg";
+import WegImport from "../components/WegImport";
 import { newTenant, saveTenant, TenantForm, TenantTable } from "./Tenants";
 
 export default function PropertyDetail({ data, update, propertyId }: PageProps & { propertyId: string }) {
@@ -16,6 +18,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
   const [valValue, setValValue] = useState(0);
   const [valNote, setValNote] = useState("");
   const [showFormer, setShowFormer] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   if (!p) {
     return (
@@ -33,6 +36,9 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
   const tenants = data.tenants.filter((t) => t.propertyId === p.id).sort((a, b) => a.moveIn.localeCompare(b.moveIn));
   const shownTenants = tenants.filter((t) => showFormer || !t.moveOut || t.moveOut >= today);
   const statements = data.statements.filter((s) => s.propertyId === p.id).sort((a, b) => b.periodStart.localeCompare(a.periodStart));
+  const wegDocs: (WegAnnualStatement | EconomicPlan)[] = [...data.wegAnnuals, ...data.economicPlans]
+    .filter((d) => d.propertyId === p.id)
+    .sort((a, b) => b.year - a.year || a.kind.localeCompare(b.kind));
 
   const remove = () => {
     if (!confirm(`„${p.name}“ mit ${tenants.length} Mietern und ${statements.length} Abrechnungen löschen?`)) return;
@@ -198,6 +204,55 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         {shownTenants.length > 0 && <TenantTable data={data} tenants={shownTenants} onEdit={(t) => setEditingTenant(structuredClone(t))} />}
       </div>
 
+      {p.type === "etw" && (
+        <div className="card">
+          <div className="row" style={{ marginBottom: 8 }}>
+            <h2 style={{ margin: 0 }}>WEG-Unterlagen</h2>
+            <span className="spacer" />
+            <button className="primary" onClick={() => setImporting(true)}>+ Jahresabrechnung / Wirtschaftsplan</button>
+          </div>
+          <p className="hint">
+            Jahresabrechnung (Ist) und Wirtschaftsplan (Plan) der Hausverwaltung. Aus der geprüften Jahresabrechnung entsteht die Mieterabrechnung, der Wirtschaftsplan dient
+            nur der Prognose.
+          </p>
+          {wegDocs.length === 0 ? (
+            <p className="muted">Noch keine Unterlagen erfasst.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="compact">
+                <tbody>
+                  {wegDocs.map((d) => {
+                    const unitName = p.units.find((u) => u.id === d.unitId)?.name;
+                    const annualSummary = d.kind === "annual" ? summarizeAnnual(d) : null;
+                    const openReview = d.positions.filter((x) => x.classification === "review").length;
+                    return (
+                      <tr key={d.id}>
+                        <td>
+                          <a href={`#/weg/${d.kind === "annual" ? "jahresabrechnung" : "wirtschaftsplan"}/${d.id}`}>
+                            {d.kind === "annual" ? "Jahresabrechnung" : "Wirtschaftsplan"} {d.year}
+                          </a>{" "}
+                          <span className="muted small">{unitName}</span>
+                        </td>
+                        <td>{d.kind === "annual" ? <span className="badge neutral">Ist</span> : <span className="badge warn">Plan</span>}</td>
+                        <td className="num">
+                          {annualSummary
+                            ? `umlagefähig ${formatEUR(annualSummary.allocable)}`
+                            : `Hausgeld ${formatEUR(summarizePlan(d as EconomicPlan).total)}`}
+                        </td>
+                        <td>
+                          {annualSummary?.matchesDeclared === false && <span className="badge danger">✗ Kontrollsumme</span>}{" "}
+                          {openReview > 0 && <span className="badge warn">⚠ {openReview} zu prüfen</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
         <div className="card" style={{ marginBottom: 0 }}>
           <h2>Wirtschaftlichkeit p. a.</h2>
@@ -303,6 +358,19 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
           </div>
         )}
       </div>
+
+      {importing && (
+        <WegImport
+          data={data}
+          property={p}
+          onClose={() => setImporting(false)}
+          onCreate={(doc) => {
+            update((d) => (doc.kind === "annual" ? { ...d, wegAnnuals: [...d.wegAnnuals, doc] } : { ...d, economicPlans: [...d.economicPlans, doc] }));
+            setImporting(false);
+            window.location.hash = `#/weg/${doc.kind === "annual" ? "jahresabrechnung" : "wirtschaftsplan"}/${doc.id}`;
+          }}
+        />
+      )}
 
       {editingTenant && (
         <TenantForm

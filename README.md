@@ -21,12 +21,22 @@ Web-App für private Vermieter: Mietobjekte wie ein Depot im Blick behalten, Mie
 - **Anschreiben je Mieter** zum Drucken oder als PDF, optional mit Anpassung der Vorauszahlung (§ 560 Abs. 4 BGB)
 - **Datenschutz**: Alle Daten bleiben lokal im Browser. Sicherung und Wiederherstellung über eine JSON-Datei.
 
+### Eigentumswohnungen (WEG)
+
+Für vermietete Eigentumswohnungen arbeitet die App mit drei getrennten Ebenen:
+
+1. **WEG-Jahresabrechnung** (Ist, Eigentümer ↔ Gemeinschaft): Einzelabrechnung hochladen oder abtippen. Jede Position wird nach BetrKV bewertet (umlagefähig, nicht umlagefähig, Prüfung erforderlich), mit Begründung, Quelle (Dokument, Seite, Zeile) und Prüfstatus. Die Kontrollsumme vergleicht die Positionen mit den Bewirtschaftungskosten. Über-/Unterdeckung und Rücklage bleiben auf der Eigentümer-Ebene.
+2. **Mieterabrechnung**: übernimmt nur geprüfte, umlagefähige Ist-Positionen (§ 556a Abs. 3 BGB: Schlüssel der WEG). Heizkosten kommen aus der Heizkostenabrechnung; darin enthaltene Energie- und Wartungskosten werden nicht doppelt umgelegt. Freigeben lässt sie sich erst, wenn nichts mehr offen ist; danach ist sie eingefroren.
+3. **Wirtschaftsplan** (Prognose): Plan-Ist-Vergleich, erwartete Nachzahlung und Vorauszahlungsempfehlung – nie Grundlage einer Abrechnung.
+
+Analyse, Zielmodell und Roadmap: [`docs/ANALYSE_UND_ROADMAP.md`](docs/ANALYSE_UND_ROADMAP.md). Der reale Testfall WE 09 liegt anonymisiert in `src/lib/fixtures/we09.ts` und lässt sich unter Einstellungen → „Testfall WE 09 hinzufügen“ laden.
+
 ## Entwicklung
 
 ```bash
 npm install
 npm run dev        # Entwicklungsserver auf http://localhost:5173
-npm test           # Tests der Abrechnungslogik
+npm test           # Tests: Abrechnung, Rendite, WEG-Akzeptanztests (WE 09)
 npm run build      # Produktions-Build nach dist/
 ```
 

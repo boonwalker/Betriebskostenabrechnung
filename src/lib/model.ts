@@ -1,4 +1,4 @@
-import type { AppData, ISODate, Property, RentPeriod, Tenant } from "./types";
+import type { AppData, ISODate, Property, RentPeriod, Statement, Tenant } from "./types";
 
 export const uid = () => crypto.randomUUID();
 
@@ -24,6 +24,25 @@ export function newProperty(): Property {
     maintenanceAnnual: 0,
     managementAnnual: 0,
     otherCostsAnnual: 0,
+    wegManager: "",
+    wegUnitsCount: null,
+    wegMeaTotal: null,
+    wegAreaTotal: null,
+  };
+}
+
+export function newStatement(propertyId: string, periodStart: ISODate, periodEnd: ISODate): Statement {
+  return {
+    id: uid(),
+    propertyId,
+    periodStart,
+    periodEnd,
+    costs: [],
+    prepaymentOverrides: {},
+    prepaymentsConfirmed: {},
+    status: "draft",
+    release: null,
+    createdAt: new Date().toISOString(),
   };
 }
 
@@ -41,10 +60,12 @@ export const warmRent = (r: RentPeriod | undefined) => (r ? r.coldRent + r.prepa
 
 export function emptyData(): AppData {
   return {
-    version: 2,
+    version: 3,
     properties: [],
     tenants: [],
     statements: [],
+    wegAnnuals: [],
+    economicPlans: [],
     settings: { landlord: { name: "", address: "", iban: "" }, anthropicApiKey: "", marginalTaxRate: 35 },
   };
 }
@@ -55,7 +76,7 @@ export function migrate(raw: any): AppData {
   if (!raw || !Array.isArray(raw.properties)) throw new Error("Keine gültigen Daten.");
   const base = emptyData();
   return {
-    version: 2,
+    version: 3,
     settings: { ...base.settings, ...raw.settings, landlord: { ...base.settings.landlord, ...raw.settings?.landlord } },
     properties: raw.properties.map((p: Partial<Property>) => ({ ...newProperty(), ...p })),
     tenants: (raw.tenants ?? []).map((t: Tenant & { monthlyPrepayment?: number }) => {
@@ -67,7 +88,14 @@ export function migrate(raw: any): AppData {
           t.rentHistory ?? [{ id: uid(), validFrom: t.moveIn, coldRent: 0, prepaymentOperating: monthlyPrepayment ?? 0, prepaymentHeating: 0 }],
       };
     }),
-    statements: raw.statements ?? [],
+    statements: (raw.statements ?? []).map((st: Partial<Statement>) => ({
+      prepaymentsConfirmed: {},
+      status: "draft",
+      release: null,
+      ...st,
+    })),
+    wegAnnuals: raw.wegAnnuals ?? [],
+    economicPlans: raw.economicPlans ?? [],
   };
 }
 

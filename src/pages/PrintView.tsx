@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { KEY_LABELS } from "../lib/betrkv";
+import { releasedResult } from "../lib/release";
 import { calculateStatement, type Co2Result, type DistributionKey, type ItemShare, type TenantResult } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
@@ -21,7 +22,9 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
   const [suggestAdjustment, setSuggestAdjustment] = useState(false);
 
   if (!statement || !property) return <div className="card empty">Abrechnung nicht gefunden.</div>;
-  const result = calculateStatement(statement, property, data.tenants);
+  const released = statement.status === "released";
+  // Freigegebene Abrechnungen zeigen den eingefrorenen Stand, nicht die aktuelle Neuberechnung
+  const result = (released && releasedResult(statement)) || calculateStatement(statement, property, data.tenants);
   const isSelected = (r: TenantResult) => !selected || selected.has(r.tenant.id);
   const landlordMissing = !data.settings.landlord.name || !data.settings.landlord.address;
 
@@ -33,6 +36,12 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
           <span className="spacer" />
           <button className="primary" onClick={() => window.print()}>Drucken / als PDF speichern</button>
         </div>
+        {!released && (
+          <div className="alert danger" style={{ marginTop: 12 }}>
+            <strong>Entwurf – nicht versenden.</strong> Die Abrechnung ist noch nicht freigegeben; das Ergebnis ist vorläufig. Offene Punkte findest du in der{" "}
+            <a href={`#/abrechnungen/${statement.id}`}>Abrechnung</a>.
+          </div>
+        )}
         {landlordMissing && (
           <div className="alert warn" style={{ marginTop: 12 }}>
             Bitte hinterlege in den <a href="#/einstellungen">Einstellungen</a> deinen Namen, deine Anschrift und deine Bankverbindung als Vermieter.
@@ -71,6 +80,7 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
           periodDays={result.periodDays}
           co2={result.co2}
           suggestAdjustment={suggestAdjustment}
+          draft={!released}
         />
       ))}
     </>
@@ -92,6 +102,7 @@ function Letter({
   periodDays,
   co2,
   suggestAdjustment,
+  draft,
 }: {
   data: AppData;
   property: Property;
@@ -100,6 +111,7 @@ function Letter({
   periodDays: number;
   co2: Co2Result[];
   suggestAdjustment: boolean;
+  draft: boolean;
 }) {
   const { landlord } = data.settings;
   const address = r.tenant.mailingAddress.trim() || `${r.unit.name}\n${property.address.replace(/,\s*/g, "\n")}`;
@@ -111,11 +123,44 @@ function Letter({
   const overridden = statement.prepaymentOverrides[r.tenant.id] !== undefined;
   const labor = r.labor35a.service + r.labor35a.craftsman;
 
+  // Herkunft der Positionen: Anteile laut WEG-Einzelabrechnung folgen dem WEG-Schlüssel (§ 556a Abs. 3 BGB)
+  const sourceOf = (costId: string) => {
+    const cost = statement.costs.find((c) => c.id === costId);
+    const annual = cost?.sourceAnnualId ? data.wegAnnuals.find((a) => a.id === cost.sourceAnnualId) : undefined;
+    return { cost, annual, position: annual?.positions.find((p) => p.id === cost?.sourcePositionId) };
+  };
+  const keyText = (item: ItemShare) => {
+    const { annual, position } = sourceOf(item.costId);
+    if (item.key === "direct" && annual) return `Anteil lt. WEG-Abrechnung${position?.wegKey ? ` (${position.wegKey})` : ""}`;
+    return KEY_LABELS[item.key];
+  };
+  // Bei Wohnungseigentum: Gesamtkosten der WEG und Anteil nach WEG-Schlüssel ausweisen, soweit bekannt
+  const wegTotal = (item: ItemShare) => {
+    const { position } = sourceOf(item.costId);
+    return position?.totalAmount ? formatEUR(position.totalAmount) : null;
+  };
+  const wegShare = (item: ItemShare) => {
+    const { annual, position } = sourceOf(item.costId);
+    if (!annual) return null;
+    const time = r.days < periodDays ? ` × ${r.days}/${periodDays} Tage` : "";
+    if (position?.heating === "total") return { total: "–", share: `lt. Heizkosten\u00ADabrechnung${time}` };
+    if (/mea|miteigentum/i.test(position?.wegKey ?? "") && r.unit.mea && property.wegMeaTotal) {
+      return { total: `${formatNum(property.wegMeaTotal)} MEA`, share: `${formatNum(r.unit.mea)} MEA${time}` };
+    }
+    return { total: "–", share: `lt. Einzel\u00ADabrechnung${time}` };
+  };
+  const fromWeg = r.items.some((i) => sourceOf(i.costId).annual);
+  const heatingNotes = r.items.flatMap((item) => {
+    const { annual, position } = sourceOf(item.costId);
+    return annual?.heating && position?.heating === "total" ? [{ costId: item.costId, amount: item.amount, heating: annual.heating }] : [];
+  });
+
   return (
     <div className="letter">
+      {draft && <div className="watermark">ENTWURF</div>}
       <div className="sender">{[landlord.name, landlord.address.replace(/\n/g, ", ")].filter(Boolean).join(" · ")}</div>
       <div className="address-block">{`${r.tenant.name}\n${address}`}</div>
-      <div className="meta">{formatDate(todayISO())}</div>
+      <div className="meta">{formatDate(statement.release?.releasedAt.slice(0, 10) ?? todayISO())}</div>
 
       <h2>Betriebskostenabrechnung für den Zeitraum {formatDate(statement.periodStart)} bis {formatDate(statement.periodEnd)}</h2>
       <p>Guten Tag {r.tenant.name},</p>
@@ -125,7 +170,19 @@ function Letter({
       <table style={{ marginBottom: "4mm" }}>
         <tbody>
           <tr><td>Ihr Abrechnungszeitraum</td><td>{formatDate(r.start)} – {formatDate(r.end)} ({r.days} von {periodDays} Tagen)</td></tr>
-          <tr><td>Wohnfläche Ihrer Wohnung</td><td>{formatNum(r.unit.area)} m² von {formatNum(property.units.reduce((a, u) => a + u.area, 0))} m² gesamt</td></tr>
+          <tr>
+            <td>Wohnfläche Ihrer Wohnung</td>
+            <td>
+              {formatNum(r.unit.area)} m² von{" "}
+              {formatNum(property.type === "etw" && property.wegAreaTotal ? property.wegAreaTotal : property.units.reduce((a, u) => a + u.area, 0))} m² gesamt
+            </td>
+          </tr>
+          {property.type === "etw" && r.unit.mea && property.wegMeaTotal && (
+            <tr>
+              <td>Miteigentumsanteil</td>
+              <td>{formatNum(r.unit.mea)} / {formatNum(property.wegMeaTotal)}</td>
+            </tr>
+          )}
           <tr><td>Personen in Ihrem Haushalt</td><td>{r.tenant.persons}</td></tr>
         </tbody>
       </table>
@@ -145,10 +202,10 @@ function Letter({
           {r.items.map((item) => (
             <tr key={item.costId + item.label}>
               <td>{item.label}</td>
-              <td className="num">{formatEUR(item.total)}</td>
-              <td>{KEY_LABELS[item.key]}</td>
-              <td className="num">{item.key === "direct" ? "–" : `${formatNum(item.basisTotal)} ${BASIS_UNIT[item.key]}`}</td>
-              <td className="num">{shareText(item, r, periodDays)}</td>
+              <td className="num">{wegTotal(item) ?? formatEUR(item.total)}</td>
+              <td>{keyText(item)}</td>
+              <td className="num">{wegShare(item)?.total ?? (item.key === "direct" ? "–" : `${formatNum(item.basisTotal)} ${BASIS_UNIT[item.key]}`)}</td>
+              <td className="num">{wegShare(item)?.share ?? shareText(item, r, periodDays)}</td>
               <td className="num">{formatEUR(item.amount)}</td>
             </tr>
           ))}
@@ -183,6 +240,25 @@ function Letter({
         </p>
       )}
 
+      {fromWeg && (
+        <p className="small">
+          Die Kosten sind nach den in der Wohnungseigentümergemeinschaft geltenden Verteilungsschlüsseln auf Ihre Wohnung verteilt (§ 556a Abs. 3 BGB);
+          Grundlage ist die Jahresabrechnung der Hausverwaltung{property.wegManager ? ` (${property.wegManager})` : ""}. Nicht umlagefähige Kosten wie Verwaltung,
+          Instandhaltung und die Erhaltungsrücklage sind nicht enthalten.
+        </p>
+      )}
+      {heatingNotes.map((n) => (
+        <p className="small" key={n.costId}>
+          <strong>Heiz- und Warmwasserkosten:</strong> Die Kosten von {formatEUR(n.amount)} stammen aus der Heizkostenabrechnung
+          {n.heating.heatSource ? ` (${n.heating.heatSource})` : ""}
+          {n.heating.buildingTotal ? `; Gesamtkosten der Liegenschaft ${formatEUR(n.heating.buildingTotal)}` : ""}
+          {n.heating.baseSharePct !== null ? `; Verteilung ${n.heating.baseSharePct} % nach Fläche, ${100 - n.heating.baseSharePct} % nach Verbrauch (HeizkostenV)` : ""}.{" "}
+          {n.heating.components.map((c) => `${c.label} ${formatEUR(c.amount)}`).join(", ")}
+          {n.heating.consumptionHeatingKwh !== null ? `. Ihr Verbrauch: Heizung ${formatNum(n.heating.consumptionHeatingKwh)} kWh` : ""}
+          {n.heating.consumptionWaterKwh !== null ? `, Warmwasser ${formatNum(n.heating.consumptionWaterKwh)} kWh` : ""}.
+          {r.days < periodDays && " Für Ihren Nutzungszeitraum ist zeitanteilig abgerechnet."}
+        </p>
+      ))}
       {co2.map((c) => {
         const tenantCo2 = r.items.filter((i) => i.costId === c.costId).reduce((a, i) => a + i.co2Amount, 0);
         return (
@@ -203,6 +279,7 @@ function Letter({
       )}
 
       <div className="result">
+        {draft && "Vorläufig (Entwurf) – "}
         {r.balance > 0 ? `Nachzahlung: ${formatEUR(r.balance)}` : r.balance < 0 ? `Guthaben: ${formatEUR(-r.balance)}` : "Die Abrechnung ist ausgeglichen."}
       </div>
       {r.balance > 0 && (

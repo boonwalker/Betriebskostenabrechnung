@@ -13,7 +13,7 @@ const rent = (id: string, validFrom: string, coldRent: number, prepaymentOperati
 export function demoData(): AppData {
   const year = new Date().getFullYear() - 1;
   return {
-    version: 2,
+    version: 3,
     settings: {
       landlord: { name: "Max Mustervermieter", address: "Hauptstraße 1\n12345 Musterstadt", iban: "DE12 3456 7890 1234 5678 90" },
       anthropicApiKey: "",
@@ -100,6 +100,8 @@ export function demoData(): AppData {
         rentHistory: [rent("demo-r7", "2021-05-01", 750, 170, 60), rent("demo-r8", `${year + 1}-01-01`, 780, 185, 65)],
       },
     ],
+    wegAnnuals: [],
+    economicPlans: [],
     statements: [
       {
         id: "demo-s1",
@@ -108,6 +110,9 @@ export function demoData(): AppData {
         periodEnd: `${year}-12-31`,
         createdAt: new Date().toISOString(),
         prepaymentOverrides: {},
+        prepaymentsConfirmed: {},
+        status: "draft",
+        release: null,
         costs: [
           { id: "demo-c1", category: 1, label: "Grundsteuer", amount: 612.4, key: "area" },
           { id: "demo-c2", category: 2, label: "Frischwasser", amount: 1180.25, key: "persons" },

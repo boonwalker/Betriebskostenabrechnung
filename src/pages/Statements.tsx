@@ -47,6 +47,7 @@ export default function Statements({ data, update }: PageProps) {
                 <th className="num">Gesamtkosten</th>
                 <th className="num">Nachzahlungen</th>
                 <th className="num">Guthaben</th>
+                <th>Status</th>
                 <th>Frist</th>
                 <th />
               </tr>
@@ -66,6 +67,9 @@ export default function Statements({ data, update }: PageProps) {
                     <td className="num">{formatEUR(r.totalCosts)}</td>
                     <td className="num">{formatEUR(due)}</td>
                     <td className="num">{formatEUR(credit)}</td>
+                    <td>
+                      <span className={`badge ${s.status === "released" ? "status-released" : "status-draft"}`}>{s.status === "released" ? "freigegeben" : "Entwurf"}</span>
+                    </td>
                     <td>
                       <span className={`badge ${overdue ? "danger" : "neutral"}`}>{formatDate(r.deadline)}</span>
                     </td>
@@ -112,18 +116,24 @@ function NewStatement({ data, onClose, onCreate }: { data: AppData; onClose: () 
       periodEnd: `${year}-12-31`,
       costs:
         copy && previous
-          ? previous.costs.map((c) => ({
-              ...c,
-              id: uid(),
-              amount: 0,
-              source: undefined,
-              consumption: c.key === "consumption" || c.key === "heating" ? {} : c.consumption,
-              co2Cost: undefined,
-              co2Kg: undefined,
-              laborCost: undefined,
-            }))
+          ? previous.costs
+              // Positionen aus einer WEG-Jahresabrechnung kommen jedes Jahr neu aus der Abrechnung des Jahres
+              .filter((c) => !c.sourceAnnualId)
+              .map((c) => ({
+                ...c,
+                id: uid(),
+                amount: 0,
+                source: undefined,
+                consumption: c.key === "consumption" || c.key === "heating" ? {} : c.consumption,
+                co2Cost: undefined,
+                co2Kg: undefined,
+                laborCost: undefined,
+              }))
           : [],
       prepaymentOverrides: {},
+      prepaymentsConfirmed: {},
+      status: "draft",
+      release: null,
       createdAt: new Date().toISOString(),
     });
   };

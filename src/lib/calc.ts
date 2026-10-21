@@ -1,6 +1,7 @@
-import { categoryLabel } from "./betrkv";
+import { categoryLabel, isHeatingCategory } from "./betrkv";
 import { co2Stage } from "./co2";
 import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
+import { allocate, fromCents, sumEuro, toCents, type Cents } from "./money";
 import type { CostItem, ISODate, Property, Section35aKind, Statement, Tenant, Unit } from "./types";
 
 /** Belegungsabschnitt einer Einheit: ein Mieter oder Leerstand (tenantId = null) */
@@ -134,18 +135,21 @@ interface Part {
   item: CostItem;
   label: string;
   key: DistributionKey;
-  amount: number;
-  /** Anteil dieser Teilposition an der Gesamtposition (für § 35a- und CO2-Anteile) */
-  fraction: number;
+  /** zu verteilender Betrag, darin enthaltene § 35a-Arbeitskosten und Mieteranteil CO2 – in Cent */
+  amount: Cents;
+  labor: Cents;
+  co2: Cents;
 }
 
-function splitItem(item: CostItem, distributable: number): Part[] {
+function splitItem(item: CostItem, amount: Cents, labor: Cents, co2: Cents): Part[] {
   const label = item.label || categoryLabel(item.category);
-  if (item.key !== "heating") return [{ item, label, key: item.key, amount: distributable, fraction: 1 }];
-  const share = Math.min(70, Math.max(50, item.consumptionShare ?? 70)) / 100;
+  if (item.key !== "heating") return [{ item, label, key: item.key, amount, labor, co2 }];
+  const share = Math.min(70, Math.max(50, item.consumptionShare ?? 70));
+  const ratio = [100 - share, share];
+  const [a, l, c] = [allocate(amount, ratio), allocate(labor, ratio), allocate(co2, ratio)];
   return [
-    { item, label: `${label} – Grundkosten (${Math.round((1 - share) * 100)} %)`, key: "area", amount: distributable * (1 - share), fraction: 1 - share },
-    { item, label: `${label} – Verbrauchskosten (${Math.round(share * 100)} %)`, key: "consumption", amount: distributable * share, fraction: share },
+    { item, label: `${label} – Grundkosten (${100 - share} %)`, key: "area", amount: a[0], labor: l[0], co2: c[0] },
+    { item, label: `${label} – Verbrauchskosten (${share} %)`, key: "consumption", amount: a[1], labor: l[1], co2: c[1] },
   ];
 }
 
@@ -196,7 +200,7 @@ export function sumRent(tenant: Tenant, start: ISODate, end: ISODate, pick: (r: 
 export function calcPrepayments(tenant: Tenant, start: ISODate, end: ISODate): Prepayments {
   const operating = sumRent(tenant, start, end, (r) => r.prepaymentOperating);
   const heating = sumRent(tenant, start, end, (r) => r.prepaymentHeating);
-  return { operating, heating, total: round2(operating + heating) };
+  return { operating, heating, total: sumEuro([operating, heating]) };
 }
 
 export function calculateStatement(statement: Statement, property: Property, allTenants: Tenant[]): StatementResult {
@@ -218,17 +222,20 @@ export function calculateStatement(statement: Statement, property: Property, all
 
   // CO2-Kostenaufteilung: Vermieteranteil vorab abziehen
   const co2: Co2Result[] = [];
-  const distributable = new Map<string, number>();
+  const distributable = new Map<string, Cents>();
   for (const item of statement.costs) {
-    let amount = item.amount;
+    let amount = toCents(item.amount);
     if (item.co2Cost && item.co2Cost > 0) {
-      if (!item.co2Kg || totalArea === 0) {
+      // Stufe nach CO2-Ausstoß des Gebäudes je m² Wohnfläche des Gebäudes – bei WEG die Gesamtfläche
+      const co2Area = property.type === "etw" && property.wegAreaTotal ? property.wegAreaTotal : totalArea;
+      if (!item.co2Kg || co2Area === 0) {
         warnings.push(`„${item.label}“: Für die CO2-Kostenaufteilung fehlt der CO2-Ausstoß in kg. Ohne Angabe trägt der Mieter die CO2-Kosten voll – das ist nur bei Stufe 1 korrekt.`);
       } else {
-        const kgPerM2Year = (item.co2Kg / totalArea) * (365 / periodDays);
+        const kgPerM2Year = (item.co2Kg / co2Area) * (365 / periodDays);
         const stage = co2Stage(kgPerM2Year);
-        const landlordAmount = round2((item.co2Cost * stage.landlordPct) / 100);
-        amount -= landlordAmount;
+        const landlordCents = Math.round((toCents(item.co2Cost) * stage.landlordPct) / 100);
+        const landlordAmount = fromCents(landlordCents);
+        amount -= landlordCents;
         co2.push({ costId: item.id, label: item.label, co2Cost: item.co2Cost, co2Kg: item.co2Kg, kgPerM2Year, stage: stage.stage, landlordPct: stage.landlordPct, landlordAmount });
       }
     }
@@ -239,32 +246,43 @@ export function calculateStatement(statement: Statement, property: Property, all
   const shares = new Map<Segment, ItemShare[]>(segments.map((s) => [s, []]));
   for (const item of statement.costs) {
     const itemDistributable = distributable.get(item.id)!;
-    const landlordCo2 = co2.find((c) => c.costId === item.id)?.landlordAmount ?? 0;
-    const tenantCo2 = (item.co2Cost ?? 0) - landlordCo2;
+    const landlordCo2 = toCents(co2.find((c) => c.costId === item.id)?.landlordAmount ?? 0);
+    const tenantCo2 = toCents(item.co2Cost ?? 0) - landlordCo2;
+    if (isHeatingCategory(item.category) && (item.key === "direct" || item.key === "area")) {
+      const unitsWithChange = units.filter((u) => segments.filter((s) => s.unitId === u.id).length > 1);
+      if (unitsWithChange.length) {
+        warnings.push(
+          `„${item.label}“: Bei Mieterwechsel oder Leerstand in ${unitsWithChange.map((u) => u.name).join(", ")} ist eine Zwischenablesung nötig (§ 9b HeizkostenV). Ohne sie wird hier nur zeitanteilig aufgeteilt.`,
+        );
+      }
+    }
     if (item.key === "heating" && Object.values(item.consumption ?? {}).every((v) => !v)) {
       warnings.push(`„${item.label}“: Für die Heizkostenverteilung fehlen die Verbrauchswerte der Einheiten (§ 7 HeizkostenV).`);
     }
-    for (const part of splitItem(item, itemDistributable)) {
+    for (const part of splitItem(item, itemDistributable, toCents(item.laborCost ?? 0), tenantCo2)) {
       const weights = segments.map((s) => weight(part, s, unitById.get(s.unitId)!));
       const totalWeight = weights.reduce((a, b) => a + b, 0);
       if (totalWeight === 0) {
         if (part.amount !== 0) warnings.push(`„${part.label}“ kann nicht verteilt werden (Verteilungsbasis ist 0).`);
         continue;
       }
+      // Cent-genaue Verteilung: Die Anteile ergeben exakt den Betrag der Position
+      const amounts = allocate(part.amount, weights);
+      const labor = allocate(part.labor, weights);
+      const co2Shares = allocate(part.co2, weights);
       segments.forEach((seg, i) => {
-        const ratio = weights[i] / totalWeight;
         shares.get(seg)!.push({
           costId: item.id,
           category: item.category,
           label: part.label,
           key: part.key,
-          total: part.amount,
+          total: fromCents(part.amount),
           basisTotal: totalWeight / periodDays,
           basisShare: weights[i] / periodDays,
-          amount: part.amount * ratio,
-          laborAmount: (item.laborCost ?? 0) * part.fraction * ratio,
+          amount: fromCents(amounts[i]),
+          laborAmount: fromCents(labor[i]),
           laborKind: item.laborKind,
-          co2Amount: tenantCo2 * part.fraction * ratio,
+          co2Amount: fromCents(co2Shares[i]),
         });
       });
     }
@@ -273,9 +291,8 @@ export function calculateStatement(statement: Statement, property: Property, all
   const tenantResults: TenantResult[] = [];
   const vacancies: VacancyResult[] = [];
   for (const seg of segments) {
-    const raw = shares.get(seg)!;
-    const items = raw.map((s) => ({ ...s, amount: round2(s.amount), laborAmount: round2(s.laborAmount), co2Amount: round2(s.co2Amount) }));
-    const totalCosts = round2(items.reduce((a, s) => a + s.amount, 0));
+    const items = shares.get(seg)!;
+    const totalCosts = sumEuro(items.map((s) => s.amount));
     const unit = unitById.get(seg.unitId)!;
     if (!seg.tenantId) {
       vacancies.push({ unit, start: seg.start, end: seg.end, days: seg.days, amount: totalCosts });
@@ -284,7 +301,7 @@ export function calculateStatement(statement: Statement, property: Property, all
     const tenant = tenants.find((t) => t.id === seg.tenantId)!;
     const prepaymentsCalculated = calcPrepayments(tenant, seg.start, seg.end);
     const prepayments = statement.prepaymentOverrides[tenant.id] ?? prepaymentsCalculated.total;
-    const labor = (kind: Section35aKind) => round2(raw.filter((s) => s.laborKind === kind).reduce((a, s) => a + s.laborAmount, 0));
+    const labor = (kind: Section35aKind) => sumEuro(items.filter((s) => s.laborKind === kind).map((s) => s.laborAmount));
     tenantResults.push({
       tenant,
       unit,
@@ -295,20 +312,20 @@ export function calculateStatement(statement: Statement, property: Property, all
       totalCosts,
       prepayments,
       prepaymentsCalculated,
-      balance: round2(totalCosts - prepayments),
+      balance: fromCents(toCents(totalCosts) - toCents(prepayments)),
       labor35a: { service: labor("service"), craftsman: labor("craftsman") },
     });
   }
 
-  const vacancyTotal = vacancies.reduce((a, v) => a + v.amount, 0);
-  const co2Total = co2.reduce((a, c) => a + c.landlordAmount, 0);
+  const vacancyTotal = sumEuro(vacancies.map((v) => v.amount));
+  const co2Total = sumEuro(co2.map((c) => c.landlordAmount));
   return {
     periodDays,
-    totalCosts: round2(statement.costs.reduce((a, c) => a + c.amount, 0)),
+    totalCosts: sumEuro(statement.costs.map((c) => c.amount)),
     tenants: tenantResults,
     vacancies,
     co2,
-    landlordShare: round2(vacancyTotal + co2Total),
+    landlordShare: sumEuro([vacancyTotal, co2Total]),
     warnings,
     deadline: addMonths(periodEnd, 12),
   };

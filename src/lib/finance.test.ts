@@ -104,7 +104,8 @@ describe("migrate", () => {
       statements: [],
       settings: { landlord: { name: "L", address: "", iban: "" }, anthropicApiKey: "k" },
     });
-    expect(data.version).toBe(2);
+    expect(data.version).toBe(3);
+    expect(data.wegAnnuals).toEqual([]);
     expect(data.properties[0].loans).toEqual([]);
     expect(data.tenants[0].rentHistory[0]).toMatchObject({ validFrom: "2020-01-01", prepaymentOperating: 120 });
     expect(data.settings.marginalTaxRate).toBe(35);

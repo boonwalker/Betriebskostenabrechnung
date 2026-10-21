@@ -38,6 +38,9 @@ function statement(costs: Statement["costs"], overrides: Record<string, number> 
     periodEnd: "2025-12-31",
     costs,
     prepaymentOverrides: overrides,
+    prepaymentsConfirmed: {},
+    status: "draft",
+    release: null,
     createdAt: "",
   };
 }
@@ -156,6 +159,27 @@ describe("calculateStatement", () => {
   it("berechnet die Abrechnungsfrist", () => {
     const r = calculateStatement(statement([]), property, []);
     expect(r.deadline).toBe("2026-12-31");
+  });
+});
+
+describe("Rundung", () => {
+  it("verteilt jede Position ohne Centdifferenz", () => {
+    const three: Property = { ...property, units: [...property.units, { id: "u3", name: "DG", area: 33.33 }] };
+    const tenants = [
+      tenant({ id: "a", unitId: "u1", moveIn: "2020-01-01" }),
+      tenant({ id: "b", unitId: "u2", moveIn: "2025-03-17" }),
+      tenant({ id: "c", unitId: "u3", moveIn: "2020-01-01", moveOut: "2025-08-09" }),
+    ];
+    const costs = [
+      { id: "x", category: 1, label: "Grundsteuer", amount: 1000.01, key: "area" as const },
+      { id: "y", category: 2, label: "Wasser", amount: 777.77, key: "persons" as const },
+      { id: "h", category: 6, label: "Heizung", amount: 3333.33, key: "heating" as const, consumption: { u1: 7, u2: 11, u3: 13 }, consumptionShare: 65 },
+    ];
+    const r = calculateStatement(statement(costs), three, tenants);
+    // Mieteranteile + Leerstand ergeben exakt die Gesamtkosten
+    const allTenants = r.tenants.reduce((a, t) => a + Math.round(t.totalCosts * 100), 0);
+    const allVacancy = r.vacancies.reduce((a, v) => a + Math.round(v.amount * 100), 0);
+    expect(allTenants + allVacancy).toBe(Math.round(r.totalCosts * 100));
   });
 });
 

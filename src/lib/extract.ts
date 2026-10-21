@@ -115,33 +115,38 @@ async function toBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
-export async function extractInvoice(file: File, apiKey: string, billingPeriod: string): Promise<Extraction> {
-  if (!isSupportedFile(file)) throw new Error("Bitte eine PDF-Datei oder ein Bild (JPG, PNG, WebP, GIF) hochladen.");
-  const data = await toBase64(file);
-  const doc: BetaContentBlockParam =
-    file.type === "application/pdf"
-      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data } }
-      : { type: "image", source: { type: "base64", media_type: file.type as ImageType, data } };
+function toBlock(file: File, data: string): BetaContentBlockParam {
+  return file.type === "application/pdf"
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data } }
+    : { type: "image", source: { type: "base64", media_type: file.type as ImageType, data } };
+}
+
+/** Sendet Dokumente mit strukturierter Ausgabe an Claude und gibt das JSON zurück */
+async function askClaude(files: File[], apiKey: string, system: string, schema: Record<string, unknown>, instruction: string): Promise<unknown> {
+  for (const f of files) if (!isSupportedFile(f)) throw new Error(`„${f.name}“: Bitte PDF-Dateien oder Bilder (JPG, PNG, WebP, GIF) hochladen.`);
+  const blocks: BetaContentBlockParam[] = [];
+  for (const [i, f] of files.entries()) {
+    blocks.push({ type: "text", text: `Datei ${i + 1}: ${f.name}` });
+    blocks.push(toBlock(f, await toBase64(f)));
+  }
 
   // Der Schlüssel liegt nur im Browser des Nutzers und geht direkt an die Anthropic-API.
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 
   let response;
   try {
-    response = await client.beta.messages.create({
-      model: "claude-opus-5-5",
-      max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "medium", format: { type: "json_schema", schema: JSON_SCHEMA } },
-      system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: [doc, { type: "text", text: `Abrechnungszeitraum: ${billingPeriod}. Bitte erfasse diesen Beleg.` }],
-        },
-      ],
-    });
+    // Streaming, weil mehrseitige Abrechnungen lange Antworten erzeugen können
+    response = await client.beta.messages
+      .stream({
+        model: "claude-opus-5-5",
+        max_tokens: 64000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: "high", format: { type: "json_schema", schema } },
+        system,
+        messages: [{ role: "user", content: [...blocks, { type: "text", text: instruction }] }],
+      })
+      .finalMessage();
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) throw new Error("Der API-Schlüssel ist ungültig. Bitte in den Einstellungen prüfen.");
     if (err instanceof Anthropic.RateLimitError) throw new Error("Zu viele Anfragen – bitte kurz warten und erneut versuchen.");
@@ -150,8 +155,162 @@ export async function extractInvoice(file: File, apiKey: string, billingPeriod: 
     throw err;
   }
 
-  if (response.stop_reason === "refusal") throw new Error("Der Beleg konnte nicht verarbeitet werden.");
-  if (response.stop_reason === "max_tokens") throw new Error("Der Beleg ist zu umfangreich für eine automatische Erfassung.");
+  if (response.stop_reason === "refusal") throw new Error("Das Dokument konnte nicht verarbeitet werden.");
+  if (response.stop_reason === "max_tokens") throw new Error("Das Dokument ist zu umfangreich für eine automatische Erfassung.");
   const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
-  return ExtractionSchema.parse(JSON.parse(text));
+  return JSON.parse(text);
+}
+
+export async function extractInvoice(file: File, apiKey: string, billingPeriod: string): Promise<Extraction> {
+  const json = await askClaude([file], apiKey, SYSTEM, JSON_SCHEMA, `Abrechnungszeitraum: ${billingPeriod}. Bitte erfasse diesen Beleg.`);
+  return ExtractionSchema.parse(json);
+}
+
+/* ---------- WEG-Jahresabrechnung und Wirtschaftsplan ---------- */
+
+const nullableNumber = { type: ["number", "null"] } as const;
+
+const WegSchema = z.object({
+  documentKind: z.enum(["annual", "plan", "other"]),
+  year: z.number().int().nullable(),
+  unitName: z.string(),
+  managementCostsActual: z.number().nullable(),
+  managementCostsPlan: z.number().nullable(),
+  reserveContribution: z.number().nullable(),
+  annualHausgeld: z.number().nullable(),
+  monthlyHausgeld: z.number().nullable(),
+  positions: z.array(
+    z.object({
+      label: z.string(),
+      unitAmount: z.number(),
+      totalAmount: z.number().nullable(),
+      wegKey: z.string(),
+      declaredAllocable: z.enum(["yes", "no", "unknown"]),
+      isReserve: z.boolean(),
+      page: z.number().int().nullable(),
+      sourceText: z.string(),
+      confidence: z.number(),
+    }),
+  ),
+  heating: z
+    .object({
+      heatSource: z.string(),
+      buildingTotal: z.number().nullable(),
+      unitShare: z.number(),
+      baseSharePct: z.number().nullable(),
+      areaTotal: z.number().nullable(),
+      consumptionHeatingKwh: z.number().nullable(),
+      consumptionWaterKwh: z.number().nullable(),
+      components: z.array(z.object({ label: z.string(), amount: z.number() })),
+      co2Cost: z.number().nullable(),
+      co2Kg: z.number().nullable(),
+      page: z.number().int().nullable(),
+    })
+    .nullable(),
+  notes: z.string(),
+});
+
+export type WegExtraction = z.infer<typeof WegSchema>;
+
+const WEG_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "documentKind",
+    "year",
+    "unitName",
+    "managementCostsActual",
+    "managementCostsPlan",
+    "reserveContribution",
+    "annualHausgeld",
+    "monthlyHausgeld",
+    "positions",
+    "heating",
+    "notes",
+  ],
+  properties: {
+    documentKind: { type: "string", enum: ["annual", "plan", "other"], description: "annual = Jahres-/Einzelabrechnung (Ist), plan = Wirtschaftsplan" },
+    year: { type: ["integer", "null"] },
+    unitName: { type: "string", description: "Bezeichnung der Wohnung, z. B. WE 09" },
+    managementCostsActual: { ...nullableNumber, description: "Bewirtschaftungskosten Ist der Wohnung (ohne Rücklage)" },
+    managementCostsPlan: { ...nullableNumber, description: "Bewirtschaftungskosten Soll laut Wirtschaftsplan in der Jahresabrechnung" },
+    reserveContribution: { ...nullableNumber, description: "Zuführung zur Erhaltungsrücklage der Wohnung" },
+    annualHausgeld: { ...nullableNumber, description: "nur Wirtschaftsplan: Hausgeld pro Jahr" },
+    monthlyHausgeld: { ...nullableNumber, description: "nur Wirtschaftsplan: Hausgeld pro Monat" },
+    positions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["label", "unitAmount", "totalAmount", "wegKey", "declaredAllocable", "isReserve", "page", "sourceText", "confidence"],
+        properties: {
+          label: { type: "string", description: "Bezeichnung exakt wie im Dokument" },
+          unitAmount: { type: "number", description: "Anteil der Wohnung in Euro" },
+          totalAmount: { ...nullableNumber, description: "Gesamtbetrag der WEG in Euro" },
+          wegKey: { type: "string", description: "Verteilerschlüssel laut Dokument, z. B. MEA, Wohnfläche, Einheiten, HKA; leer wenn nicht erkennbar" },
+          declaredAllocable: { type: "string", enum: ["yes", "no", "unknown"], description: "Kennzeichnung der Verwaltung, ob umlagefähig" },
+          isReserve: { type: "boolean", description: "Zuführung zur Erhaltungsrücklage" },
+          page: { type: ["integer", "null"], description: "Seite im Dokument (1-basiert, über alle Dateien fortlaufend)" },
+          sourceText: { type: "string", description: "Tabellenzeile wörtlich, gekürzt" },
+          confidence: { type: "number", description: "Sicherheit der Erkennung von 0 bis 1" },
+        },
+      },
+    },
+    heating: {
+      anyOf: [
+        { type: "null" },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["heatSource", "buildingTotal", "unitShare", "baseSharePct", "areaTotal", "consumptionHeatingKwh", "consumptionWaterKwh", "components", "co2Cost", "co2Kg", "page"],
+          properties: {
+            heatSource: { type: "string", description: "z. B. Gas, Öl, Fernwärme, Wärmepumpe" },
+            buildingTotal: nullableNumber,
+            unitShare: { type: "number" },
+            baseSharePct: { ...nullableNumber, description: "Grundkostenanteil in Prozent" },
+            areaTotal: nullableNumber,
+            consumptionHeatingKwh: nullableNumber,
+            consumptionWaterKwh: nullableNumber,
+            components: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["label", "amount"],
+                properties: { label: { type: "string" }, amount: { type: "number" } },
+              },
+            },
+            co2Cost: nullableNumber,
+            co2Kg: { ...nullableNumber, description: "CO2-Ausstoß der Liegenschaft in kg" },
+            page: { type: ["integer", "null"] },
+          },
+        },
+      ],
+    },
+    notes: { type: "string", description: "Unklarheiten, unleserliche Stellen, Hinweise auf Deutsch" },
+  },
+} as const;
+
+const WEG_SYSTEM = `Du liest Unterlagen einer Wohnungseigentümergemeinschaft (WEG) aus: Jahresabrechnung/Einzelabrechnung, Heiz- und Warmwasserkostenabrechnung oder Wirtschaftsplan.
+
+Regeln:
+- Erfasse jede Kostenposition der Einzelabrechnung bzw. des Einzelwirtschaftsplans der angegebenen Wohnung einzeln mit der Bezeichnung exakt wie im Dokument. Fasse nichts zusammen und bewerte nichts selbst.
+- unitAmount ist immer der Anteil der Wohnung, totalAmount der Gesamtbetrag der Gemeinschaft (falls ausgewiesen).
+- Deutsche Zahlen: „1.468,43“ = 1468.43.
+- Die Zuführung zur Erhaltungsrücklage ist bei Jahresabrechnungen meist nicht Teil der Bewirtschaftungskosten: Erfasse sie in reserveContribution und NICHT als Position. Im Wirtschaftsplan ist sie eine Position (isReserve = true).
+- Über-/Unterdeckung, Abrechnungsspitze, Hausgeldzahlungen und Salden sind keine Kostenpositionen – nicht als Position erfassen.
+- Heizkosten: Ist eine Heizkostenabrechnung enthalten, erfasse in heating den Anteil der Wohnung, die Bestandteile (Grund-/Verbrauchskosten Heizung und Warmwasser), Verbräuche und ggf. CO2-Angaben. Die Gesamtsumme der Heizkosten der Wohnung erscheint zusätzlich als Position, wenn sie in der Einzelabrechnung als Zeile steht.
+- Seiten über mehrere Dateien fortlaufend zählen. Gedrehte oder fotografierte Seiten sorgfältig lesen.
+- confidence < 0.8, wenn ein Wert schwer lesbar oder die Zuordnung zur Wohnung unsicher ist.
+- Erfinde keine Werte. Fehlende Werte als null, Unklarheiten in notes.`;
+
+export async function extractWegDocument(files: File[], apiKey: string, unitName: string, expectedKind: "annual" | "plan"): Promise<WegExtraction> {
+  const json = await askClaude(
+    files,
+    apiKey,
+    WEG_SYSTEM,
+    WEG_JSON_SCHEMA,
+    `Wohnung: ${unitName}. Erwarteter Dokumenttyp: ${expectedKind === "annual" ? "Jahresabrechnung (Ist)" : "Wirtschaftsplan"}. Bitte erfasse die Daten.`,
+  );
+  return WegSchema.parse(json);
 }

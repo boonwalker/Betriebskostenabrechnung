@@ -5,7 +5,23 @@ import { formatEUR, formatPct } from "../lib/format";
 import { newStatement, uid } from "../lib/model";
 import { fromCents, sumCents, toCents } from "../lib/money";
 import type { AppData, EconomicPlan, HeatingBill, WegAnnualStatement } from "../lib/types";
-import { checkAnnual, checkPlan, comparePlanActual, explainDrivers, forecastForTenant, summarizeAnnual, summarizePlan, transferToStatement } from "../lib/weg";
+import { BarList, BudgetMeter, Checkpoints, SplitBar } from "../components/Charts";
+import { formatSignedPct } from "../lib/format";
+import {
+  budgetUsage,
+  checkAnnual,
+  checkPlan,
+  compareYears,
+  comparePlanActual,
+  costDrivers,
+  explainDrivers,
+  forecastForTenant,
+  planCheckpoints,
+  planSplit,
+  summarizeAnnual,
+  summarizePlan,
+  transferToStatement,
+} from "../lib/weg";
 
 type Doc = WegAnnualStatement | EconomicPlan;
 
@@ -148,6 +164,7 @@ export default function WegEditor({ data, update, kind, id }: PageProps & { kind
 
 function AnnualSummaryCard({ data, update, annual }: { data: AppData; update: PageProps["update"]; annual: WegAnnualStatement }) {
   const s = summarizeAnnual(annual);
+  const budget = budgetUsage(annual);
   const findings = checkAnnual(annual);
   const statement = data.statements.find((st) => st.propertyId === annual.propertyId && st.periodStart.startsWith(String(annual.year)));
 
@@ -189,6 +206,23 @@ function AnnualSummaryCard({ data, update, annual }: { data: AppData; update: Pa
           `${s.ownerOverUnderCoverage >= 0 ? "Überdeckung" : "Unterdeckung"} gegenüber dem Plan ${formatEUR(Math.abs(s.ownerOverUnderCoverage))}. `}
         Zuführung zur Erhaltungsrücklage {formatEUR(s.reserveContribution)}. Beides ist kein Guthaben und keine Kostenposition des Mieters.
       </div>
+      {budget && (
+        <div className="stack" style={{ marginTop: 16, gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Budgetauslastung Bewirtschaftungskosten {annual.year}</h3>
+          <div className="kpi-row">
+            <Kpi label="geplant (Soll)" value={formatEUR(budget.plan)} />
+            <Kpi label="tatsächlich (Ist)" value={formatEUR(budget.actual)} />
+            <Kpi label="Auslastung" value={formatPct(budget.usage)} />
+            <Kpi
+              label="Abweichung zum Wirtschaftsplan"
+              value={`${budget.difference > 0 ? "+" : ""}${formatEUR(budget.difference)}`}
+              hint={`${formatSignedPct(budget.differencePct)} · ${budget.difference <= 0 ? "unter Plan" : "über Plan"}`}
+            />
+          </div>
+          <BudgetMeter usage={budget.usage} label="Budgetauslastung" />
+          <p className="hint" style={{ margin: 0 }}>Gesamte Bewirtschaftungskosten einschließlich nicht umlagefähiger Anteile, ohne die gesonderte Erhaltungsrücklage.</p>
+        </div>
+      )}
       {findings.length > 0 && (
         <ul className="findings">
           {findings.map((f, i) => (
@@ -229,9 +263,22 @@ function PlanSummaryCard({ data, plan }: { data: AppData; plan: EconomicPlan }) 
   const forecast = tenant ? forecastForTenant(plan, property, tenant) : null;
   const expected = ours("allocable");
   const uncertain = ours("review");
+  const split = planSplit(plan);
+  const years = comparison ? compareYears(plan, comparison) : null;
+  const drivers2 = costDrivers(plan);
+  const checkpoints = planCheckpoints(plan, data.wegAnnuals);
 
   return (
     <>
+      <div className="card">
+        <div className="row" style={{ marginBottom: 10 }}>
+          <h2 style={{ margin: 0 }}>Prüfpunkte</h2>
+          <span className="spacer" />
+          <span className="badge warn">Prognose {plan.year}</span>
+        </div>
+        <Checkpoints items={checkpoints} />
+      </div>
+
       <div className="card">
         <h2>Summen</h2>
         <div className="kpi-row">
@@ -247,6 +294,17 @@ function PlanSummaryCard({ data, plan }: { data: AppData; plan: EconomicPlan }) 
             value={formatEUR(s.monthly)}
             hint={s.matchesMonthlyHausgeld === false ? `⚠ Plan nennt ${formatEUR(plan.monthlyHausgeld!)}` : s.matchesMonthlyHausgeld ? "✓ wie im Plan" : undefined}
           />
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <SplitBar
+            parts={[
+              { label: "geplant umlagefähig", value: split.allocable, hint: `${formatEUR(split.allocable)} · ${formatEUR(split.allocableMonthly)} pro Monat` },
+              { label: "Eigentümeranteil inkl. Rücklage", value: split.owner, hint: `${formatEUR(split.owner)} · ${formatEUR(split.ownerMonthly)} pro Monat` },
+            ]}
+          />
+          <p className="hint" style={{ marginTop: 6, marginBottom: 0 }}>
+            Einstufung laut Kennzeichnung der Verwaltung – sie muss anhand des Mietvertrags und der Kostenart geprüft werden.
+          </p>
         </div>
         {s.undeclared > 0 && <p className="small muted" style={{ marginTop: 8 }}>Ohne Kennzeichnung der Verwaltung: {formatEUR(s.undeclared)}</p>}
         {findings.length > 0 && (
@@ -295,6 +353,71 @@ function PlanSummaryCard({ data, plan }: { data: AppData; plan: EconomicPlan }) 
           </>
         )}
       </div>
+
+      {years && (
+        <div className="card">
+          <h2>
+            Vergleich Ist {years.actualYear} ↔ Plan {years.planYear}
+          </h2>
+          <div className="two-col">
+            <div className="table-wrap">
+              <table className="compact fin-table">
+                <thead>
+                  <tr>
+                    <th>Kennzahl</th>
+                    <th className="num">{years.actualYear} Ist</th>
+                    <th className="num">{years.planYear} Plan</th>
+                    <th className="num">Veränderung</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {years.rows.map((r) => (
+                    <tr key={r.label} className={r.strong ? "sum" : ""}>
+                      <td>{r.label}</td>
+                      <td className="num">{formatEUR(r.actual)}</td>
+                      <td className="num">{formatEUR(r.plan)}</td>
+                      <td className="num">
+                        {r.difference > 0 ? "+" : ""}
+                        {formatEUR(r.difference)} <span className="muted">({formatSignedPct(r.differencePct)})</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="stack" style={{ gap: 8 }}>
+              <strong>Umlagefähige Betriebskosten</strong>
+              <BarList
+                items={[
+                  { label: `${years.actualYear} Ist`, value: years.rows[3].actual, hint: "eigene Bewertung" },
+                  { label: `${years.planYear} Plan`, value: years.rows[3].plan, forecast: true, hint: "Kennzeichnung der Verwaltung" },
+                ]}
+              />
+              <p className="hint" style={{ margin: 0 }}>
+                Rechnerische Veränderung {years.rows[3].difference > 0 ? "+" : ""}
+                {formatEUR(years.rows[3].difference)} ({formatSignedPct(years.rows[3].differencePct)}). Kein abschließend geprüfter Vergleich: Der Plan verteilt nach MEA, das
+                Ist nach Verbrauch und Heizkostenabrechnung; offene Positionen sind im Ist nicht enthalten.
+              </p>
+              {years.previousPlan && (
+                <p className="small" style={{ margin: 0 }}>
+                  Plan mit Plan: Das Hausgeld steigt von {formatEUR(years.previousPlan.total)} ({years.previousPlan.year}) auf {formatEUR(years.previousPlan.next)} (
+                  {formatSignedPct(years.previousPlan.differencePct)}) – aussagekräftiger für die Budgetentwicklung als Ist mit Plan.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {drivers2.length > 0 && (
+        <div className="card">
+          <h2>Kostentreiber {plan.year}</h2>
+          <p className="hint">Größte umlagefähige Positionen des Wirtschaftsplans (Anteil der Wohnung), Summe {formatEUR(split.allocable)}.</p>
+          <BarList
+            items={drivers2.map((d) => ({ label: d.label, value: d.amount, forecast: true, hint: d.members ? d.members.join(", ") : undefined }))}
+          />
+        </div>
+      )}
 
       <div className="card">
         <h2>Plan-Ist-Vergleich {comparison ? `(Plan ${plan.year} ↔ Ist ${comparison.year})` : ""}</h2>

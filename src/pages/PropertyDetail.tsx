@@ -8,7 +8,8 @@ import { formatEUR, formatEUR0, formatNum, formatPct, formatSignedEUR0 } from ".
 import { missingInfo, PROPERTY_TYPE_LABELS, rentAt, uid, warmRent } from "../lib/model";
 import type { EconomicPlan, Property, Tenant, WegAnnualStatement } from "../lib/types";
 import { wealthSeries, type WealthSeries } from "../lib/wealth";
-import { summarizeAnnual, summarizePlan } from "../lib/weg";
+import { planCheckpoints, planSplit, summarizeAnnual, summarizePlan } from "../lib/weg";
+import { Checkpoints } from "../components/Charts";
 import WegImport from "../components/WegImport";
 import { newTenant, saveTenant, TenantForm, TenantTable } from "./Tenants";
 
@@ -262,6 +263,8 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         {shownTenants.length > 0 && <TenantTable data={data} tenants={shownTenants} onEdit={(t) => setEditingTenant(structuredClone(t))} />}
       </div>
 
+      {p.type === "etw" && <CostOverview data={data} property={p} />}
+
       {p.type === "etw" && (
         <div className="card">
           <div className="row" style={{ marginBottom: 8 }}>
@@ -471,4 +474,35 @@ function yearRows(w: WealthSeries) {
     years.set(year, row);
   }
   return [...years.values()];
+}
+
+/** Betriebskostenübersicht einer Eigentumswohnung: letztes Ist, aktueller Plan und Prüfpunkte */
+function CostOverview({ data, property }: { data: PageProps["data"]; property: Property }) {
+  const annual = data.wegAnnuals.filter((a) => a.propertyId === property.id).sort((a, b) => b.year - a.year)[0];
+  const plan = data.economicPlans.filter((x) => x.propertyId === property.id).sort((a, b) => b.year - a.year)[0];
+  if (!annual && !plan) return null;
+  const split = plan ? planSplit(plan) : null;
+  return (
+    <div className="card">
+      <div className="row" style={{ marginBottom: 10 }}>
+        <h2 style={{ margin: 0 }}>Betriebskostenübersicht</h2>
+        <span className="spacer" />
+        {plan && <span className="badge warn">Prognose {plan.year}</span>}
+      </div>
+      <div className="kpi-row">
+        {annual && <Kpi label={`letzte bekannte Ist-Kosten ${annual.year} (umlagefähig)`} value={formatEUR(summarizeAnnual(annual).allocable)} />}
+        {split && <Kpi label={`geplante umlagefähige Kosten ${plan!.year}`} value={formatEUR(split.allocable)} hint={`${formatEUR(split.allocableMonthly)} pro Monat`} />}
+        {split && <Kpi label="Eigentümeranteil inkl. Rücklage" value={`${formatEUR(split.ownerMonthly)} / Monat`} hint={`${formatEUR(split.owner)} pro Jahr, trägst du selbst`} />}
+      </div>
+      {plan && (
+        <>
+          <h3 style={{ marginTop: 16 }}>Automatisch erkannte Prüfpunkte</h3>
+          <Checkpoints items={planCheckpoints(plan, data.wegAnnuals).filter((f) => f.level !== "info" || f.title?.startsWith("Jahresabrechnung"))} />
+          <p className="small" style={{ marginTop: 10, marginBottom: 0 }}>
+            <a href={`#/weg/wirtschaftsplan/${plan.id}`}>Wirtschaftsplan {plan.year} mit Jahresvergleich und Kostentreibern öffnen →</a>
+          </p>
+        </>
+      )}
+    </div>
+  );
 }

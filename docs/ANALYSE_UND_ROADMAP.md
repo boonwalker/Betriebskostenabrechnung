@@ -188,6 +188,18 @@ Prognose 2025 aus dem Wirtschaftsplan: erwartete Kosten 495,73 € (1.182,62 €
 
 Schenkung der Eltern mit Übergang von Nutzen und Lasten am 01.08.2025 – zeitgleich mit dem Mieterwechsel. Die Vermögensentwicklung beginnt im August 2025; Startwert ist vorerst der Grundsteuerwert (112.200 €) als Untergrenze. Für die Abschreibung fehlen noch die Anschaffungskosten der Eltern und deren Erwerbsjahr (§ 11d EStDV), z. B. aus deren Anlage V oder Kaufvertrag.
 
+### Auswertungen und Grafiken (Ideen aus dem ChatGPT-Briefing)
+
+| Idee | Umsetzung |
+|---|---|
+| Budgetauslastung Soll/Ist | Jahresabrechnung: 1.468,43 € von 1.579,08 € = 93,0 %, −110,65 € (−7,0 %), Balken |
+| Aufteilung Wirtschaftsplan | 1.228,20 € umlagefähig (102,35 €/Monat) gegenüber 695,56 € Eigentümeranteil (57,96 €/Monat), 63,8 % / 36,2 % |
+| Vergleich Ist 2024 ↔ Plan 2025 | Bewirtschaftung, Rücklage, Gesamt, umlagefähig (+171,85 €, +16,3 %); Plan mit Plan +11,5 % |
+| Kostentreiber | größte umlagefähige Planpositionen, Rest zusammengefasst (37,49 €) |
+| Prüfpunkte / Abrechnungsfehler erkennen | Heizung nach MEA im Plan, offene Klassifizierung (Dachwartung), ausstehende Jahresabrechnung, geänderte Verteilerschlüssel, auffällige Abweichungen (≥ 25 % und ≥ 25 €) |
+| Betriebskostenübersicht auf der Objektseite | letztes Ist, Plan, Eigentümeranteil pro Monat, Prüfpunkte |
+| Vorauszahlungen optimieren | bereits vorhanden: kostendeckende Vorauszahlung in der Prognose (Anpassung nur nach Abrechnung, § 560 Abs. 4 BGB) |
+
 ### Nächste Schritte
 
 1. **Zahlungseingänge (1.10 ausbauen):** monatliche Ist-Vorauszahlungen statt nur eines Jahresbetrags, optional per Kontoauszug-Import.

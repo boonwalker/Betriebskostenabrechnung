@@ -98,6 +98,8 @@ export function summarizeAnnual(a: WegAnnualStatement): AnnualSummary {
 
 export interface Finding {
   level: "error" | "warning" | "info";
+  /** kurze Überschrift für Prüfpunkte */
+  title?: string;
   text: string;
   positionId?: string;
 }
@@ -324,6 +326,192 @@ export function explainDrivers(rows: ComparisonRow[], limit = 3): string[] {
       const pct = r.differencePct !== null ? ` (${r.differencePct > 0 ? "+" : ""}${(r.differencePct * 100).toFixed(1).replace(".", ",")} %)` : "";
       return `${r.label} ${dir} um ${fmt(Math.abs(r.difference!))}${pct}.`;
     });
+}
+
+/* ---------- Auswertungen für Übersichten und Grafiken ---------- */
+
+export interface BudgetUsage {
+  plan: number;
+  actual: number;
+  /** Ist ÷ Soll */
+  usage: number;
+  /** Ist − Soll (negativ: unter Plan) */
+  difference: number;
+  differencePct: number;
+}
+
+/** Budgetauslastung der Bewirtschaftungskosten (ohne Rücklage) laut Jahresabrechnung */
+export function budgetUsage(a: WegAnnualStatement): BudgetUsage | null {
+  const plan = a.managementCostsPlan;
+  const actual = a.managementCostsActual;
+  if (plan === null || actual === null || plan <= 0) return null;
+  const difference = fromCents(toCents(actual) - toCents(plan));
+  return { plan, actual, usage: actual / plan, difference, differencePct: difference / plan };
+}
+
+export interface PlanSplit {
+  /** laut Kennzeichnung der Verwaltung umlagefähig */
+  allocable: number;
+  /** Eigentümeranteil: nicht umlagefähig inkl. Rücklage und nicht gekennzeichneter Positionen */
+  owner: number;
+  total: number;
+  allocableMonthly: number;
+  ownerMonthly: number;
+  allocableShare: number;
+}
+
+export function planSplit(plan: EconomicPlan): PlanSplit {
+  const s = summarizePlan(plan);
+  const owner = fromCents(toCents(s.total) - toCents(s.declaredAllocable));
+  return {
+    allocable: s.declaredAllocable,
+    owner,
+    total: s.total,
+    allocableMonthly: fromCents(Math.round(toCents(s.declaredAllocable) / 12)),
+    ownerMonthly: fromCents(Math.round(toCents(owner) / 12)),
+    allocableShare: s.total > 0 ? s.declaredAllocable / s.total : 0,
+  };
+}
+
+export interface YearRow {
+  label: string;
+  actual: number;
+  plan: number;
+  difference: number;
+  differencePct: number | null;
+  strong?: boolean;
+}
+
+export interface YearComparison {
+  actualYear: number;
+  planYear: number;
+  rows: YearRow[];
+  /** Hausgeld-Soll des Vorjahres (aus der Jahresabrechnung) gegenüber dem neuen Plan – Plan mit Plan */
+  previousPlan: { year: number; total: number; next: number; difference: number; differencePct: number } | null;
+}
+
+/**
+ * Ist eines Jahres (Jahresabrechnung) gegenüber dem Wirtschaftsplan eines (meist späteren) Jahres:
+ * Bewirtschaftungskosten, Rücklage, Gesamt und umlagefähiger Anteil.
+ */
+export function compareYears(plan: EconomicPlan, actual: WegAnnualStatement): YearComparison {
+  const p = summarizePlan(plan);
+  const a = summarizeAnnual(actual);
+  const row = (label: string, act: number, pl: number, strong?: boolean): YearRow => {
+    const difference = fromCents(toCents(pl) - toCents(act));
+    return { label, actual: act, plan: pl, difference, differencePct: act !== 0 ? difference / act : null, strong };
+  };
+  const management = actual.managementCostsActual ?? a.total;
+  const rows = [
+    row("Bewirtschaftungskosten ohne Rücklage", management, p.managementCosts),
+    row("Zuführung zur Erhaltungsrücklage", actual.reserveContribution, p.reserve),
+    row("Gesamt einschließlich Rücklage", fromCents(toCents(management) + toCents(actual.reserveContribution)), p.total, true),
+    row("davon umlagefähig", a.allocable, p.declaredAllocable),
+  ];
+  let previousPlan: YearComparison["previousPlan"] = null;
+  if (actual.managementCostsPlan !== null && actual.year === plan.year - 1) {
+    const total = fromCents(toCents(actual.managementCostsPlan) + toCents(actual.reserveContribution));
+    const difference = fromCents(toCents(p.total) - toCents(total));
+    previousPlan = { year: actual.year, total, next: p.total, difference, differencePct: total > 0 ? difference / total : 0 };
+  }
+  return { actualYear: actual.year, planYear: plan.year, rows, previousPlan };
+}
+
+export interface CostDriver {
+  label: string;
+  amount: number;
+  /** zusammengefasste kleinere Positionen */
+  members?: string[];
+}
+
+/** Größte umlagefähige Positionen des Wirtschaftsplans, der Rest zusammengefasst */
+export function costDrivers(plan: EconomicPlan, limit = 9): CostDriver[] {
+  const items = plan.positions.filter((p) => p.declaredAllocable === true && p.amount !== 0).sort((a, b) => b.amount - a.amount);
+  const top: CostDriver[] = items.slice(0, limit).map((p) => ({ label: p.label, amount: p.amount }));
+  const rest = items.slice(limit);
+  if (rest.length === 1) top.push({ label: rest[0].label, amount: rest[0].amount });
+  else if (rest.length > 1) top.push({ label: "Übrige Positionen", amount: sumOf(rest), members: rest.map((p) => p.label) });
+  return top;
+}
+
+const isHeatingLike = (p: LedgerPosition) => !!p.heating || /w(ä|ae)rmepumpe|heiz|warmwasser|wohnungsstation|brennstoff|fernw(ä|ae)rme/i.test(p.label);
+const normKey = (k: string | undefined) => (k ?? "").toLowerCase().trim();
+
+/**
+ * Prüfpunkte zu einem Wirtschaftsplan: was bei der späteren Mieterabrechnung anders laufen wird
+ * als im Plan, was noch zu klären ist und welche Abweichungen zum Ist auffallen.
+ */
+export function planCheckpoints(plan: EconomicPlan, annuals: WegAnnualStatement[]): Finding[] {
+  const out: Finding[] = [];
+  const mine = annuals.filter((a) => a.propertyId === plan.propertyId && a.unitId === plan.unitId);
+
+  // Heizung im Plan nach MEA, beim Mieter nach HeizkostenV
+  const heatingByMea = plan.positions.filter((p) => isHeatingLike(p) && p.amount !== 0 && /mea|miteigentum/.test(normKey(p.wegKey)));
+  if (heatingByMea.length) {
+    out.push({
+      level: "warning",
+      title: "Heizkostenverteilung prüfen",
+      text: `${heatingByMea.map((p) => p.label).join(", ")} (${fmt(sumOf(heatingByMea))}) plant die Verwaltung nach MEA. Beim Mieter werden Heiz- und Warmwasserkosten nach der Heizkostenabrechnung verteilt (50–70 % nach Verbrauch, HeizkostenV) – der tatsächliche Betrag kann deutlich abweichen.`,
+    });
+  }
+
+  // Von der Verwaltung als umlagefähig gekennzeichnet, aber eigene Bewertung offen
+  for (const p of plan.positions.filter((p) => p.declaredAllocable === true && p.classification === "review" && p.amount !== 0)) {
+    out.push({
+      level: "warning",
+      title: `${p.label} klassifizieren`,
+      text: `${fmt(p.amount)} sind nur bei passender Kostenart und Vereinbarung im Mietvertrag umlagefähig. ${p.reason}`.trim(),
+    });
+  }
+
+  // Ist-Abrechnung zum Planjahr
+  const sameYear = mine.find((a) => a.year === plan.year);
+  if (!sameYear) {
+    out.push({
+      level: "info",
+      title: `Jahresabrechnung ${plan.year} ausstehend`,
+      text: "Der Wirtschaftsplan liefert eine Prognose, aber keine Abrechnungswerte. Die Mieterabrechnung entsteht erst aus der Jahresabrechnung.",
+    });
+  }
+
+  // Vergleich mit dem Ist: Verteilerschlüssel und auffällige Abweichungen
+  const actual = sameYear ?? mine.filter((a) => a.year < plan.year).sort((a, b) => b.year - a.year)[0];
+  if (actual) {
+    const keys = (ps: LedgerPosition[]) => {
+      // je Kostengruppe: normalisierter Schlüssel → Schreibweise im Dokument
+      const m = new Map<string, { label: string; keys: Map<string, string> }>();
+      for (const p of ps) {
+        if (!p.wegKey || p.amount === 0) continue;
+        const g = groupOf(p);
+        const e = m.get(g.key) ?? { label: g.label, keys: new Map<string, string>() };
+        if (!e.keys.has(normKey(p.wegKey))) e.keys.set(normKey(p.wegKey), p.wegKey.trim());
+        m.set(g.key, e);
+      }
+      return m;
+    };
+    const planKeys = keys(plan.positions);
+    const actualKeys = keys(actual.positions);
+    for (const [k, pk] of planKeys) {
+      const ak = actualKeys.get(k);
+      // Heizung: bereits oben als eigener Prüfpunkt
+      if (k === "heating" || !ak || [...pk.keys.keys()].some((x) => ak.keys.has(x))) continue;
+      out.push({
+        level: "info",
+        title: `Verteilerschlüssel: ${pk.label}`,
+        text: `Plan ${plan.year} nach ${[...pk.keys.values()].join(", ")}, Abrechnung ${actual.year} nach ${[...ak.keys.values()].join(", ")}. Abweichungen zwischen Plan und Ist sind hier zu erwarten.`,
+      });
+    }
+    for (const r of comparePlanActual(plan, actual)) {
+      if (r.difference === null || r.differencePct === null || r.key === "reserve") continue;
+      if (Math.abs(r.differencePct) < 0.25 || Math.abs(r.difference) < 25) continue;
+      out.push({
+        level: "warning",
+        title: `Auffällige Abweichung: ${r.label}`,
+        text: `Plan ${plan.year} ${fmt(r.plan)} gegenüber Ist ${actual.year} ${fmt(r.actual!)} (${r.difference > 0 ? "+" : ""}${(r.differencePct * 100).toFixed(1).replace(".", ",")} %).`,
+      });
+    }
+  }
+  return out;
 }
 
 /* ---------- Prognose für einen Mieter ---------- */

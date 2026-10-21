@@ -192,6 +192,10 @@ export interface LedgerPosition {
   totalAmount?: number | null;
   /** Verteilerschlüssel der Verwaltung, z. B. „MEA“, „Wohnfläche“, „Einheiten“, „HKA“ */
   wegKey?: string;
+  /** Schlüsselbasis laut Dokument, z. B. 34,766 von 478,182 cbm oder 49 von 1.000 MEA */
+  wegBasis?: { total: number; share: number; unit: string } | null;
+  /** Bemerkung im Dokument, z. B. Rechnungsdaten oder Zahlungszeitpunkt */
+  note?: string;
   /** Kostenart nach § 2 BetrKV (null = keine) */
   category: number | null;
   classification: Classification;
@@ -229,6 +233,8 @@ export interface HeatingBill {
   consumptionHeatingKwh: number | null;
   consumptionWaterKwh: number | null;
   components: HeatingComponent[];
+  /** Kosten, die laut Heizkostenabrechnung in den Gesamtheizkosten enthalten sind (z. B. Wärmestrom, Heizungswartung) */
+  includedCosts?: HeatingComponent[];
   /** CO2KostAufG nur bei Brennstoffen mit CO2-Preis (Öl, Gas, Fernwärme …), nicht bei Wärmepumpen-Strom */
   co2Applicable: boolean;
   co2Cost: number | null;
@@ -244,6 +250,8 @@ export interface WegAnnualStatement {
   year: number;
   /** Bewirtschaftungskosten Ist laut Einzelabrechnung (ohne Rücklage) */
   managementCostsActual: number | null;
+  /** Summe der Gesamtkosten der WEG laut Einzelabrechnung (Spalte „Gesamt“) */
+  buildingTotal?: number | null;
   /** Bewirtschaftungskosten Soll laut Wirtschaftsplan */
   managementCostsPlan: number | null;
   /** Zuführung zur Erhaltungsrücklage – nur Eigentümer-Ebene */
@@ -263,6 +271,9 @@ export interface EconomicPlan {
   /** Hausgeld laut Plan */
   annualHausgeld: number | null;
   monthlyHausgeld: number | null;
+  /** monatliche Aufteilung laut Plan: Rücklage und Kostentragung */
+  monthlyReserve?: number | null;
+  monthlyCosts?: number | null;
   /** Positionen inkl. Zuführung zur Erhaltungsrücklage */
   positions: LedgerPosition[];
   documents: string[];

@@ -1,7 +1,7 @@
 import { categoryLabel } from "./betrkv";
 import { CLASSIFICATION_LABELS } from "./classify";
 import { fromCents, sumCents, toCents } from "./money";
-import type { CostItem, EconomicPlan, LedgerPosition, Statement, WegAnnualStatement } from "./types";
+import type { CostItem, EconomicPlan, HeatingBill, LedgerPosition, Statement, WegAnnualStatement } from "./types";
 import { uid } from "./model";
 
 /*
@@ -14,6 +14,46 @@ import { uid } from "./model";
 
 const sumOf = (ps: LedgerPosition[]) => fromCents(sumCents(ps.map((p) => toCents(p.amount))));
 const tolerance = 0; // Cent – Kontrollsummen müssen exakt stimmen
+/** Bis zu dieser Abweichung (in Cent) gilt eine Differenz zwischen Dokumenten als Rundungsdifferenz */
+const roundingCents = 5;
+
+/** Prüft, ob der Anteil der Wohnung zur Schlüsselrechnung „Gesamt × Anteil ÷ Basis“ passt */
+export function checkKeyMath(positions: LedgerPosition[]): Finding[] {
+  const out: Finding[] = [];
+  for (const p of positions) {
+    const b = p.wegBasis;
+    if (!b || !b.total || p.totalAmount === null || p.totalAmount === undefined) continue;
+    const expected = Math.round((toCents(p.totalAmount) * b.share) / b.total);
+    const diff = toCents(p.amount) - expected;
+    if (diff === 0) continue;
+    const text = `„${p.label}“: ${fmt(p.totalAmount)} × ${num(b.share)}/${num(b.total)} ${b.unit} = ${fmt(fromCents(expected))}, im Dokument ${fmt(p.amount)}`;
+    out.push(
+      Math.abs(diff) <= 1
+        ? { level: "info", text: `${text} (Rundungsdifferenz).`, positionId: p.id }
+        : { level: "warning", text: `${text}. Bitte Schlüssel und Beträge prüfen.`, positionId: p.id },
+    );
+  }
+  return out;
+}
+
+/**
+ * Ist eine heizungsbezogene Position (Energie, Wartung) in der Heizkostenabrechnung enthalten?
+ * true/false laut Kostenaufstellung der Heizkostenabrechnung, null = nicht feststellbar.
+ */
+export function includedInHeatingBill(p: LedgerPosition, heating: HeatingBill | null): boolean | null {
+  const included = heating?.includedCosts ?? [];
+  if (included.length === 0) return null;
+  const words = (s: string) => s.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue");
+  const label = words(p.label);
+  const topics: [RegExp, RegExp][] = [
+    [/strom|energie|brennstoff|gas|oel|fernwaerme/, /strom|energie|brennstoff|gas|oel|fernwaerme/],
+    [/wartung.*(heizung|waermepumpe)|(heizung|waermepumpe)s?\s*-?wartung/, /wartung/],
+    [/wohnungsstation|uebergabestation|frischwasserstation/, /station/],
+    [/messdienst|ablesung|verbrauchserfassung|zaehler/, /messdienst|ablesung|erfassung|zaehler|geraetemiete/],
+  ];
+  for (const [mine, theirs] of topics) if (mine.test(label)) return included.some((c) => theirs.test(words(c.label)));
+  return false;
+}
 
 export interface AnnualSummary {
   allocable: number;
@@ -72,6 +112,16 @@ export function checkAnnual(a: WegAnnualStatement): Finding[] {
     });
   }
 
+  // Spalte „Gesamt“ der WEG
+  if (a.buildingTotal !== null && a.buildingTotal !== undefined && a.positions.every((p) => p.totalAmount !== null && p.totalAmount !== undefined)) {
+    const sumTotal = sumCents(a.positions.map((p) => toCents(p.totalAmount!)));
+    if (sumTotal !== toCents(a.buildingTotal)) {
+      out.push({ level: "warning", text: `Gesamtkosten der WEG: Positionen ergeben ${fmt(fromCents(sumTotal))}, Abrechnung nennt ${fmt(a.buildingTotal)}.` });
+    }
+  }
+  out.push(...checkKeyMath(a.positions));
+  for (const p of a.positions) if (p.note && p.classification === "review") out.push({ level: "info", text: `„${p.label}“ laut Dokument: ${p.note}`, positionId: p.id });
+
   // Doppelte Positionen
   const seen = new Map<string, LedgerPosition>();
   for (const p of a.positions) {
@@ -84,11 +134,20 @@ export function checkAnnual(a: WegAnnualStatement): Finding[] {
   // Heizkosten: enthaltene Energie-/Wartungskosten nicht zusätzlich umlegen
   const heatingTotal = a.positions.filter((p) => p.heating === "total");
   const components = a.positions.filter((p) => p.heating === "component" && p.amount !== 0);
-  if ((heatingTotal.length > 0 || a.heating) && components.length > 0) {
-    for (const c of components) {
+  for (const c of components) {
+    const inc = includedInHeatingBill(c, a.heating);
+    if (inc === true) {
+      out.push({ level: "warning", text: `„${c.label}“ ist bereits in der Heizkostenabrechnung enthalten und wird nicht zusätzlich umgelegt.`, positionId: c.id });
+    } else if (inc === false) {
       out.push({
         level: "warning",
-        text: `„${c.label}“ ist Teil der Heizkostenabrechnung und wird nicht zusätzlich in die Mieterabrechnung übernommen.`,
+        text: `„${c.label}“ ist eine Heizungs-/Warmwasserposition außerhalb der Heizkostenabrechnung. Nach HeizkostenV gehört sie in die verbrauchsabhängige Verteilung – bitte mit der Hausverwaltung klären und selbst bewerten.`,
+        positionId: c.id,
+      });
+    } else if (heatingTotal.length > 0 || a.heating) {
+      out.push({
+        level: "warning",
+        text: `„${c.label}“ ist möglicherweise in den Heizkosten enthalten. Erfasse die Kostenaufstellung der Heizkostenabrechnung, um Doppelerfassung auszuschließen.`,
         positionId: c.id,
       });
     }
@@ -101,6 +160,23 @@ export function checkAnnual(a: WegAnnualStatement): Finding[] {
       const compSum = fromCents(sumCents(h.components.map((c) => toCents(c.amount))));
       if (toCents(compSum) !== toCents(h.unitShare)) {
         out.push({ level: "error", text: `Heizkostenabrechnung: Bestandteile ergeben ${fmt(compSum)}, Anteil der Wohnung ist ${fmt(h.unitShare)}.` });
+      }
+    }
+    const included = h.includedCosts ?? [];
+    if (included.length > 0 && h.buildingTotal !== null) {
+      const incSum = sumCents(included.map((c) => toCents(c.amount)));
+      if (incSum !== toCents(h.buildingTotal)) {
+        out.push({ level: "error", text: `Heizkostenabrechnung: Kostenaufstellung ergibt ${fmt(fromCents(incSum))}, Gesamtheizkosten sind ${fmt(h.buildingTotal)}.` });
+      }
+    }
+    const totalInStatement = heatingTotal.length === 1 ? heatingTotal[0].totalAmount : null;
+    if (totalInStatement !== null && totalInStatement !== undefined && h.buildingTotal !== null) {
+      const diff = toCents(totalInStatement) - toCents(h.buildingTotal);
+      if (diff !== 0) {
+        out.push({
+          level: Math.abs(diff) <= roundingCents ? "info" : "warning",
+          text: `Gesamtheizkosten: Jahresabrechnung ${fmt(totalInStatement)}, Heizkostenabrechnung ${fmt(h.buildingTotal)} (Differenz ${fmt(fromCents(diff))}${Math.abs(diff) <= roundingCents ? ", Rundungsdifferenz ohne Auswirkung auf den Anteil der Wohnung" : ""}).`,
+        });
       }
     }
     const posAmount = heatingTotal.length === 1 ? heatingTotal[0].amount : null;
@@ -159,6 +235,24 @@ export function summarizePlan(plan: EconomicPlan): PlanSummary {
     matchesAnnualHausgeld: plan.annualHausgeld === null ? null : toCents(plan.annualHausgeld) === toCents(total),
     matchesMonthlyHausgeld: plan.monthlyHausgeld === null ? null : toCents(plan.monthlyHausgeld) === toCents(monthly),
   };
+}
+
+export function checkPlan(plan: EconomicPlan): Finding[] {
+  const out: Finding[] = [];
+  const s = summarizePlan(plan);
+  if (s.matchesAnnualHausgeld === false) out.push({ level: "error", text: `Positionen ergeben ${fmt(s.total)}, der Plan nennt ${fmt(plan.annualHausgeld!)} pro Jahr.` });
+  if (s.matchesMonthlyHausgeld === false) out.push({ level: "warning", text: `${fmt(s.total)} ÷ 12 = ${fmt(s.monthly)}, der Plan nennt ${fmt(plan.monthlyHausgeld!)} pro Monat.` });
+  if (plan.monthlyReserve != null && plan.monthlyCosts != null && plan.monthlyHausgeld != null) {
+    const diff = toCents(plan.monthlyReserve) + toCents(plan.monthlyCosts) - toCents(plan.monthlyHausgeld);
+    if (diff !== 0) {
+      out.push({
+        level: Math.abs(diff) <= roundingCents ? "info" : "warning",
+        text: `Monatliche Aufteilung: Rücklage ${fmt(plan.monthlyReserve)} + Kosten ${fmt(plan.monthlyCosts)} = ${fmt(fromCents(toCents(plan.monthlyReserve) + toCents(plan.monthlyCosts)))}, Hausgeld laut Plan ${fmt(plan.monthlyHausgeld)}${Math.abs(diff) <= roundingCents ? " (Rundungsdifferenz im Plan)" : ""}.`,
+      });
+    }
+  }
+  out.push(...checkKeyMath(plan.positions));
+  return out;
 }
 
 /* ---------- Plan-Ist-Vergleich ---------- */
@@ -256,7 +350,19 @@ export function transferToStatement(annual: WegAnnualStatement | EconomicPlan, s
     if (already.has(p.id)) skipped.push({ position: p, reason: "bereits übernommen" });
     else if (p.classification !== "allocable") skipped.push({ position: p, reason: CLASSIFICATION_LABELS[p.classification] });
     else if (!p.reviewed) skipped.push({ position: p, reason: "noch nicht geprüft" });
-    else if (p.heating === "component" && hasHeatingTotal) skipped.push({ position: p, reason: "in der Heizkostenabrechnung enthalten" });
+    else if (p.heating === "component" && includedInHeatingBill(p, annual.heating) === true)
+      skipped.push({ position: p, reason: "in der Heizkostenabrechnung enthalten" });
+    else if (p.heating === "component" && p.origin !== "user")
+      // Heizungsbezogene Kosten nur übernehmen, wenn der Vermieter sie ausdrücklich bewertet hat
+      skipped.push({
+        position: p,
+        reason:
+          includedInHeatingBill(p, annual.heating) === false
+            ? "Heizungsposition außerhalb der Heizkostenabrechnung – bitte selbst bewerten"
+            : hasHeatingTotal
+              ? "möglicherweise in den Heizkosten enthalten – bitte selbst bewerten"
+              : "Heizungsposition – bitte selbst bewerten",
+      });
     else if (p.amount === 0) skipped.push({ position: p, reason: "Betrag 0" });
     else {
       const h = p.heating === "total" ? annual.heating : null;
@@ -279,3 +385,4 @@ export function transferToStatement(annual: WegAnnualStatement | EconomicPlan, s
 }
 
 const fmt = (n: number) => new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n);
+const num = (n: number) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(n);

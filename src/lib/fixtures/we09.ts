@@ -4,11 +4,17 @@ import type { EconomicPlan, LedgerPosition, Property, Statement, Tenant, WegAnnu
 
 /**
  * Realer Testfall „WE 09“ (anonymisiert: ohne Anschrift, Verwaltung und Namen).
- * Quelle: Einzelabrechnung 2024, Heizkostenabrechnung 2024 und Wirtschaftsplan 2025 der WEG.
+ * Quelle: Originale der Einzelabrechnung 2024, Heizkostenabrechnung (Kontrollblatt) 2024,
+ * Gesamtdarstellung 2024, Aufstellung Treppenhausreinigung 2024 und Wirtschaftsplan 2025.
+ * Bezeichnungen, Gesamtbeträge und Schlüssel wie im Dokument.
  * Eigentumswohnung, 11 Einheiten, 44,75 m², MEA 49/1.000, Wärmepumpe.
  */
 
-const pos = (id: string, label: string, amount: number, year: number, declaredAllocable: boolean | null = null): LedgerPosition =>
+type Extra = Pick<LedgerPosition, "totalAmount" | "wegKey" | "wegBasis" | "note">;
+const MEA = { total: 1000, share: 49, unit: "MEA" };
+const WE = { total: 11, share: 1, unit: "WE" };
+
+const pos = (id: string, label: string, amount: number, year: number, declaredAllocable: boolean | null = null, extra: Extra = {}): LedgerPosition =>
   applyRules(
     {
       id,
@@ -20,7 +26,8 @@ const pos = (id: string, label: string, amount: number, year: number, declaredAl
       origin: "rule",
       reviewed: false,
       declaredAllocable,
-      provenance: { document: year === 2024 ? "Einzelabrechnung 2024 WE 09" : "Wirtschaftsplan 2025 WE 09" },
+      provenance: { document: year === 2024 ? "Einzelabrechnung 2024 WE 09" : "Wirtschaftsplan 2025" },
+      ...extra,
     },
     year,
   );
@@ -33,7 +40,7 @@ export function we09Property(): Property {
     address: "",
     type: "etw",
     units: [{ id: "we09-u", name: "WE 09", area: 44.75, mea: 49 }],
-    wegManager: "Hausverwaltung",
+    wegManager: "",
     wegUnitsCount: 11,
     wegMeaTotal: 1000,
     wegAreaTotal: 900,
@@ -51,21 +58,33 @@ export function we09Annual2024(): WegAnnualStatement {
     managementCostsActual: 1468.43,
     managementCostsPlan: 1579.08,
     reserveContribution: 147.0,
+    buildingTotal: 25274.93,
     positions: [
-      pos("a1", "Wasser", 60.23, y),
-      pos("a2", "Abwasser", 143.75, y),
-      pos("a3", "Treppenhausreinigung", 126.1, y),
-      pos("a4", "Allgemeinstrom", 45.53, y),
-      pos("a5", "Straßenreinigung", 4.01, y),
-      pos("a6", "Niederschlagswasser", 44.94, y),
-      pos("a7", "Gebäudeversicherung", 180.75, y),
-      pos("a8", "Haftpflichtversicherung", 3.82, y),
-      pos("a9", "Winterdienst", 29.36, y),
-      pos("a10", "Heizung und Warmwasser", 417.86, y),
-      pos("a11", "Bankgebühren", 10.69, y),
-      pos("a12", "Verwaltergebühren", 361.55, y),
-      pos("a13", "Instandhaltung / Instandsetzung", 4.85, y),
-      pos("a14", "Wartung Dach", 34.99, y),
+      pos("a1", "Wasser", 60.23, y, null, { totalAmount: 828.44, wegKey: "Verbrauch", wegBasis: { total: 478.182, share: 34.766, unit: "cbm" } }),
+      pos("a2", "Abwassergebühren", 143.75, y, null, { totalAmount: 1960.96, wegKey: "Verbrauch", wegBasis: { total: 474.244, share: 34.766, unit: "cbm" } }),
+      pos("a3", "Treppenhausreinigung", 126.1, y, null, {
+        totalAmount: 2125.1,
+        wegKey: "gesonderte Berechnung",
+        note: "Aufteilung alle/Bestand/Neubau je MEA: 21,32 € + 104,78 € (Aufstellung Treppenhausreinigung)",
+      }),
+      pos("a4", "Treppenhausreinigung WE 06", 0, y, null, { totalAmount: 528, wegKey: "Einzelkosten WE 06" }),
+      pos("a5", "Allgemeinstrom", 45.53, y, null, { totalAmount: 929.23, wegKey: "MEA", wegBasis: MEA }),
+      pos("a6", "Straßenreinigung", 4.01, y, null, { totalAmount: 81.83, wegKey: "MEA", wegBasis: MEA }),
+      pos("a7", "Niederschlagswasser", 44.94, y, null, { totalAmount: 917.24, wegKey: "MEA", wegBasis: MEA }),
+      pos("a8", "Gebäudeversicherung", 180.75, y, null, { totalAmount: 3688.68, wegKey: "MEA", wegBasis: MEA }),
+      pos("a9", "Haftpflichtversicherung", 3.82, y, null, { totalAmount: 78, wegKey: "MEA", wegBasis: MEA }),
+      pos("a10", "Winterdienst", 29.36, y, null, { totalAmount: 599.1, wegKey: "MEA", wegBasis: MEA }),
+      pos("a11", "Wartung Wohnungsstationen", 0, y, null, { totalAmount: 0, wegKey: "Wohneinheiten", wegBasis: WE }),
+      pos("a12", "Wartung Dach", 34.99, y, null, {
+        totalAmount: 714,
+        wegKey: "MEA",
+        wegBasis: MEA,
+        note: "Rechnungen vom 19.12.2023 und 28.11.2024, bezahlt 2025 (Gesamtdarstellung) – betrifft zwei Leistungsjahre",
+      }),
+      pos("a13", "Heiz- und Warmwasserkosten", 417.86, y, null, { totalAmount: 8530.1, wegKey: "Heizkosten" }),
+      pos("a14", "Bankgebühren", 10.69, y, null, { totalAmount: 218.25, wegKey: "MEA", wegBasis: MEA }),
+      pos("a15", "Verwaltergebühren", 361.55, y, null, { totalAmount: 3977, wegKey: "Wohneinheiten", wegBasis: WE }),
+      pos("a16", "Instandhaltung/-setzung", 4.85, y, null, { totalAmount: 99, wegKey: "MEA", wegBasis: MEA }),
     ],
     heating: {
       heatSource: "Wärmepumpe",
@@ -75,6 +94,10 @@ export function we09Annual2024(): WegAnnualStatement {
       areaTotal: 900,
       consumptionHeatingKwh: 1585,
       consumptionWaterKwh: 448.8,
+      includedCosts: [
+        { id: "i1", label: "Brennstoffkosten Wärmestrom (41.785,55 kWh)", amount: 8375.41 },
+        { id: "i2", label: "Heizungswartung", amount: 154.7 },
+      ],
       components: [
         { id: "h1", label: "Grundkosten Heizung", amount: 114.56 },
         { id: "h2", label: "Verbrauchskosten Heizung", amount: 226.49 },
@@ -100,28 +123,30 @@ export function we09Plan2025(): EconomicPlan {
     year: y,
     annualHausgeld: 1923.76,
     monthlyHausgeld: 160.31,
+    monthlyReserve: 18.38,
+    monthlyCosts: 141.94,
     positions: [
-      // laut Verwaltung umlagefähig
-      pos("p1", "Gebäudeversicherung", 196.0, y, true),
-      pos("p2", "Haftpflichtversicherung", 3.92, y, true),
-      pos("p3", "Allgemeinstrom", 49.0, y, true),
-      pos("p4", "Straßenreinigung", 4.17, y, true),
-      pos("p5", "Frischwasser", 49.0, y, true),
-      pos("p6", "Abwasser", 102.9, y, true),
-      pos("p7", "Niederschlagswasser", 49.0, y, true),
-      pos("p8", "Winterdienst", 41.65, y, true),
-      pos("p9", "Treppenhausreinigung alle", 107.8, y, true),
-      pos("p10", "Treppenhausreinigung WE 06", 0, y, true),
-      pos("p11", "Wartung Dach", 19.6, y, true),
-      pos("p12", "Strom Wärmepumpe", 539.0, y, true),
-      pos("p13", "Wartung Heizung", 9.8, y, true),
-      pos("p14", "Wartung Wohnungsstationen", 56.36, y, true),
-      // laut Verwaltung nicht umlagefähig
-      pos("p15", "Verwaltung", 380.0, y, false),
-      pos("p16", "Erhaltungsrücklage", 220.5, y, false),
-      pos("p17", "Bankspesen", 11.76, y, false),
-      pos("p18", "Erhaltung / Instandhaltung", 73.5, y, false),
-      pos("p19", "Sonstige Ausgaben", 9.8, y, false),
+      // 2. Vorschüsse (umlagefähig gem. §§ 1, 2 BetrKV) laut Verwaltung
+      pos("p1", "Gebäudeversicherung", 196.0, y, true, { totalAmount: 4000, wegKey: "MEA", wegBasis: MEA }),
+      pos("p2", "Haftpflichtversicherung", 3.92, y, true, { totalAmount: 80, wegKey: "MEA", wegBasis: MEA }),
+      pos("p3", "Allgemeinstrom", 49.0, y, true, { totalAmount: 1000, wegKey: "MEA", wegBasis: MEA }),
+      pos("p4", "Straßenreinigung", 4.17, y, true, { totalAmount: 85, wegKey: "MEA", wegBasis: MEA }),
+      pos("p5", "Frischwasser", 49.0, y, true, { totalAmount: 1000, wegKey: "MEA", wegBasis: MEA }),
+      pos("p6", "Abwasser", 102.9, y, true, { totalAmount: 2100, wegKey: "MEA", wegBasis: MEA }),
+      pos("p7", "Niederschlagswasser", 49.0, y, true, { totalAmount: 1000, wegKey: "MEA", wegBasis: MEA }),
+      pos("p8", "Winterdienst", 41.65, y, true, { totalAmount: 850, wegKey: "MEA", wegBasis: MEA }),
+      pos("p9", "Treppenhausreinigung alle", 107.8, y, true, { totalAmount: 2200, wegKey: "MEA", wegBasis: MEA }),
+      pos("p10", "Treppenhausreinigung WE 06", 0, y, true, { totalAmount: 528, wegKey: "Einzelkosten WE 06" }),
+      pos("p11", "Wartung Dach", 19.6, y, true, { totalAmount: 400, wegKey: "MEA", wegBasis: MEA }),
+      pos("p12", "Strom Wärmepumpe", 539.0, y, true, { totalAmount: 11000, wegKey: "MEA", wegBasis: MEA }),
+      pos("p13", "Wartung Heizung", 9.8, y, true, { totalAmount: 200, wegKey: "MEA", wegBasis: MEA }),
+      pos("p14", "Wartung Wohnungsstationen", 56.36, y, true, { totalAmount: 620, wegKey: "Wohneinheiten", wegBasis: WE }),
+      // 1. Vorschüsse (nicht umlagefähig) laut Verwaltung
+      pos("p15", "Verwaltung", 380.0, y, false, { totalAmount: 4180, wegKey: "Wohneinheiten", wegBasis: WE }),
+      pos("p16", "Zuführung zur Rücklage", 220.5, y, false, { totalAmount: 4500, wegKey: "MEA", wegBasis: MEA }),
+      pos("p17", "Bankspesen", 11.76, y, false, { totalAmount: 240, wegKey: "MEA", wegBasis: MEA }),
+      pos("p18", "Erhaltung/Instandhaltung", 73.5, y, false, { totalAmount: 1500, wegKey: "MEA", wegBasis: MEA }),
+      pos("p19", "Sonstige Ausgaben", 9.8, y, false, { totalAmount: 200, wegKey: "MEA", wegBasis: MEA }),
     ],
     documents: ["Wirtschaftsplan 2025 WE 09"],
     createdAt: "2026-10-21T00:00:00.000Z",

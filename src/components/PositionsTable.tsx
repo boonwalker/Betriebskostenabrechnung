@@ -1,6 +1,6 @@
 import { COST_CATEGORIES } from "../lib/betrkv";
 import { applyRules, CLASSIFICATION_LABELS } from "../lib/classify";
-import { formatEUR } from "../lib/format";
+import { formatEUR, formatNum } from "../lib/format";
 import { uid } from "../lib/model";
 import type { Classification, LedgerPosition } from "../lib/types";
 import { NumberInput } from "./ui";
@@ -84,6 +84,7 @@ export default function PositionsTable({
                     {p.provenance?.row ? ` · „${p.provenance.row}“` : ""}
                     {uncertain && <span className="badge warn" style={{ marginLeft: 6 }}>unsicher erkannt</span>}
                   </div>
+                  {p.note && <div className="small" style={{ color: "var(--warn)" }}>Bemerkung im Dokument: {p.note}</div>}
                 </td>
                 <td>
                   <NumberInput
@@ -97,6 +98,12 @@ export default function PositionsTable({
                     }
                     ariaLabel="Betrag"
                   />
+                  {(p.totalAmount !== null && p.totalAmount !== undefined) || p.wegBasis ? (
+                    <div className="small muted" style={{ textAlign: "right" }}>
+                      {p.totalAmount !== null && p.totalAmount !== undefined && <>von {formatEUR(p.totalAmount)}</>}
+                      {p.wegBasis ? <> · {formatNum(p.wegBasis.share)}/{formatNum(p.wegBasis.total)} {p.wegBasis.unit}</> : p.wegKey ? <> · {p.wegKey}</> : null}
+                    </div>
+                  ) : null}
                   {p.extractedAmount !== undefined && p.extractedAmount !== p.amount && (
                     <div className="small muted">korrigiert, ausgelesen: {formatEUR(p.extractedAmount)}</div>
                   )}

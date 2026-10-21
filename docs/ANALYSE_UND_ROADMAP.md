@@ -133,10 +133,26 @@ Grundregeln:
 
 Zusätzlich im Browser geprüft: Testfall WE 09 laden → Jahresabrechnung prüfen → Mieterabrechnung 2024 erstellen → Vorauszahlungen bestätigen → freigeben → PDF; Abrechnung 2025 ohne Ist-Daten zeigt die fehlenden Angaben; KI-Import mit simulierter Antwort.
 
+### Abgleich mit den Originaldokumenten (Fotos, Oktober 2026)
+
+Die Testwerte des Briefings wurden mit den Originalen nachgerechnet und stimmen. Zusätzlich ergaben die Originale:
+
+| Erkenntnis | Umsetzung |
+|---|---|
+| Jeder Anteil der Einzelabrechnung ergibt sich exakt aus „Gesamt × Anteil ÷ Basis“ (MEA, WE, cbm). | Schlüsselbasis je Position; `checkKeyMath` rechnet jeden Anteil nach und erkennt Tipp- und Auslesefehler. |
+| Die Gesamtkosten der WEG summieren sich auf 25.274,93 €. | Kontrollsumme auch über die Spalte „Gesamt“ (`buildingTotal`). |
+| Die Heizkostenabrechnung enthält laut Kostenaufstellung nur Wärmestrom (8.375,41 €) und Heizungswartung (154,70 €). „Wartung Wohnungsstationen“ rechnet die WEG gesondert nach Wohneinheiten ab (2024: 0 €, Plan 2025: 56,36 €). | Kostenaufstellung der Heizkostenabrechnung (`includedCosts`). Heizungsbezogene Positionen gelten nur dann als enthalten, wenn sie dort stehen. Sonst muss der Vermieter sie ausdrücklich bewerten. |
+| Gesamtheizkosten: 8.530,10 € (Einzelabrechnung) gegenüber 8.530,11 € (Heizkostenabrechnung). | Wird als Rundungsdifferenz ohne Auswirkung auf den Anteil ausgewiesen. |
+| Wirtschaftsplan 2025: Rücklage 18,38 € + Kosten 141,94 € = 160,32 €, Hausgeld laut Plan 160,31 €. | Prüfung der monatlichen Aufteilung (`checkPlan`). |
+| Wartung Dach 714 € umfasst Rechnungen vom 19.12.2023 und 28.11.2024, bezahlt 2025. | Bemerkungen aus dem Dokument je Position (`note`), werden bei prüfpflichtigen Positionen angezeigt. |
+| Wasser und Abwasser verteilt die WEG im Ist nach Verbrauch (cbm), im Plan nach MEA. Die Treppenhausreinigung im Ist nach Gemeinschaftsflächen-Gruppen (alle/Bestand/Neubau je MEA: 21,32 € + 104,78 € = 126,10 €), im Plan nach MEA. | Erklärt Plan-Ist-Abweichungen. Das Anschreiben zeigt die Schlüsselbasis aus dem Dokument. |
+
+Die Fotos enthalten Namen anderer Eigentümer und Kontonummern. Sie werden deshalb nicht im Repository gespeichert, der Testfall enthält nur die Beträge der WE 09.
+
 ### Nächste Schritte
 
 1. **Mietvertrag (1.9):** vereinbarte Kostenarten und abweichende Umlageschlüssel je Mietverhältnis. Nicht vereinbarte Positionen werden nicht übernommen.
 2. **Zahlungseingänge (1.10 ausbauen):** monatliche Ist-Vorauszahlungen statt nur eines Jahresbetrags, optional per Kontoauszug-Import.
 3. **Dokumentenarchiv:** Originale in IndexedDB speichern und Herkunftsangaben mit der Seite im Dokument verlinken.
-4. **KI-Auslese mit echten Unterlagen testen:** WE-09-Fotos 2024 einlesen und mit den Sollwerten oben vergleichen (Genauigkeit messen).
+4. **KI-Auslese mit echten Unterlagen testen:** die WE-09-Fotos 2024 mit API-Schlüssel einlesen und das Ergebnis mit `src/lib/fixtures/we09.ts` vergleichen (Genauigkeit messen).
 5. **Grundsteuer und separat abgerechnete Kosten** (z. B. Müll) für Eigentumswohnungen: eigene Belege neben der WEG-Abrechnung.

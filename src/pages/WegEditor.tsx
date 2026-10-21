@@ -7,7 +7,7 @@ import { formatEUR, formatPct } from "../lib/format";
 import { newStatement, rentAt, uid } from "../lib/model";
 import { fromCents, sumCents, toCents } from "../lib/money";
 import type { AppData, EconomicPlan, HeatingBill, WegAnnualStatement } from "../lib/types";
-import { checkAnnual, comparePlanActual, explainDrivers, summarizeAnnual, summarizePlan, transferToStatement } from "../lib/weg";
+import { checkAnnual, checkPlan, comparePlanActual, explainDrivers, summarizeAnnual, summarizePlan, transferToStatement } from "../lib/weg";
 
 type Doc = WegAnnualStatement | EconomicPlan;
 
@@ -82,6 +82,10 @@ export default function WegEditor({ data, update, kind, id }: PageProps & { kind
                 <NumberInput value={doc.managementCostsPlan ?? undefined} onChange={(v) => set({ managementCostsPlan: v })} />
               </label>
               <label className="field">
+                Gesamtkosten der WEG laut Abrechnung (€)
+                <NumberInput value={doc.buildingTotal ?? undefined} onChange={(v) => set({ buildingTotal: v || null })} />
+              </label>
+              <label className="field">
                 Zuführung Erhaltungsrücklage (€)
                 <NumberInput value={doc.reserveContribution} onChange={(v) => set({ reserveContribution: v })} />
               </label>
@@ -95,6 +99,14 @@ export default function WegEditor({ data, update, kind, id }: PageProps & { kind
               <label className="field">
                 Hausgeld pro Monat laut Plan (€)
                 <NumberInput value={doc.monthlyHausgeld ?? undefined} onChange={(v) => set({ monthlyHausgeld: v })} />
+              </label>
+              <label className="field">
+                davon monatlich Rücklage (€)
+                <NumberInput value={doc.monthlyReserve ?? undefined} onChange={(v) => set({ monthlyReserve: v || null })} />
+              </label>
+              <label className="field">
+                davon monatlich Kostentragung (€)
+                <NumberInput value={doc.monthlyCosts ?? undefined} onChange={(v) => set({ monthlyCosts: v || null })} />
               </label>
             </>
           )}
@@ -203,6 +215,7 @@ function AnnualSummaryCard({ data, update, annual }: { data: AppData; update: Pa
 
 function PlanSummaryCard({ data, plan }: { data: AppData; plan: EconomicPlan }) {
   const s = summarizePlan(plan);
+  const findings = checkPlan(plan);
   const ours = (c: string) => fromCents(sumCents(plan.positions.filter((p) => p.classification === c).map((p) => toCents(p.amount))));
   const annuals = data.wegAnnuals.filter((a) => a.propertyId === plan.propertyId && a.unitId === plan.unitId).sort((a, b) => b.year - a.year);
   const comparison = annuals.find((a) => a.year === plan.year) ?? annuals.find((a) => a.year < plan.year) ?? null;
@@ -236,6 +249,16 @@ function PlanSummaryCard({ data, plan }: { data: AppData; plan: EconomicPlan }) 
           />
         </div>
         {s.undeclared > 0 && <p className="small muted" style={{ marginTop: 8 }}>Ohne Kennzeichnung der Verwaltung: {formatEUR(s.undeclared)}</p>}
+        {findings.length > 0 && (
+          <ul className="findings">
+            {findings.map((f, i) => (
+              <li key={i} className={f.level}>
+                {f.level === "error" ? "✗ " : f.level === "warning" ? "⚠ " : "ⓘ "}
+                {f.text}
+              </li>
+            ))}
+          </ul>
+        )}
         <p className="small" style={{ marginTop: 10 }}>
           Eigene Bewertung: umlagefähig {formatEUR(expected)} · nicht umlagefähig {formatEUR(ours("non_allocable"))} · zu prüfen {formatEUR(uncertain)}
         </p>
@@ -374,7 +397,36 @@ function HeatingCard({ annual, onChange }: { annual: WegAnnualStatement; onChang
           <NumberInput value={h.consumptionWaterKwh ?? undefined} onChange={(v) => set({ consumptionWaterKwh: v })} />
         </label>
       </div>
-      <h3 style={{ marginTop: 16 }}>Bestandteile</h3>
+      <h3 style={{ marginTop: 16 }}>Enthaltene Kosten der Liegenschaft</h3>
+      <p className="hint">Kostenaufstellung der Heizkostenabrechnung (z. B. Brennstoff/Wärmestrom, Heizungswartung). Daran erkennt die App, welche Positionen der Jahresabrechnung schon in den Heizkosten stecken.</p>
+      <table className="compact">
+        <tbody>
+          {(h.includedCosts ?? []).map((c) => (
+            <tr key={c.id}>
+              <td>
+                <input
+                  value={c.label}
+                  onChange={(e) => set({ includedCosts: (h.includedCosts ?? []).map((x) => (x.id === c.id ? { ...x, label: e.target.value } : x)) })}
+                  aria-label="enthaltene Kostenart"
+                />
+              </td>
+              <td style={{ width: 140 }}>
+                <NumberInput
+                  value={c.amount}
+                  onChange={(amount) => set({ includedCosts: (h.includedCosts ?? []).map((x) => (x.id === c.id ? { ...x, amount } : x)) })}
+                  ariaLabel="Betrag"
+                />
+              </td>
+              <td style={{ width: 40 }}>
+                <button className="ghost" onClick={() => set({ includedCosts: (h.includedCosts ?? []).filter((x) => x.id !== c.id) })} aria-label="entfernen">✕</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button style={{ marginTop: 8 }} onClick={() => set({ includedCosts: [...(h.includedCosts ?? []), { id: uid(), label: "", amount: 0 }] })}>+ enthaltene Kosten</button>
+
+      <h3 style={{ marginTop: 16 }}>Anteil der Wohnung – Bestandteile</h3>
       <table className="compact">
         <tbody>
           {h.components.map((c) => (

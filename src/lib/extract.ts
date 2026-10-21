@@ -176,6 +176,9 @@ const WegSchema = z.object({
   unitName: z.string(),
   managementCostsActual: z.number().nullable(),
   managementCostsPlan: z.number().nullable(),
+  buildingTotal: z.number().nullable(),
+  monthlyReserve: z.number().nullable(),
+  monthlyCosts: z.number().nullable(),
   reserveContribution: z.number().nullable(),
   annualHausgeld: z.number().nullable(),
   monthlyHausgeld: z.number().nullable(),
@@ -185,6 +188,10 @@ const WegSchema = z.object({
       unitAmount: z.number(),
       totalAmount: z.number().nullable(),
       wegKey: z.string(),
+      basisTotal: z.number().nullable(),
+      basisShare: z.number().nullable(),
+      basisUnit: z.string(),
+      remark: z.string(),
       declaredAllocable: z.enum(["yes", "no", "unknown"]),
       isReserve: z.boolean(),
       page: z.number().int().nullable(),
@@ -202,6 +209,7 @@ const WegSchema = z.object({
       consumptionHeatingKwh: z.number().nullable(),
       consumptionWaterKwh: z.number().nullable(),
       components: z.array(z.object({ label: z.string(), amount: z.number() })),
+      includedCosts: z.array(z.object({ label: z.string(), amount: z.number() })),
       co2Cost: z.number().nullable(),
       co2Kg: z.number().nullable(),
       page: z.number().int().nullable(),
@@ -221,6 +229,9 @@ const WEG_JSON_SCHEMA = {
     "unitName",
     "managementCostsActual",
     "managementCostsPlan",
+    "buildingTotal",
+    "monthlyReserve",
+    "monthlyCosts",
     "reserveContribution",
     "annualHausgeld",
     "monthlyHausgeld",
@@ -234,6 +245,9 @@ const WEG_JSON_SCHEMA = {
     unitName: { type: "string", description: "Bezeichnung der Wohnung, z. B. WE 09" },
     managementCostsActual: { ...nullableNumber, description: "Bewirtschaftungskosten Ist der Wohnung (ohne Rücklage)" },
     managementCostsPlan: { ...nullableNumber, description: "Bewirtschaftungskosten Soll laut Wirtschaftsplan in der Jahresabrechnung" },
+    buildingTotal: { ...nullableNumber, description: "Summe der Spalte Gesamtkosten der WEG in der Einzelabrechnung" },
+    monthlyReserve: { ...nullableNumber, description: "nur Wirtschaftsplan: davon monatlich für Rücklage" },
+    monthlyCosts: { ...nullableNumber, description: "nur Wirtschaftsplan: davon monatlich für Kostentragung" },
     reserveContribution: { ...nullableNumber, description: "Zuführung zur Erhaltungsrücklage der Wohnung" },
     annualHausgeld: { ...nullableNumber, description: "nur Wirtschaftsplan: Hausgeld pro Jahr" },
     monthlyHausgeld: { ...nullableNumber, description: "nur Wirtschaftsplan: Hausgeld pro Monat" },
@@ -242,12 +256,30 @@ const WEG_JSON_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["label", "unitAmount", "totalAmount", "wegKey", "declaredAllocable", "isReserve", "page", "sourceText", "confidence"],
+        required: [
+          "label",
+          "unitAmount",
+          "totalAmount",
+          "wegKey",
+          "basisTotal",
+          "basisShare",
+          "basisUnit",
+          "remark",
+          "declaredAllocable",
+          "isReserve",
+          "page",
+          "sourceText",
+          "confidence",
+        ],
         properties: {
           label: { type: "string", description: "Bezeichnung exakt wie im Dokument" },
           unitAmount: { type: "number", description: "Anteil der Wohnung in Euro" },
           totalAmount: { ...nullableNumber, description: "Gesamtbetrag der WEG in Euro" },
           wegKey: { type: "string", description: "Verteilerschlüssel laut Dokument, z. B. MEA, Wohnfläche, Einheiten, HKA; leer wenn nicht erkennbar" },
+          basisTotal: { ...nullableNumber, description: "Schlüssel gesamt, z. B. 1000 (MEA), 11 (WE), 478.182 (cbm)" },
+          basisShare: { ...nullableNumber, description: "Schlüssel Anteil der Wohnung, z. B. 49 (MEA), 1 (WE), 34.766 (cbm)" },
+          basisUnit: { type: "string", description: "Einheit des Schlüssels, z. B. MEA, WE, cbm, m², kWh; leer wenn keiner" },
+          remark: { type: "string", description: "Bemerkung zur Position im Dokument (z. B. Rechnungsdaten, Zahlungszeitpunkt), sonst leer" },
           declaredAllocable: { type: "string", enum: ["yes", "no", "unknown"], description: "Kennzeichnung der Verwaltung, ob umlagefähig" },
           isReserve: { type: "boolean", description: "Zuführung zur Erhaltungsrücklage" },
           page: { type: ["integer", "null"], description: "Seite im Dokument (1-basiert, über alle Dateien fortlaufend)" },
@@ -262,7 +294,20 @@ const WEG_JSON_SCHEMA = {
         {
           type: "object",
           additionalProperties: false,
-          required: ["heatSource", "buildingTotal", "unitShare", "baseSharePct", "areaTotal", "consumptionHeatingKwh", "consumptionWaterKwh", "components", "co2Cost", "co2Kg", "page"],
+          required: [
+            "heatSource",
+            "buildingTotal",
+            "unitShare",
+            "baseSharePct",
+            "areaTotal",
+            "consumptionHeatingKwh",
+            "consumptionWaterKwh",
+            "components",
+            "includedCosts",
+            "co2Cost",
+            "co2Kg",
+            "page",
+          ],
           properties: {
             heatSource: { type: "string", description: "z. B. Gas, Öl, Fernwärme, Wärmepumpe" },
             buildingTotal: nullableNumber,
@@ -273,6 +318,16 @@ const WEG_JSON_SCHEMA = {
             consumptionWaterKwh: nullableNumber,
             components: {
               type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["label", "amount"],
+                properties: { label: { type: "string" }, amount: { type: "number" } },
+              },
+            },
+            includedCosts: {
+              type: "array",
+              description: "Kostenaufstellung der Liegenschaft: in den Gesamtheizkosten enthaltene Kosten, z. B. Brennstoff/Wärmestrom, Heizungswartung",
               items: {
                 type: "object",
                 additionalProperties: false,
@@ -300,6 +355,8 @@ Regeln:
 - Die Zuführung zur Erhaltungsrücklage ist bei Jahresabrechnungen meist nicht Teil der Bewirtschaftungskosten: Erfasse sie in reserveContribution und NICHT als Position. Im Wirtschaftsplan ist sie eine Position (isReserve = true).
 - Über-/Unterdeckung, Abrechnungsspitze, Hausgeldzahlungen und Salden sind keine Kostenpositionen – nicht als Position erfassen.
 - Heizkosten: Ist eine Heizkostenabrechnung enthalten, erfasse in heating den Anteil der Wohnung, die Bestandteile (Grund-/Verbrauchskosten Heizung und Warmwasser), Verbräuche und ggf. CO2-Angaben. Die Gesamtsumme der Heizkosten der Wohnung erscheint zusätzlich als Position, wenn sie in der Einzelabrechnung als Zeile steht.
+- Übernimm zu jeder Position den Verteilerschlüssel mit Basis (z. B. 49 von 1000 MEA, 1 von 11 WE, 34,766 von 478,182 cbm) und Bemerkungen (z. B. „Rg. v. 19.12.23 und 28.11.24“), falls angegeben. Aus Gesamtdarstellungen der Einnahmen/Ausgaben übernimm nur Bemerkungen zu den Positionen der Einzelabrechnung, keine zusätzlichen Positionen.
+- Übersichten mit Daten anderer Eigentümer (Abrechnungsergebnis aller Wohnungen, Rücklagenanteile) nicht erfassen – nur die angegebene Wohnung.
 - Seiten über mehrere Dateien fortlaufend zählen. Gedrehte oder fotografierte Seiten sorgfältig lesen.
 - confidence < 0.8, wenn ein Wert schwer lesbar oder die Zuordnung zur Wohnung unsicher ist.
 - Erfinde keine Werte. Fehlende Werte als null, Unklarheiten in notes.`;

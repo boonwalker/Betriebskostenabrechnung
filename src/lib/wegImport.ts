@@ -19,6 +19,8 @@ function toPositions(x: WegExtraction, year: number, document: string): LedgerPo
         amount: p.unitAmount,
         totalAmount: p.totalAmount,
         wegKey: p.wegKey || undefined,
+        wegBasis: p.basisTotal && p.basisShare !== null ? { total: p.basisTotal, share: p.basisShare, unit: p.basisUnit } : null,
+        note: p.remark || undefined,
         category: null,
         classification: "review",
         reason: "",
@@ -52,6 +54,7 @@ export function annualFromExtraction(x: WegExtraction, ctx: Context): WegAnnualS
     year,
     managementCostsActual: x.managementCostsActual,
     managementCostsPlan: x.managementCostsPlan,
+    buildingTotal: x.buildingTotal,
     reserveContribution: x.reserveContribution ?? reserveFromPositions,
     positions,
     heating: h
@@ -64,6 +67,7 @@ export function annualFromExtraction(x: WegExtraction, ctx: Context): WegAnnualS
           consumptionHeatingKwh: h.consumptionHeatingKwh,
           consumptionWaterKwh: h.consumptionWaterKwh,
           components: h.components.map((c) => ({ id: uid(), ...c })),
+          includedCosts: h.includedCosts.map((c) => ({ id: uid(), ...c })),
           // CO2-Preis nur auf fossile Brennstoffe und Fernwärme, nicht auf Strom für Wärmepumpen
           co2Applicable: !!h.co2Cost || !/w(ä|ae)rmepumpe|strom/i.test(h.heatSource),
           co2Cost: h.co2Cost,
@@ -87,6 +91,8 @@ export function planFromExtraction(x: WegExtraction, ctx: Context): EconomicPlan
     year,
     annualHausgeld: x.annualHausgeld,
     monthlyHausgeld: x.monthlyHausgeld,
+    monthlyReserve: x.monthlyReserve,
+    monthlyCosts: x.monthlyCosts,
     positions: toPositions(x, year, ctx.documents.join(", ")),
     documents: ctx.documents,
     createdAt: new Date().toISOString(),

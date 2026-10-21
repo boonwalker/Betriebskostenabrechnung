@@ -5,7 +5,17 @@ import { we09Annual2024, we09Plan2025, we09Property, we09Statement, we09Tenant }
 import { emptyData } from "./model";
 import { changedSinceRelease, releaseStatement, statementReadiness } from "./release";
 import type { AppData, WegAnnualStatement } from "./types";
-import { checkAnnual, comparePlanActual, explainDrivers, summarizeAnnual, summarizePlan, transferToStatement } from "./weg";
+import {
+  checkAnnual,
+  checkKeyMath,
+  checkPlan,
+  comparePlanActual,
+  explainDrivers,
+  includedInHeatingBill,
+  summarizeAnnual,
+  summarizePlan,
+  transferToStatement,
+} from "./weg";
 
 /** Akzeptanztests aus dem Projektbriefing, Testfall WE 09 */
 
@@ -191,5 +201,58 @@ describe("Testfall 7 – prüfpflichtige Positionen", () => {
     expect(classifyLabel("Kabelfernsehen", 2025).classification).toBe("non_allocable");
     expect(classifyLabel("Sonstige Ausgaben", 2025).classification).toBe("review");
     expect(classifyLabel("Heizungswartung", 2025).heating).toBe("component");
+  });
+});
+
+describe("Abgleich mit den Originaldokumenten", () => {
+  it("die Anteile der Wohnung folgen exakt den Schlüsseln der Verwaltung", () => {
+    expect(checkKeyMath(we09Annual2024().positions)).toEqual([]);
+    expect(checkKeyMath(we09Plan2025().positions)).toEqual([]);
+  });
+
+  it("die Gesamtkosten der WEG ergeben 25.274,93 €", () => {
+    expect(checkAnnual(we09Annual2024()).some((f) => f.text.startsWith("Gesamtkosten der WEG"))).toBe(false);
+  });
+
+  it("erkennt einen falsch übernommenen Betrag über die Schlüsselrechnung", () => {
+    const a = we09Annual2024();
+    const typo = a.positions.map((p) => (p.label === "Gebäudeversicherung" ? { ...p, amount: 108.75 } : p));
+    expect(checkKeyMath(typo).find((f) => f.level === "warning")?.text).toContain("180,75");
+  });
+
+  it("weist die Centdifferenz der Heizkosten zwischen den Dokumenten als Rundung aus", () => {
+    const f = checkAnnual(we09Annual2024()).find((x) => x.text.startsWith("Gesamtheizkosten"));
+    expect(f?.level).toBe("info");
+    expect(f?.text).toContain("Rundungsdifferenz");
+  });
+
+  it("Wärmestrom und Heizungswartung sind laut Kostenaufstellung in den Heizkosten enthalten", () => {
+    const h = we09Annual2024().heating;
+    const plan = we09Plan2025();
+    const byLabel = (l: string) => plan.positions.find((p) => p.label === l)!;
+    expect(includedInHeatingBill(byLabel("Strom Wärmepumpe"), h)).toBe(true);
+    expect(includedInHeatingBill(byLabel("Wartung Heizung"), h)).toBe(true);
+    // Wohnungsstationen rechnet die WEG gesondert nach Wohneinheiten ab – nicht in der Heizkostenabrechnung
+    expect(includedInHeatingBill(byLabel("Wartung Wohnungsstationen"), h)).toBe(false);
+  });
+
+  it("übernimmt Wohnungsstationen-Wartung außerhalb der Heizkostenabrechnung nicht ungeprüft", () => {
+    const a = reviewedAnnual();
+    const ws = { ...a, positions: a.positions.map((p) => (p.label === "Wartung Wohnungsstationen" ? { ...p, amount: 56.36, reviewed: true } : p)) };
+    const finding = checkAnnual(ws).find((f) => f.text.includes("außerhalb der Heizkostenabrechnung"));
+    expect(finding).toBeDefined();
+    const { skipped } = transferToStatement(ws, we09Statement(2024));
+    expect(skipped.find((s) => s.position.label === "Wartung Wohnungsstationen")?.reason).toContain("außerhalb der Heizkostenabrechnung");
+  });
+
+  it("zeigt die Bemerkung zur Dachwartung (zwei Leistungsjahre) zur Prüfung an", () => {
+    expect(checkAnnual(we09Annual2024()).some((f) => f.level === "info" && f.text.includes("19.12.2023"))).toBe(true);
+  });
+
+  it("findet die Rundungsdifferenz in der monatlichen Aufteilung des Wirtschaftsplans", () => {
+    const f = checkPlan(we09Plan2025());
+    expect(f).toHaveLength(1);
+    expect(f[0].level).toBe("info");
+    expect(f[0].text).toContain("160,32");
   });
 });

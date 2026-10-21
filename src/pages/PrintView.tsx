@@ -87,6 +87,8 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
   );
 }
 
+const formatBasis = (n: number) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(n);
+
 function shareText(item: ItemShare, r: TenantResult, periodDays: number): string {
   if (item.key === "direct") return r.days < periodDays ? `${r.days}/${periodDays} Tage` : "100 %";
   const raw = (item.basisShare * periodDays) / r.days;
@@ -131,7 +133,7 @@ function Letter({
   };
   const keyText = (item: ItemShare) => {
     const { annual, position } = sourceOf(item.costId);
-    if (item.key === "direct" && annual) return `Anteil lt. WEG-Abrechnung${position?.wegKey ? ` (${position.wegKey})` : ""}`;
+    if (item.key === "direct" && annual) return position?.wegBasis?.unit === "cbm" ? "Verbrauch" : position?.wegKey ?? "WEG-Schlüssel";
     return KEY_LABELS[item.key];
   };
   // Bei Wohnungseigentum: Gesamtkosten der WEG und Anteil nach WEG-Schlüssel ausweisen, soweit bekannt
@@ -144,8 +146,10 @@ function Letter({
     if (!annual) return null;
     const time = r.days < periodDays ? ` × ${r.days}/${periodDays} Tage` : "";
     if (position?.heating === "total") return { total: "–", share: `lt. Heizkosten\u00ADabrechnung${time}` };
-    if (/mea|miteigentum/i.test(position?.wegKey ?? "") && r.unit.mea && property.wegMeaTotal) {
-      return { total: `${formatNum(property.wegMeaTotal)} MEA`, share: `${formatNum(r.unit.mea)} MEA${time}` };
+    // Nur die im Dokument ausgewiesene Schlüsselbasis zeigen – nichts aus dem Namen des Schlüssels ableiten
+    if (position?.wegBasis) {
+      const b = position.wegBasis;
+      return { total: `${formatBasis(b.total)} ${b.unit}`, share: `${formatBasis(b.share)} ${b.unit}${time}` };
     }
     return { total: "–", share: `lt. Einzel\u00ADabrechnung${time}` };
   };

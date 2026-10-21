@@ -112,7 +112,7 @@ export function demoData(): AppData {
         prepaymentOverrides: {},
         prepaymentsConfirmed: {},
         status: "draft",
-        release: null,
+        releases: {},
         costs: [
           { id: "demo-c1", category: 1, label: "Grundsteuer", amount: 612.4, key: "area" },
           { id: "demo-c2", category: 2, label: "Frischwasser", amount: 1180.25, key: "persons" },

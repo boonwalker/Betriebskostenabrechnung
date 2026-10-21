@@ -41,7 +41,7 @@ export function newStatement(propertyId: string, periodStart: ISODate, periodEnd
     prepaymentOverrides: {},
     prepaymentsConfirmed: {},
     status: "draft",
-    release: null,
+    releases: {},
     createdAt: new Date().toISOString(),
   };
 }
@@ -88,12 +88,18 @@ export function migrate(raw: any): AppData {
           t.rentHistory ?? [{ id: uid(), validFrom: t.moveIn, coldRent: 0, prepaymentOperating: monthlyPrepayment ?? 0, prepaymentHeating: 0 }],
       };
     }),
-    statements: (raw.statements ?? []).map((st: Partial<Statement>) => ({
-      prepaymentsConfirmed: {},
-      status: "draft",
-      release: null,
-      ...st,
-    })),
+    statements: (raw.statements ?? []).map((st: Partial<Statement> & { release?: { releasedAt: string; resultJson: string } | null }) => {
+      const { release, ...rest } = st;
+      // Frühere Freigabe der ganzen Abrechnung → Freigabe je Mietverhältnis
+      const releases: Statement["releases"] = { ...rest.releases };
+      if (release && !rest.releases) {
+        const result = JSON.parse(release.resultJson);
+        for (const t of result.tenants ?? []) {
+          releases[t.tenant.id] = { releasedAt: release.releasedAt, resultJson: JSON.stringify({ ...t, co2: result.co2, periodDays: result.periodDays }) };
+        }
+      }
+      return { prepaymentsConfirmed: {}, ...rest, status: rest.status ?? "draft", releases };
+    }),
     wegAnnuals: raw.wegAnnuals ?? [],
     economicPlans: raw.economicPlans ?? [],
   };

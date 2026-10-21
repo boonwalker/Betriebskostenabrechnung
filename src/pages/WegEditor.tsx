@@ -153,7 +153,7 @@ function AnnualSummaryCard({ data, update, annual }: { data: AppData; update: Pa
 
   const toStatement = () => {
     if (statement?.status === "released") {
-      alert("Die Mieterabrechnung ist bereits freigegeben. Hebe die Freigabe zuerst auf, wenn du sie ändern willst.");
+      alert("Die Mieterabrechnung ist für alle Mieter freigegeben. Hebe eine Freigabe auf, wenn du sie ändern willst.");
       return;
     }
     const base = statement ?? newStatement(annual.propertyId, `${annual.year}-01-01`, `${annual.year}-12-31`);

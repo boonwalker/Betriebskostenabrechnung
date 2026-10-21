@@ -12,9 +12,9 @@ import {
   we09TrialTenant2024,
 } from "./fixtures/we09";
 import { degreeDays } from "./degreeDays";
-import { emptyData } from "./model";
+import { emptyData, migrate } from "./model";
 import { agreementFor } from "./lease";
-import { changedSinceRelease, releaseStatement, statementReadiness } from "./release";
+import { changedSinceRelease, releasedTenant, releaseStatement, releaseTenant, revokeRelease, statementReadiness } from "./release";
 import type { AppData, Statement, WegAnnualStatement } from "./types";
 import {
   checkAnnual,
@@ -409,5 +409,72 @@ describe("2025: Mieterwechsel am 31.07./01.08.", () => {
     const r = statementReadiness(st, data);
     expect(r.blockers.some((b) => b.includes("Vermieters von Vormieterin"))).toBe(true);
     expect(r.hints.some((h) => h.includes("keine Vorauszahlungen hinterlegt"))).toBe(true);
+  });
+});
+
+describe("Freigabe je Mietverhältnis", () => {
+  const resolvedAnnual2025 = (): WegAnnualStatement => {
+    const a = reviewedAnnual();
+    return {
+      ...a,
+      id: "we09-a2025-probe",
+      year: 2025,
+      positions: a.positions.map((p) => (p.label === "Wartung Dach" ? { ...p, classification: "non_allocable" as const, origin: "user" as const, reviewed: true } : p)),
+    };
+  };
+  const setup = () => {
+    const data = appData({ tenants: [we09PreviousTenant(), we09Tenant()], wegAnnuals: [resolvedAnnual2025()] });
+    const st0 = { ...we09Statement(2025), prepaymentsConfirmed: { "we09-t": true } };
+    const st = { ...st0, costs: transferToStatement(resolvedAnnual2025(), st0, { property: we09Property(), tenants: data.tenants }).items };
+    return { data, st };
+  };
+
+  it("gibt den neuen Mieter frei, obwohl Angaben zur Vormieterin fehlen", () => {
+    const { data, st } = setup();
+    const r = statementReadiness(st, data);
+    expect(r.general).toEqual([]);
+    expect(r.tenants.find((t) => t.tenantId === "we09-t")?.ready).toBe(true);
+    expect(r.tenants.find((t) => t.tenantId === "we09-vormieterin")?.ready).toBe(false);
+    const released = releaseTenant(st, data, "we09-t");
+    expect(released.status).toBe("partial");
+    expect(releasedTenant(released, "we09-t")?.result.days).toBe(153);
+    expect(() => releaseTenant(released, data, "we09-vormieterin")).toThrow(/Vorauszahlungen von Vormieterin/);
+  });
+
+  it("Angaben zur Vormieterin ändern das freigegebene Anschreiben nicht", () => {
+    const { data, st } = setup();
+    const released = releaseTenant(st, data, "we09-t");
+    const later = { ...released, prepaymentOverrides: { "we09-vormieterin": 700 }, prepaymentsConfirmed: { ...released.prepaymentsConfirmed, "we09-vormieterin": true } };
+    expect(changedSinceRelease(later, data, "we09-t")).toBe(false);
+    // eine Änderung an gemeinsamen Kosten würde das Ergebnis ändern – das wird angezeigt
+    const changedCosts = { ...released, costs: released.costs.map((c) => (c.label === "Winterdienst" ? { ...c, amount: 40 } : c)) };
+    expect(changedSinceRelease(changedCosts, data, "we09-t")).toBe(true);
+  });
+
+  it("vollständig freigegeben, wenn alle Mietverhältnisse freigegeben sind; Aufheben setzt zurück", () => {
+    const { data, st } = setup();
+    const withFather = {
+      ...data,
+      tenants: [{ ...we09PreviousTenant(), landlord: { name: "Vater", address: "Straße 1\n52525 Ort", iban: "" } }, we09Tenant()],
+    };
+    const ready = { ...st, prepaymentsConfirmed: { "we09-t": true, "we09-vormieterin": true } };
+    const all = releaseStatement(ready, withFather);
+    expect(all.status).toBe("released");
+    expect(revokeRelease(all, withFather, "we09-t").status).toBe("partial");
+  });
+
+  it("übernimmt frühere Freigaben der ganzen Abrechnung", () => {
+    const old = {
+      version: 2,
+      properties: [],
+      tenants: [],
+      statements: [
+        { ...we09Statement(2024), releases: undefined, status: "released", release: { releasedAt: "2026-01-10T00:00:00Z", resultJson: JSON.stringify({ periodDays: 366, co2: [], tenants: [{ tenant: { id: "x" }, days: 366 }] }) } },
+      ],
+      settings: {},
+    };
+    const migrated = migrate(old);
+    expect(Object.keys(migrated.statements[0].releases)).toEqual(["x"]);
+    expect(migrated.statements[0].status).toBe("released");
   });
 });

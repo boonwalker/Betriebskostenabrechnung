@@ -68,7 +68,9 @@ export default function Statements({ data, update }: PageProps) {
                     <td className="num">{formatEUR(due)}</td>
                     <td className="num">{formatEUR(credit)}</td>
                     <td>
-                      <span className={`badge ${s.status === "released" ? "status-released" : "status-draft"}`}>{s.status === "released" ? "freigegeben" : "Entwurf"}</span>
+                      <span className={`badge ${s.status === "draft" ? "status-draft" : "status-released"}`}>
+                        {s.status === "released" ? "freigegeben" : s.status === "partial" ? "teilweise freigegeben" : "Entwurf"}
+                      </span>
                     </td>
                     <td>
                       <span className={`badge ${overdue ? "danger" : "neutral"}`}>{formatDate(r.deadline)}</span>
@@ -133,7 +135,7 @@ function NewStatement({ data, onClose, onCreate }: { data: AppData; onClose: () 
       prepaymentOverrides: {},
       prepaymentsConfirmed: {},
       status: "draft",
-      release: null,
+      releases: {},
       createdAt: new Date().toISOString(),
     });
   };

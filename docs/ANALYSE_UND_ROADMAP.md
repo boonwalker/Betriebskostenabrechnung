@@ -118,6 +118,7 @@ Grundregeln:
 | 1.9 Mietvertrag: vereinbarte Kostenarten, Umlagemaßstab, Fälligkeit | ✅ | `src/lib/lease.ts`, `Tenants.tsx` |
 | 1.10 Vorauszahlungen bestätigen | ✅ einfache Form (Gesamtbetrag + Bestätigung) | `StatementEditor.tsx` |
 | Mieterwechsel: Vermieter je Mieter, Vertragsmaßstab je Mieter, § 9b HeizkostenV | ✅ | `calc.ts`, `degreeDays.ts`, `Tenants.tsx` |
+| Freigabe je Mietverhältnis (allgemeine und eigene Blocker, eingefrorenes Ergebnis je Mieter) | ✅ | `release.ts`, `StatementEditor.tsx`, `PrintView.tsx` |
 | 2.1–2.4 Wirtschaftsplan, Plan-Ist, Prognose, Vorauszahlungsempfehlung | ✅ Grundversion | `weg.ts`, `WegEditor.tsx` |
 
 ### Akzeptanztests (automatisiert, `src/lib/we09.test.ts`)
@@ -183,8 +184,7 @@ Prognose 2025 aus dem Wirtschaftsplan: erwartete Kosten 495,73 € (1.182,62 €
 
 ### Nächste Schritte
 
-1. **Freigabe je Mietverhältnis:** Eine Abrechnung mit zwei Mietern lässt sich bisher nur gemeinsam freigeben. Fehlen Angaben zur Vormieterin, hält das auch das Anschreiben an den neuen Mieter auf.
-2. **Zahlungseingänge (1.10 ausbauen):** monatliche Ist-Vorauszahlungen statt nur eines Jahresbetrags, optional per Kontoauszug-Import.
-3. **Dokumentenarchiv:** Originale in IndexedDB speichern und Herkunftsangaben mit der Seite im Dokument verlinken.
-4. **KI-Auslese mit echten Unterlagen testen:** die WE-09-Fotos 2024 mit API-Schlüssel einlesen und das Ergebnis mit `src/lib/fixtures/we09.ts` vergleichen (Genauigkeit messen).
-5. **Grundsteuer und separat abgerechnete Kosten** (z. B. Müll) für Eigentumswohnungen: eigene Belege neben der WEG-Abrechnung.
+1. **Zahlungseingänge (1.10 ausbauen):** monatliche Ist-Vorauszahlungen statt nur eines Jahresbetrags, optional per Kontoauszug-Import.
+2. **Dokumentenarchiv:** Originale in IndexedDB speichern und Herkunftsangaben mit der Seite im Dokument verlinken.
+3. **KI-Auslese mit echten Unterlagen testen:** die WE-09-Fotos 2024 mit API-Schlüssel einlesen und das Ergebnis mit `src/lib/fixtures/we09.ts` vergleichen (Genauigkeit messen).
+4. **Grundsteuer und separat abgerechnete Kosten** (z. B. Müll) für Eigentumswohnungen: eigene Belege neben der WEG-Abrechnung.

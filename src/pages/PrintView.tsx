@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { KEY_LABELS } from "../lib/betrkv";
-import { releasedResult } from "../lib/release";
+import { releasedTenant } from "../lib/release";
 import { calculateStatement, type Co2Result, type DistributionKey, type ItemShare, type TenantResult } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
@@ -26,9 +26,15 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
   const [suggestAdjustment, setSuggestAdjustment] = useState(false);
 
   if (!statement || !property) return <div className="card empty">Abrechnung nicht gefunden.</div>;
-  const released = statement.status === "released";
-  // Freigegebene Abrechnungen zeigen den eingefrorenen Stand, nicht die aktuelle Neuberechnung
-  const result = (released && releasedResult(statement)) || calculateStatement(statement, property, data.tenants);
+  const live = calculateStatement(statement, property, data.tenants);
+  // Freigegebene Mietverhältnisse zeigen den eingefrorenen Stand, nicht die aktuelle Neuberechnung
+  const letters = live.tenants.map((r) => {
+    const frozen = releasedTenant(statement, r.tenant.id);
+    return frozen
+      ? { r: frozen.result, periodDays: frozen.periodDays, co2: frozen.co2, draft: false, releasedAt: statement.releases[r.tenant.id].releasedAt }
+      : { r, periodDays: live.periodDays, co2: live.co2, draft: true, releasedAt: null as string | null };
+  });
+  const anyDraft = letters.some((l) => l.draft && (!selected || selected.has(l.r.tenant.id)));
   const isSelected = (r: TenantResult) => !selected || selected.has(r.tenant.id);
   const landlordMissing = !data.settings.landlord.name || !data.settings.landlord.address;
 
@@ -40,9 +46,9 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
           <span className="spacer" />
           <button className="primary" onClick={() => window.print()}>Drucken / als PDF speichern</button>
         </div>
-        {!released && (
+        {anyDraft && (
           <div className="alert danger" style={{ marginTop: 12 }}>
-            <strong>Entwurf – nicht versenden.</strong> Die Abrechnung ist noch nicht freigegeben; das Ergebnis ist vorläufig. Offene Punkte findest du in der{" "}
+            <strong>Entwurf – nicht versenden.</strong> Mindestens ein ausgewähltes Anschreiben ist noch nicht freigegeben; sein Ergebnis ist vorläufig. Offene Punkte findest du in der{" "}
             <a href={`#/abrechnungen/${statement.id}`}>Abrechnung</a>.
           </div>
         )}
@@ -52,19 +58,19 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
           </div>
         )}
         <div className="row small" style={{ marginTop: 12 }}>
-          {result.tenants.map((r) => (
+          {letters.map(({ r, draft }) => (
             <label key={r.tenant.id} className="row">
               <input
                 type="checkbox"
                 checked={isSelected(r)}
                 onChange={(e) => {
-                  const next = new Set(selected ?? result.tenants.map((t) => t.tenant.id));
+                  const next = new Set<string>(selected ?? letters.map((l) => l.r.tenant.id));
                   if (e.target.checked) next.add(r.tenant.id);
                   else next.delete(r.tenant.id);
                   setSelected(next);
                 }}
               />
-              {r.tenant.name}
+              {r.tenant.name} <span className={`badge ${draft ? "status-draft" : "status-released"}`}>{draft ? "Entwurf" : "freigegeben"}</span>
             </label>
           ))}
         </div>
@@ -74,19 +80,22 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
         </label>
       </div>
 
-      {result.tenants.filter(isSelected).map((r) => (
-        <Letter
-          key={r.tenant.id + r.start}
-          data={data}
-          property={property}
-          statement={statement}
-          r={r}
-          periodDays={result.periodDays}
-          co2={result.co2}
-          suggestAdjustment={suggestAdjustment}
-          draft={!released}
-        />
-      ))}
+      {letters
+        .filter((l) => isSelected(l.r))
+        .map((l) => (
+          <Letter
+            key={l.r.tenant.id + l.r.start}
+            data={data}
+            property={property}
+            statement={statement}
+            r={l.r}
+            periodDays={l.periodDays}
+            co2={l.co2}
+            suggestAdjustment={suggestAdjustment}
+            draft={l.draft}
+            releasedAt={l.releasedAt}
+          />
+        ))}
     </>
   );
 }
@@ -112,6 +121,7 @@ function Letter({
   co2,
   suggestAdjustment,
   draft,
+  releasedAt,
 }: {
   data: AppData;
   property: Property;
@@ -121,6 +131,7 @@ function Letter({
   co2: Co2Result[];
   suggestAdjustment: boolean;
   draft: boolean;
+  releasedAt: string | null;
 }) {
   const landlord = landlordFor(r.tenant, data);
   const rule = r.tenant.lease?.allocationRule ?? "weg";
@@ -179,7 +190,7 @@ function Letter({
       {draft && <div className="watermark">ENTWURF</div>}
       <div className="sender">{[landlord.name, landlord.address.replace(/\n/g, ", ")].filter(Boolean).join(" · ")}</div>
       <div className="address-block">{`${r.tenant.name}\n${address}`}</div>
-      <div className="meta">{formatDate(statement.release?.releasedAt.slice(0, 10) ?? todayISO())}</div>
+      <div className="meta">{formatDate(releasedAt?.slice(0, 10) ?? todayISO())}</div>
 
       <h2>Betriebskostenabrechnung für den Zeitraum {formatDate(statement.periodStart)} bis {formatDate(statement.periodEnd)}</h2>
       <p>Guten Tag {r.tenant.name},</p>

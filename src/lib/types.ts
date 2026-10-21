@@ -199,17 +199,16 @@ export interface Statement {
   prepaymentsConfirmed: Record<string, boolean>;
   /** Verbrauch je Mieter laut Zwischenablesung beim Nutzerwechsel (kWh bzw. Einheiten) */
   interimReadings?: Record<string, { heating: number | null; water: number | null }>;
-  status: "draft" | "released";
-  /** eingefrorener Stand bei Freigabe – spätere Änderungen an Daten ändern ihn nicht */
-  release: StatementRelease | null;
+  /** draft = nichts freigegeben, partial = einzelne Mietverhältnisse freigegeben, released = alle */
+  status: "draft" | "partial" | "released";
+  /** Freigaben je Mietverhältnis (Mieter-ID) – eingefrorener Stand, spätere Datenänderungen ändern ihn nicht */
+  releases: Record<string, TenantRelease>;
   createdAt: string;
 }
 
-export interface StatementRelease {
+export interface TenantRelease {
   releasedAt: string;
-  /** Prüfsumme der Eingangsdaten zum Zeitpunkt der Freigabe */
-  fingerprint: string;
-  /** JSON des Berechnungsergebnisses (StatementResult) */
+  /** JSON des Ergebnisses für diesen Mieter (TenantResult) samt CO2-Angaben und Abrechnungstagen */
   resultJson: string;
 }
 

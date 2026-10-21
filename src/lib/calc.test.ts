@@ -40,7 +40,7 @@ function statement(costs: Statement["costs"], overrides: Record<string, number> 
     prepaymentOverrides: overrides,
     prepaymentsConfirmed: {},
     status: "draft",
-    release: null,
+    releases: {},
     createdAt: "",
   };
 }

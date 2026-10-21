@@ -6,7 +6,7 @@ import { co2Stage } from "../lib/co2";
 import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
-import { changedSinceRelease, releaseStatement, statementReadiness } from "../lib/release";
+import { changedSinceRelease, releaseTenant, revokeRelease, statementReadiness } from "../lib/release";
 import { uid } from "../lib/store";
 import { transferToStatement } from "../lib/weg";
 import type { AllocationKey, CostItem, Property, Section35aKind, Statement } from "../lib/types";
@@ -54,8 +54,8 @@ export default function StatementEditor({ data, update, statementId }: PageProps
   const readingTenants = result.tenants
     .filter((r) => statement.costs.some((c) => c.heatingParts && c.directUnitId === r.unit.id) && result.tenants.filter((x) => x.unit.id === r.unit.id).length > 1)
     .map((r) => r.tenant);
+  // Gesperrt erst, wenn alle Mietverhältnisse freigegeben sind; einzelne Freigaben bleiben eingefroren
   const released = statement.status === "released";
-  const changed = changedSinceRelease(statement, data);
   const year = Number(statement.periodStart.slice(0, 4));
   const annuals = data.wegAnnuals.filter((a) => a.propertyId === property.id && a.year === year);
 
@@ -73,14 +73,16 @@ export default function StatementEditor({ data, update, statementId }: PageProps
     alert(`${added} Position(en) übernommen.` + (notes.length ? `\n\nNicht übernommen:\n${notes.join("\n")}` : ""));
   };
 
-  const release = () => {
+  const save = (next: Statement) => update((d) => ({ ...d, statements: d.statements.map((s) => (s.id === next.id ? next : s)) }));
+  const release = (tenantId: string) => {
     try {
-      const next = releaseStatement(statement, data);
-      update((d) => ({ ...d, statements: d.statements.map((s) => (s.id === next.id ? next : s)) }));
+      save(releaseTenant(statement, data, tenantId));
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
     }
   };
+  const revoke = (tenantId: string, name: string) =>
+    confirm(`Freigabe für ${name} aufheben? Das Anschreiben wird wieder zum Entwurf.`) && save(revokeRelease(statement, data, tenantId));
 
   const today = todayISO();
   const daysLeft = Math.round((Date.parse(result.deadline) - Date.parse(today)) / 86_400_000);
@@ -91,56 +93,79 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         <div>
           <a href="#/abrechnungen" className="small">← Abrechnungen</a>
           <h1>Betriebskostenabrechnung {property.name}</h1>
-          <span className={`badge ${released ? "status-released" : "status-draft"}`}>
-            {released ? `✓ freigegeben am ${formatDate(statement.release!.releasedAt.slice(0, 10))}` : "Entwurf"}
+          <span className={`badge ${statement.status === "draft" ? "status-draft" : "status-released"}`}>
+            {statement.status === "released" ? "✓ vollständig freigegeben" : statement.status === "partial" ? "teilweise freigegeben" : "Entwurf"}
           </span>
         </div>
         <a className="btn primary" href={`#/abrechnungen/${statement.id}/druck`}>Abrechnungen drucken / PDF</a>
       </div>
 
-      {released ? (
-        <div className={`alert ${changed ? "danger" : "info"}`}>
-          {changed ? (
-            <>
-              <strong>Daten wurden nach der Freigabe geändert.</strong> Die Druckansicht zeigt weiterhin den freigegebenen Stand. Hebe die Freigabe auf, um die Abrechnung neu
-              zu berechnen und erneut freizugeben.
-            </>
-          ) : (
-            <>Die Abrechnung ist freigegeben und gesperrt. Die Druckansicht zeigt den eingefrorenen Stand.</>
-          )}{" "}
-          <button
-            className="ghost"
-            onClick={() => confirm("Freigabe aufheben? Die Abrechnung wird wieder zum Entwurf.") && set({ status: "draft", release: null })}
-          >
-            Freigabe aufheben
-          </button>
-        </div>
-      ) : (
-        <div className="card">
-          <div className="row" style={{ marginBottom: readiness.blockers.length || readiness.hints.length ? 8 : 0 }}>
-            <h2 style={{ margin: 0 }}>{readiness.ready ? "Bereit zur Freigabe" : "Was noch fehlt"}</h2>
-            <span className="spacer" />
-            <button className="primary" disabled={!readiness.ready} onClick={release} title={readiness.ready ? "Ergebnis einfrieren und als versandfertig markieren" : "Erst alle offenen Punkte klären"}>
-              Freigeben
-            </button>
-          </div>
-          {(readiness.blockers.length > 0 || readiness.hints.length > 0) && (
-            <ul className="findings">
-              {readiness.blockers.map((b) => (
+      <div className="card">
+        <h2>{readiness.ready ? "Bereit zur Freigabe" : released ? "Freigegeben" : "Freigabe"}</h2>
+        {(readiness.general.length > 0 || readiness.generalHints.length > 0) && (
+          <>
+            <div className="small muted" style={{ marginBottom: 4 }}>Betrifft alle Mietverhältnisse:</div>
+            <ul className="findings" style={{ marginTop: 0 }}>
+              {readiness.general.map((b) => (
                 <li key={b} className="error">✗ {b}</li>
               ))}
-              {readiness.hints.map((h) => (
+              {readiness.generalHints.map((h) => (
                 <li key={h} className="warning">⚠ {h}</li>
               ))}
             </ul>
-          )}
-          {!readiness.ready && (
-            <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
-              Solange Punkte offen sind, ist das Ergebnis vorläufig. Gedruckt wird es nur als gekennzeichneter Entwurf.
-            </p>
-          )}
-        </div>
-      )}
+          </>
+        )}
+        {readiness.tenants.map((t) => {
+          const rel = statement.releases[t.tenantId];
+          const changed = rel && changedSinceRelease(statement, data, t.tenantId);
+          return (
+            <div key={t.tenantId} className="tenant-release">
+              <div className="row">
+                <strong>{t.name}</strong>
+                {rel ? (
+                  <span className="badge status-released">✓ freigegeben am {formatDate(rel.releasedAt.slice(0, 10))}</span>
+                ) : (
+                  <span className={`badge ${t.ready ? "ok" : "status-draft"}`}>{t.ready ? "bereit" : "Entwurf"}</span>
+                )}
+                <span className="spacer" />
+                {rel ? (
+                  <button className="ghost" onClick={() => revoke(t.tenantId, t.name)}>Freigabe aufheben</button>
+                ) : (
+                  <button className="primary" disabled={!t.ready} onClick={() => release(t.tenantId)} title={t.ready ? "Ergebnis einfrieren und als versandfertig markieren" : "Erst die offenen Punkte klären"}>
+                    Freigeben
+                  </button>
+                )}
+              </div>
+              {changed && (
+                <div className="alert danger small" style={{ marginTop: 6, marginBottom: 0 }}>
+                  Seit der Freigabe würde sich das Ergebnis geändert haben. Das Anschreiben zeigt weiterhin den freigegebenen Stand – hebe die Freigabe auf, um neu zu
+                  berechnen.
+                </div>
+              )}
+              {!rel && (t.blockers.length > 0 || t.hints.length > 0) && (
+                <ul className="findings" style={{ marginTop: 6 }}>
+                  {t.blockers.map((b) => (
+                    <li key={b} className="error">✗ {b}</li>
+                  ))}
+                  {t.hints.map((h) => (
+                    <li key={h} className="warning">⚠ {h}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+        {!readiness.ready && !released && (
+          <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
+            Jedes Mietverhältnis lässt sich freigeben, sobald die allgemeinen und seine eigenen Punkte erledigt sind. Nicht freigegebene Anschreiben werden nur als Entwurf gedruckt.
+          </p>
+        )}
+        {statement.status === "partial" && (
+          <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
+            Freigegebene Anschreiben sind eingefroren. Änderungen an gemeinsamen Kosten wirken nur auf die übrigen Mietverhältnisse.
+          </p>
+        )}
+      </div>
 
       <fieldset className="plain-fieldset" disabled={released}>
       {daysLeft < 0 ? (
@@ -277,7 +302,9 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                         </label>
                       </td>
                       <td className="num">
-                        {!readiness.ready && !released && <div className="small muted">vorläufig</div>}
+                        {!statement.releases[r.tenant.id] && !readiness.tenants.find((x) => x.tenantId === r.tenant.id)?.ready && (
+                          <div className="small muted">vorläufig</div>
+                        )}
                         <Balance value={r.balance} />
                       </td>
                     </tr>

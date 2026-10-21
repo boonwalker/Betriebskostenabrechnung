@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { showcaseData } from "./demo";
 import { emptyData, migrate } from "./model";
 import type { AppData } from "./types";
 
@@ -6,12 +7,15 @@ export { emptyData, uid } from "./model";
 
 const STORAGE_KEY = "betriebskosten-app-v1";
 
+/** Ohne gespeicherte Daten: leer – im Vorführ-Build (VITE_SHOWCASE) mit Beispielobjekten und Testfall WE 09 */
+const initialData = () => (import.meta.env.VITE_SHOWCASE ? showcaseData() : emptyData());
+
 export function loadData(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? migrate(JSON.parse(raw)) : emptyData();
+    return raw ? migrate(JSON.parse(raw)) : initialData();
   } catch {
-    return emptyData();
+    return initialData();
   }
 }
 

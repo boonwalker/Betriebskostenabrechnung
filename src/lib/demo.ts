@@ -1,5 +1,5 @@
 import { we09Annual2024, we09Plan2025, we09PreviousTenant, we09Property, we09Tenant } from "./fixtures/we09";
-import { newProperty } from "./model";
+import { emptyData, newProperty } from "./model";
 import type { AppData, RentPeriod } from "./types";
 
 const rent = (id: string, validFrom: string, coldRent: number, prepaymentOperating: number, prepaymentHeating: number): RentPeriod => ({
@@ -135,14 +135,13 @@ export function demoData(): AppData {
   };
 }
 
-/** Beispieldaten plus Testfall WE 09 – Startzustand der Vorführversion */
+/** Startzustand der Vorführversion: nur der Testfall WE 09 */
 export function showcaseData(): AppData {
-  const d = demoData();
   return {
-    ...d,
-    properties: [...d.properties, we09Property()],
-    tenants: [...d.tenants, we09PreviousTenant(), we09Tenant()],
-    wegAnnuals: [...d.wegAnnuals, we09Annual2024()],
-    economicPlans: [...d.economicPlans, we09Plan2025()],
+    ...emptyData(),
+    properties: [we09Property()],
+    tenants: [we09PreviousTenant(), we09Tenant()],
+    wegAnnuals: [we09Annual2024()],
+    economicPlans: [we09Plan2025()],
   };
 }

@@ -5,9 +5,10 @@ import type { AppData } from "./types";
 
 export { emptyData, uid } from "./model";
 
-const STORAGE_KEY = "betriebskosten-app-v1";
+// Die Vorführversion speichert getrennt; die Versionsnummer setzt dort gespeicherte Altstände zurück
+const STORAGE_KEY = import.meta.env.VITE_SHOWCASE ? "betriebskosten-showcase-v2" : "betriebskosten-app-v1";
 
-/** Ohne gespeicherte Daten: leer – im Vorführ-Build (VITE_SHOWCASE) mit Beispielobjekten und Testfall WE 09 */
+/** Ohne gespeicherte Daten: leer – im Vorführ-Build (VITE_SHOWCASE) mit dem Testfall WE 09 */
 const initialData = () => (import.meta.env.VITE_SHOWCASE ? showcaseData() : emptyData());
 
 export function loadData(): AppData {

@@ -86,6 +86,8 @@ export interface Property {
   propertyTaxValue?: number | null;
   /** Hebesatz der Gemeinde in % (Grundsteuer B, ggf. für Wohngrundstücke) */
   propertyTaxRate?: number | null;
+  /** Grundsteuer pro Jahr laut Bescheid der Gemeinde (maßgeblich vor der Schätzung) */
+  propertyTaxAnnual?: number | null;
 }
 
 /** Mietstand ab einem Stichtag (Mietvertrag, Mieterhöhung, Anpassung der Vorauszahlung) */

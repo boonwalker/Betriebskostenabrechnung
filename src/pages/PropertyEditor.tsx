@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { NumberInput, type PageProps } from "../components/ui";
 import { depreciationRate } from "../lib/finance";
-import { estimatePropertyTax } from "../lib/propertyTax";
+import { estimatePropertyTax, impliedRate } from "../lib/propertyTax";
 import { formatEUR, formatNum, formatPct } from "../lib/format";
 import { newProperty, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
 import type { AcquisitionType, Loan, Property, PropertyType, Unit } from "../lib/types";
@@ -188,6 +188,27 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
             {estimatePropertyTax(p) && <div className="small muted">Messbetrag {formatEUR(estimatePropertyTax(p)!.baseAmount)} (× 0,31 ‰)</div>}
           </div>
         </div>
+        <div className="grid" style={{ marginTop: 12 }}>
+          <Field label="Grundsteuer laut Bescheid der Gemeinde (€ pro Jahr)" hint="gilt vor der Schätzung – für Vermögensentwicklung, Prognose und Kontrolle der Abrechnung">
+            <NumberInput value={p.propertyTaxAnnual ?? undefined} onChange={(v) => set({ propertyTaxAnnual: v || null })} />
+          </Field>
+          <div>
+            <div className="muted small">pro Monat</div>
+            <div className="kpi-value">{p.propertyTaxAnnual ? formatEUR(p.propertyTaxAnnual / 12) : "–"}</div>
+          </div>
+        </div>
+        {(() => {
+          const est = estimatePropertyTax(p);
+          const rate = impliedRate(p);
+          if (!p.propertyTaxAnnual || !est || Math.abs(p.propertyTaxAnnual - est.tax) <= Math.max(5, est.tax * 0.05)) return null;
+          return (
+            <div className="alert warn small" style={{ marginTop: 12 }}>
+              Der Bescheid ({formatEUR(p.propertyTaxAnnual)}) weicht von der Schätzung ({formatEUR(est.tax)}) ab
+              {rate ? `; rechnerisch entspräche das einem Hebesatz von ${rate.toFixed(0)} %` : ""}. Prüfe, ob der Betrag weitere Abgaben enthält (in NRW oft als
+              Grundbesitzabgabenbescheid mit Abfall- oder Straßenreinigungsgebühren). Diese sind eigene Kostenarten und gehören nicht in die Grundsteuer.
+            </div>
+          );
+        })()}
       </div>
 
       <div className="card">

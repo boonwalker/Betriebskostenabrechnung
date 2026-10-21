@@ -349,10 +349,20 @@ describe("Prognose 2025 für den Mieter WE 09", () => {
   it("rechnet zeitanteilig ab Mietbeginn und nach dem Vertragsschlüssel", () => {
     const f = forecastForTenant(we09Plan2025(), we09Property(), we09Tenant())!;
     // Plan umlagefähig 1.228,20 € − Dachwartung (ungeklärt) 19,60 € − Wohnungsstationen nach WE 56,36 € + nach MEA 30,38 €
-    expect(f.expectedYear).toBe(1182.62);
+    // = 1.182,62 €, dazu Grundsteuer laut Bescheid 336,96 € (individuell umgelegt, § 6 Nr. 3 Mietvertrag)
+    expect(f.propertyTaxYear).toBe(336.96);
+    expect(f.expectedYear).toBe(1519.58);
     expect(f.uncertainYear).toBe(19.6);
     expect(f.days).toBe(153);
     expect(f.prepayments).toBe(650);
+    expect(f.expectedShare).toBe(636.97);
+    expect(f.result).toBe(-13.03);
+  });
+
+  it("ohne Grundsteuer im Bescheid: 495,73 € Kosten, 154,27 € Guthaben", () => {
+    const p = { ...we09Property(), propertyTaxAnnual: null, propertyTaxRate: null };
+    const f = forecastForTenant(we09Plan2025(), p, we09Tenant())!;
+    expect(f.expectedYear).toBe(1182.62);
     expect(f.expectedShare).toBe(495.73);
     expect(f.result).toBe(-154.27);
   });

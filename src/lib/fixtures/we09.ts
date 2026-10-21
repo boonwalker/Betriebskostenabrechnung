@@ -51,6 +51,8 @@ export function we09Property(): Property {
     // Feststellungsbescheid vom 05.09.2025 (Zurechnung ab 01.01.2026); Hebesatz Wohngrundstücke Heinsberg ab 2026
     propertyTaxValue: 112200,
     propertyTaxRate: 559,
+    // Grundsteuer laut Angabe des Eigentümers: 28,08 € pro Monat
+    propertyTaxAnnual: 336.96,
   };
 }
 

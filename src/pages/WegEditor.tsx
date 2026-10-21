@@ -336,7 +336,7 @@ function PlanSummaryCard({ data, plan }: { data: AppData; plan: EconomicPlan }) 
               <Kpi
                 label={`erwartete Kosten ${tenant!.name}`}
                 value={formatEUR(forecast.expectedShare)}
-                hint={`${formatEUR(forecast.expectedYear)} pro Jahr × ${forecast.days}/${forecast.yearDays} Tage${forecast.uncertainShare ? `, zzgl. bis zu ${formatEUR(forecast.uncertainShare)} ungeklärt` : ""}`}
+                hint={`${formatEUR(forecast.expectedYear)} pro Jahr${forecast.propertyTaxYear ? ` (inkl. Grundsteuer ${formatEUR(forecast.propertyTaxYear)})` : ""} × ${forecast.days}/${forecast.yearDays} Tage${forecast.uncertainShare ? `, zzgl. bis zu ${formatEUR(forecast.uncertainShare)} ungeklärt` : ""}`}
               />
               <Kpi label="Vorauszahlungen im Zeitraum" value={formatEUR(forecast.prepayments)} hint={tenant!.lease ? "laut Mietvertrag" : "laut Mietverlauf"} />
               <Kpi

@@ -1,7 +1,7 @@
 import { sumRent } from "./calc";
 import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
 import { propertyMetrics } from "./finance";
-import { estimatePropertyTax } from "./propertyTax";
+import { propertyTaxPerYear } from "./propertyTax";
 import { releasedTenant } from "./release";
 import type { AppData, ISODate, Loan, Property } from "./types";
 
@@ -94,7 +94,7 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
   const tenants = data.tenants.filter((t) => t.propertyId === property.id);
   const loans = property.loans.map((l) => schedule(l, months));
   const ownCostsYear = property.maintenanceAnnual + property.managementAnnual + property.otherCostsAnnual;
-  const taxEstimate = estimatePropertyTax(property)?.tax ?? 0;
+  const taxEstimate = propertyTaxPerYear(property) ?? 0;
 
   // Hausgeld laut Wirtschaftsplan des Jahres; ohne Plan gilt der letzte frühere Plan weiter (wie bei der WEG üblich)
   const plansWithHausgeld = data.economicPlans.filter((p) => p.propertyId === property.id && p.monthlyHausgeld !== null);

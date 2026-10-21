@@ -6,6 +6,7 @@ import { daysInclusive, intersect } from "./dates";
 import { agreementFor, amountByLease, tenantsInPeriod } from "./lease";
 import type { CostItem, EconomicPlan, HeatingBill, LeaseAgreement, LedgerPosition, Property, Statement, Tenant, WegAnnualStatement } from "./types";
 import { uid } from "./model";
+import { propertyTaxPerYear } from "./propertyTax";
 
 /*
  * Drei Ebenen, die nie vermischt werden:
@@ -527,6 +528,8 @@ export interface TenantForecast {
   expectedShare: number;
   uncertainShare: number;
   prepayments: number;
+  /** darin enthaltene Grundsteuer pro Jahr (individuell umgelegt laut Mietvertrag) */
+  propertyTaxYear: number;
   /** > 0: voraussichtliche Nachzahlung, < 0: voraussichtliches Guthaben */
   result: number;
 }
@@ -552,6 +555,11 @@ export function forecastForTenant(plan: EconomicPlan, property: Property, tenant
     if (p.classification === "review" || agreement?.status === "partial") uncertain += cents;
     else expected += cents;
   }
+  // Grundsteuer steht nicht im Wirtschaftsplan: Bescheid der Gemeinde, sofern im Mietvertrag vereinbart
+  const tax = propertyTaxPerYear(property);
+  const taxAgreed = !tenant.lease || (tenant.lease.agreedCategories.includes(1) && tenant.lease.propertyTaxIndividual);
+  const propertyTaxYear = tax && taxAgreed && property.units.length === 1 ? tax : 0;
+  expected += toCents(propertyTaxYear);
   const days = daysInclusive(range.start, range.end);
   const yearDays = daysInclusive(yearStart, yearEnd);
   const prepayments = calcPrepayments(tenant, range.start, range.end).total;
@@ -564,6 +572,7 @@ export function forecastForTenant(plan: EconomicPlan, property: Property, tenant
     expectedShare,
     uncertainShare: Math.round((uncertain * days) / yearDays) / 100,
     prepayments,
+    propertyTaxYear,
     result: fromCents(toCents(expectedShare) - toCents(prepayments)),
   };
 }

@@ -85,13 +85,19 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
   }
 
   // Grundsteuer gegen Schätzung aus Grundsteuerwert und Hebesatz prüfen
-  const est = estimatePropertyTax(property);
+  const estimate = estimatePropertyTax(property);
+  const reference = property.propertyTaxAnnual
+    ? { tax: property.propertyTaxAnnual, source: "dem hinterlegten Bescheid" }
+    : estimate
+      ? { tax: estimate.tax, source: "der Schätzung (Grundsteuerwert × 0,31 ‰ × Hebesatz)" }
+      : null;
+  const est = reference;
   const taxItems = statement.costs.filter((c) => c.category === 1);
-  if (est && taxItems.length) {
+  if (reference && taxItems.length) {
     const entered = taxItems.reduce((a, c) => a + c.amount, 0);
-    if (Math.abs(entered - est.tax) > Math.max(5, est.tax * 0.05)) {
+    if (Math.abs(entered - reference.tax) > Math.max(5, reference.tax * 0.05)) {
       generalHints.push(
-        `Grundsteuer ${eur(entered)} weicht von der Schätzung ${eur(est.tax)} ab (Grundsteuerwert × 0,31 ‰ × Hebesatz). Bitte mit dem Bescheid der Gemeinde für das Abrechnungsjahr abgleichen.`,
+        `Grundsteuer ${eur(entered)} weicht von ${reference.source} mit ${eur(reference.tax)} ab. Bitte mit dem Bescheid der Gemeinde für das Abrechnungsjahr abgleichen.`,
       );
     }
   }
@@ -115,7 +121,7 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
       }
       if (property.type === "etw" && lease.propertyTaxIndividual && lease.agreedCategories.includes(1) && !taxItems.length) {
         hints.push(
-          `Die Grundsteuer ist vereinbart, aber nicht erfasst. Trage den Jahresbetrag aus dem Grundsteuerbescheid der Gemeinde ein (direkt der Wohnung zugeordnet)${est ? ` – zur Kontrolle: geschätzt ${eur(est.tax)} pro Jahr` : ""}.`,
+          `Die Grundsteuer ist vereinbart, aber nicht erfasst. Trage den Jahresbetrag aus dem Grundsteuerbescheid der Gemeinde ein (direkt der Wohnung zugeordnet)${est ? ` – zur Kontrolle: ${eur(est.tax)} pro Jahr laut ${est.source}` : ""}.`,
         );
       }
     }

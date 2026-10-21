@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { calculateStatement } from "./calc";
+import { buildSegments, calculateStatement } from "./calc";
+import { meterDates } from "./meters";
 import { classifyLabel } from "./classify";
 import {
   we09Annual2024,
@@ -476,5 +477,44 @@ describe("Freigabe je Mietverhältnis", () => {
     const migrated = migrate(old);
     expect(Object.keys(migrated.statements[0].releases)).toEqual(["x"]);
     expect(migrated.statements[0].status).toBe("released");
+  });
+});
+
+describe("Zählerstände zum Mieterwechsel", () => {
+  const annual2025 = (): WegAnnualStatement => ({ ...reviewedAnnual(), id: "we09-a2025-probe", year: 2025 });
+  const tenants = () => [we09PreviousTenant(), we09Tenant()];
+  const calc = (meterReadings: Statement["meterReadings"]) => {
+    const st0 = { ...we09Statement(2025), meterReadings };
+    const st = { ...st0, costs: transferToStatement(annual2025(), st0, { property: we09Property(), tenants: tenants() }).items };
+    return calculateStatement(st, we09Property(), tenants());
+  };
+  const share = (r: ReturnType<typeof calc>, i: number, label: string) => r.tenants[i].items.find((x) => x.label.startsWith(label))!;
+
+  it("errechnet den Verbrauch je Mieter aus den Ständen 01.01., Wechseltag und 31.12.", () => {
+    const r = calc({ "we09-u": { heating: [10000, 11200, 11585] } });
+    expect(share(r, 0, "Heiz- und Warmwasserkosten – Verbrauchskosten Heizung").amount).toBe(171.48);
+    expect(share(r, 1, "Heiz- und Warmwasserkosten – Verbrauchskosten Heizung").amount).toBe(55.01);
+    expect(share(r, 1, "Heiz- und Warmwasserkosten – Verbrauchskosten Heizung").basisShare).toBe(385);
+  });
+
+  it("verteilt Wasser und Abwasser nach den Kaltwasser-Zählerständen statt nach Tagen", () => {
+    const r = calc({ "we09-u": { coldWater: [100, 120, 134.766] } });
+    expect(share(r, 0, "Wasser").amount).toBe(34.65);
+    expect(share(r, 1, "Wasser").amount).toBe(25.58);
+    expect(share(r, 0, "Abwassergebühren").amount).toBe(82.7);
+    expect(share(r, 1, "Abwassergebühren").amount).toBe(61.05);
+    expect(share(r, 1, "Wasser").key).toBe("reading");
+  });
+
+  it("verwirft fallende Zählerstände und teilt dann nach Tagen", () => {
+    const r = calc({ "we09-u": { coldWater: [100, 90, 134.766] } });
+    expect(share(r, 1, "Wasser").amount).toBe(25.25);
+    expect(r.warnings.some((w) => w.includes("Kaltwasser-Zählerständen"))).toBe(true);
+  });
+
+  it("Stichtage: Beginn, Wechsel, Ende", () => {
+    const st = we09Statement(2025);
+    const segs = buildSegments(we09Property().units, tenants(), st.periodStart, st.periodEnd);
+    expect(meterDates(segs)).toEqual(["2025-01-01", "2025-08-01", "2025-12-31"]);
   });
 });

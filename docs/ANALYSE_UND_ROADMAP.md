@@ -171,6 +171,7 @@ Die Wohnung war durchgehend vermietet: an die Vormieterin bis 31.07.2025 (Vermie
 | Verschiedene Umlagemaßstäbe im selben Jahr | Kostenpositionen behalten den Anteil laut WEG und zusätzlich den Anteil je Vertragsmaßstab (`leaseAmounts`). Jeder Mieter trägt seinen Anteil nach seinem Vertrag; die Differenz trägt der Vermieter. |
 | Nicht vereinbarte Kosten bei nur einem Mieter | Der Anteil dieses Mieters bleibt beim Vermieter und wird nicht auf den anderen umgelegt. |
 | Heizkosten beim Nutzerwechsel (§ 9b HeizkostenV) | Bestandteile aus der Heizkostenabrechnung: Grundkosten nach Zeit. Verbrauch nach Zwischenablesung, sonst Heizung nach Gradtagzahlen (Jan–Jul 596,7 ‰, Aug–Dez 403,3 ‰) und Warmwasser nach Zeit. |
+| Zählerstände zum Wechseltag (Übergabeprotokoll) | Stände je Zähler an Beginn, Wechsel und Ende. Die App errechnet den Verbrauch je Mieter für Heizung und Warmwasser und verteilt bei Kaltwasser-Ständen auch Wasser und Abwasser nach Verbrauch (§ 6 Nr. 3 Mietvertrag). |
 
 ### Grundsteuer WE 09
 

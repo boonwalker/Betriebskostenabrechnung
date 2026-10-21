@@ -199,12 +199,20 @@ export interface Statement {
   prepaymentsConfirmed: Record<string, boolean>;
   /** Verbrauch je Mieter laut Zwischenablesung beim Nutzerwechsel (kWh bzw. Einheiten) */
   interimReadings?: Record<string, { heating: number | null; water: number | null }>;
+  /**
+   * Zählerstände je Wohnung und Zähler an den Stichtagen des Zeitraums: Beginn, jeder Nutzerwechsel, Ende.
+   * Daraus ergibt sich der Verbrauch je Mieter (bzw. Leerstand). Geht den Verbrauchswerten oben vor.
+   */
+  meterReadings?: Record<string, Partial<Record<MeterKind, (number | null)[]>>>;
   /** draft = nichts freigegeben, partial = einzelne Mietverhältnisse freigegeben, released = alle */
   status: "draft" | "partial" | "released";
   /** Freigaben je Mietverhältnis (Mieter-ID) – eingefrorener Stand, spätere Datenänderungen ändern ihn nicht */
   releases: Record<string, TenantRelease>;
   createdAt: string;
 }
+
+/** heating = Wärmezähler/Heizkostenverteiler, water = Warmwasser, coldWater = Kaltwasser (m³) */
+export type MeterKind = "heating" | "water" | "coldWater";
 
 export interface TenantRelease {
   releasedAt: string;

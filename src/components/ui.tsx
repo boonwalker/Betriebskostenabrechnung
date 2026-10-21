@@ -34,12 +34,15 @@ export function NumberInput({
   placeholder,
   style,
   ariaLabel,
+  allowEmpty,
 }: {
   value: number | undefined;
+  /** bei allowEmpty: NaN für ein leeres Feld (statt 0) */
   onChange: (n: number) => void;
   placeholder?: string;
   style?: React.CSSProperties;
   ariaLabel?: string;
+  allowEmpty?: boolean;
 }) {
   const fmt = (n: number | undefined) => (n === undefined || Number.isNaN(n) ? "" : formatNum(n));
   const [text, setText] = useState(fmt(value));
@@ -58,11 +61,11 @@ export function NumberInput({
       onFocus={() => setFocused(true)}
       onChange={(e) => {
         setText(e.target.value);
-        onChange(parseNumber(e.target.value));
+        onChange(allowEmpty && !e.target.value.trim() ? NaN : parseNumber(e.target.value));
       }}
       onBlur={() => {
         setFocused(false);
-        setText(fmt(parseNumber(text)));
+        setText(allowEmpty && !text.trim() ? "" : fmt(parseNumber(text)));
       }}
     />
   );

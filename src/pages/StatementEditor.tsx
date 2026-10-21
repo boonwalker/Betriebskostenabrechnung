@@ -3,13 +3,14 @@ import { Balance, NumberInput, type PageProps } from "../components/ui";
 import ReceiptImport from "../components/ReceiptImport";
 import { COST_CATEGORIES, isHeatingCategory, KEY_LABELS } from "../lib/betrkv";
 import { co2Stage } from "../lib/co2";
-import { calculateStatement } from "../lib/calc";
+import { buildSegments, calculateStatement } from "../lib/calc";
+import { meterDates, METER_LABELS, segmentConsumption } from "../lib/meters";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
 import { changedSinceRelease, releaseTenant, revokeRelease, statementReadiness } from "../lib/release";
 import { uid } from "../lib/store";
 import { transferToStatement } from "../lib/weg";
-import type { AllocationKey, CostItem, Property, Section35aKind, Statement } from "../lib/types";
+import type { AllocationKey, CostItem, MeterKind, Property, Section35aKind, Statement } from "../lib/types";
 
 export default function StatementEditor({ data, update, statementId }: PageProps & { statementId: string }) {
   const statement = data.statements.find((s) => s.id === statementId);
@@ -50,10 +51,11 @@ export default function StatementEditor({ data, update, statementId }: PageProps
   };
 
   const readiness = statementReadiness(statement, data);
-  // Mieter einer Wohnung mit Nutzerwechsel, deren Heizkosten aus der Heizkostenabrechnung kommen
-  const readingTenants = result.tenants
-    .filter((r) => statement.costs.some((c) => c.heatingParts && c.directUnitId === r.unit.id) && result.tenants.filter((x) => x.unit.id === r.unit.id).length > 1)
-    .map((r) => r.tenant);
+  // Wohnungen mit Nutzerwechsel im Zeitraum: Zählerstände je Stichtag erfassen
+  const allSegs = buildSegments(property.units, data.tenants.filter((t) => t.propertyId === property.id), statement.periodStart, statement.periodEnd);
+  const changeUnits = property.units
+    .map((unit) => ({ unit, segs: allSegs.filter((sg) => sg.unitId === unit.id) }))
+    .filter((x) => x.segs.length > 1);
   // Gesperrt erst, wenn alle Mietverhältnisse freigegeben sind; einzelne Freigaben bleiben eingefroren
   const released = statement.status === "released";
   const year = Number(statement.periodStart.slice(0, 4));
@@ -317,42 +319,75 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         <p className="muted small" style={{ marginTop: 12 }}>
           Vergleiche die Vorauszahlungen mit deinen Kontoauszügen. Weicht der gezahlte Betrag vom Mietvertrag ab (z. B. Rückstände), trage ihn ein und bestätige ihn erst dann.
         </p>
-        {readingTenants.length > 1 && (
-          <div style={{ marginTop: 16 }}>
-            <h3>Zwischenablesung beim Nutzerwechsel</h3>
-            <p className="hint">
-              Verbrauch je Mieter laut Ablesung des Messdienstes (Heizung und Warmwasser, z. B. kWh oder Einheiten). Ohne vollständige Werte teilt die App nach § 9b Abs. 2
-              HeizkostenV: Verbrauch Heizung nach Gradtagzahlen, Warmwasser und Grundkosten nach Zeit.
-            </p>
-            <table className="compact" style={{ maxWidth: 560 }}>
-              <thead>
-                <tr>
-                  <th>Mieter</th>
-                  <th className="num">Heizung</th>
-                  <th className="num">Warmwasser</th>
-                </tr>
-              </thead>
-              <tbody>
-                {readingTenants.map((t) => {
-                  const rd = statement.interimReadings?.[t.id] ?? { heating: null, water: null };
-                  const setReading = (patch: Partial<typeof rd>) =>
-                    set({ interimReadings: { ...statement.interimReadings, [t.id]: { ...rd, ...patch } } });
-                  return (
-                    <tr key={t.id}>
-                      <td>{t.name}</td>
-                      <td>
-                        <NumberInput value={rd.heating ?? undefined} onChange={(v) => setReading({ heating: Number.isFinite(v) ? v : null })} ariaLabel={`Ablesung Heizung ${t.name}`} />
-                      </td>
-                      <td>
-                        <NumberInput value={rd.water ?? undefined} onChange={(v) => setReading({ water: Number.isFinite(v) ? v : null })} ariaLabel={`Ablesung Warmwasser ${t.name}`} />
-                      </td>
+        {changeUnits.map(({ unit, segs }) => {
+          const dates = meterDates(segs);
+          const values = statement.meterReadings?.[unit.id] ?? {};
+          const setValue = (meter: MeterKind, i: number, v: number | null) => {
+            const row = [...(values[meter] ?? dates.map(() => null))];
+            while (row.length < dates.length) row.push(null);
+            row[i] = v;
+            set({ meterReadings: { ...statement.meterReadings, [unit.id]: { ...values, [meter]: row } } });
+          };
+          const who = (sg: (typeof segs)[number]) => (sg.tenantId ? data.tenants.find((t) => t.id === sg.tenantId)?.name : "Leerstand");
+          return (
+            <div key={unit.id} style={{ marginTop: 16 }}>
+              <h3>Zählerstände beim Nutzerwechsel – {unit.name}</h3>
+              <p className="hint">
+                Stände zum Beginn, zu jedem Wechsel und zum Ende des Zeitraums – z. B. aus dem Übergabeprotokoll und der Heizkosten- bzw. Wasserabrechnung („Ablesewert
+                alt/neu“). Daraus ergibt sich der Verbrauch je Mieter. Ohne Stände gilt § 9b Abs. 2 HeizkostenV (Heizung nach Gradtagzahlen, sonst nach Zeit). Kennst
+                du nur den Verbrauch je Mieter (z. B. aus der Nutzerwechsel-Abrechnung des Messdienstes), trage Beginn 0, beim Wechsel den Verbrauch des ersten Mieters und am
+                Ende die Summe ein.
+              </p>
+              <div className="table-wrap">
+                <table className="compact">
+                  <thead>
+                    <tr>
+                      <th>Zähler</th>
+                      {dates.map((d, i) => (
+                        <th key={d + i} className="num">
+                          {i === 0 ? "Beginn " : i === dates.length - 1 ? "Ende " : "Wechsel "}
+                          {formatDate(d)}
+                        </th>
+                      ))}
+                      <th>Verbrauch je Abschnitt</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  </thead>
+                  <tbody>
+                    {(Object.keys(METER_LABELS) as MeterKind[]).map((meter) => {
+                      const consumption = segmentConsumption(statement, unit.id, segs, meter);
+                      const raw = values[meter];
+                      const invalid = raw && raw.every((v) => v !== null && v !== undefined) && !consumption;
+                      return (
+                        <tr key={meter}>
+                          <td>{METER_LABELS[meter]}</td>
+                          {dates.map((d, i) => (
+                            <td key={d + i} style={{ minWidth: 110 }}>
+                              <NumberInput
+                                value={raw?.[i] ?? undefined}
+                                allowEmpty
+                                onChange={(v) => setValue(meter, i, Number.isFinite(v) ? v : null)}
+                                ariaLabel={`${METER_LABELS[meter]} ${formatDate(d)}`}
+                              />
+                            </td>
+                          ))}
+                          <td className="small">
+                            {invalid ? (
+                              <span className="badge danger">Zählerstände fallen – Tippfehler oder Zählertausch?</span>
+                            ) : consumption ? (
+                              segs.map((sg, i) => `${who(sg)}: ${formatNum(consumption[i])}`).join(" · ")
+                            ) : (
+                              <span className="muted">–</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
         {(result.vacancies.length > 0 || result.co2.length > 0 || result.landlordItems.length > 0) && (
           <>
             <h3 style={{ marginTop: 16 }}>Trägst du als Vermieter</h3>

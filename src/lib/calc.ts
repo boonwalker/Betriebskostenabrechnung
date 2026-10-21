@@ -3,6 +3,7 @@ import { co2Stage } from "./co2";
 import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
 import { allocate, fromCents, sumEuro, toCents, type Cents } from "./money";
 import { degreeDays } from "./degreeDays";
+import { segmentConsumption } from "./meters";
 import { agreementFor } from "./lease";
 import type { CostItem, ISODate, LeaseAllocationRule, Property, Section35aKind, Statement, Tenant, Unit } from "./types";
 
@@ -323,12 +324,12 @@ export function calculateStatement(statement: Statement, property: Property, all
     if (item.key === "direct" && item.heatingParts && unitSegs.length > 1) {
       const hp = item.heatingParts;
       const parts = allocate(itemDistributable, [hp.baseHeating, hp.consumptionHeating, hp.baseWater, hp.consumptionWater].map(toCents));
-      const readings = statement.interimReadings ?? {};
-      // Ablesung gilt nur, wenn für jeden Mieter der Wohnung ein Wert > 0 vorliegt (leeres Feld = keine Ablesung)
-      const complete = (k: "heating" | "water") => unitSegs.every((sg) => sg.tenantId && (readings[sg.tenantId]?.[k] ?? 0) > 0);
       const days = unitSegs.map((sg) => sg.days);
-      const heatW = complete("heating") ? unitSegs.map((sg) => readings[sg.tenantId!]!.heating!) : unitSegs.map((sg) => degreeDays(sg.start, sg.end));
-      const waterW = complete("water") ? unitSegs.map((sg) => readings[sg.tenantId!]!.water!) : days;
+      const heatReadings = segmentConsumption(statement, item.directUnitId!, unitSegs, "heating");
+      const waterReadings = segmentConsumption(statement, item.directUnitId!, unitSegs, "water");
+      const complete = (k: "heating" | "water") => (k === "heating" ? heatReadings : waterReadings) !== null;
+      const heatW = heatReadings ?? unitSegs.map((sg) => degreeDays(sg.start, sg.end));
+      const waterW = waterReadings ?? days;
       const defs: { name: string; amount: Cents; w: number[]; key: DistributionKey; unit: string }[] = [
         { name: "Grundkosten Heizung (nach Zeit)", amount: parts[0], w: days, key: "time", unit: "Tage" },
         complete("heating")
@@ -362,12 +363,15 @@ export function calculateStatement(statement: Statement, property: Property, all
     }
 
     // 2. Anteil der Wohnung, der je Mietvertrag nach unterschiedlichem Maßstab ermittelt wird
-    if (item.key === "direct" && item.leaseAmounts && unitSegs.length > 0) {
-      const days = unitSegs.map((sg) => sg.days);
+    if (item.key === "direct" && unitSegs.length > 0) {
+      // Kaltwasser/Abwasser nach Verbrauch: bei Nutzerwechsel nach Zählerständen statt nach Tagen
+      const isColdWater = /cbm|m³|m3/i.test(item.basis?.unit ?? "") || /cbm|m³|m3/i.test(item.leaseAmounts?.weg?.basis?.unit ?? "");
+      const water = isColdWater && unitSegs.length > 1 ? segmentConsumption(statement, item.directUnitId!, unitSegs, "coldWater") : null;
+      const days = water ?? unitSegs.map((sg) => sg.days);
       const byRule = new Map<string, Cents[]>();
       const amountFor = (rule: LeaseAllocationRule) => {
         if (!byRule.has(rule)) {
-          const la = item.leaseAmounts![rule];
+          const la = item.leaseAmounts?.[rule];
           byRule.set(rule, allocate(la ? toCents(la.amount) : itemDistributable, days));
         }
         return byRule.get(rule)!;
@@ -376,13 +380,16 @@ export function calculateStatement(statement: Statement, property: Property, all
       const diff = itemDistributable - amounts.reduce((a, b) => a + b, 0);
       if (diff !== 0) landlordItems.push({ costId: item.id, label, amount: fromCents(diff), reason: "Differenz zwischen WEG-Schlüssel und Umlagemaßstab des Mietvertrags" });
       book(unitSegs, amounts, allocate(toCents(item.laborCost ?? 0), days), allocate(tenantCo2, days), {
-        label,
-        key: "direct",
+        label: water ? `${label} (Zwischenablesung)` : label,
+        key: water ? "reading" : "direct",
         total: itemDistributable,
-        basisTotal: periodDays,
+        basisTotal: water ? water.reduce((a, b) => a + b, 0) : periodDays,
         basis: days,
-        basisUnit: undefined,
+        basisUnit: water ? "m³" : undefined,
       });
+      if (isColdWater && unitSegs.length > 1 && !water) {
+        warnings.push(`„${label}“: Beim Nutzerwechsel wird nach Tagen aufgeteilt. Mit den Kaltwasser-Zählerständen zum Wechseltag wird nach Verbrauch verteilt.`);
+      }
       if (isHeatingCategory(item.category) && unitSegs.length > 1) {
         warnings.push(`„${label}“: Bei Nutzerwechsel ist eine Zwischenablesung nötig (§ 9b HeizkostenV). Ohne sie wird hier nur zeitanteilig aufgeteilt.`);
       }

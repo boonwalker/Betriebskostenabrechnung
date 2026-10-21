@@ -2,6 +2,7 @@ import { calculateStatement, type StatementResult } from "./calc";
 import { formatDate } from "./dates";
 import type { AppData, Statement, StatementRelease, Tenant } from "./types";
 import { agreementFor } from "./lease";
+import { estimatePropertyTax } from "./propertyTax";
 import { checkAnnual } from "./weg";
 
 /** Vermieter eines Mietverhältnisses: abweichend am Mieter hinterlegt oder aus den Einstellungen */
@@ -80,7 +81,22 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
       else if (m.status === "partial") hints.push(`„${c.label}“: ${m.text}. Bitte anhand der Rechnung bestätigen.`);
     }
     if (property.type === "etw" && lease.propertyTaxIndividual && lease.agreedCategories.includes(1) && !statement.costs.some((c) => c.category === 1)) {
-      hints.push("Die Grundsteuer ist vereinbart, aber nicht erfasst. Trage sie in Höhe des Grundsteuerbescheids für die Wohnung ein (direkt der Wohnung zugeordnet).");
+      const est = estimatePropertyTax(property);
+      hints.push(
+        `Die Grundsteuer ist vereinbart, aber nicht erfasst. Trage den Jahresbetrag aus dem Grundsteuerbescheid der Gemeinde ein (direkt der Wohnung zugeordnet)${est ? ` – zur Kontrolle: geschätzt ${eur(est.tax)} pro Jahr` : ""}.`,
+      );
+    }
+  }
+
+  // Grundsteuer gegen Schätzung aus Grundsteuerwert und Hebesatz prüfen
+  const est = estimatePropertyTax(property);
+  const taxItems = statement.costs.filter((c) => c.category === 1);
+  if (est && taxItems.length) {
+    const entered = taxItems.reduce((a, c) => a + c.amount, 0);
+    if (Math.abs(entered - est.tax) > Math.max(5, est.tax * 0.05)) {
+      hints.push(
+        `Grundsteuer ${eur(entered)} weicht von der Schätzung ${eur(est.tax)} ab (Grundsteuerwert × 0,31 ‰ × Hebesatz). Bitte mit dem Bescheid der Gemeinde für das Abrechnungsjahr abgleichen.`,
+      );
     }
   }
 

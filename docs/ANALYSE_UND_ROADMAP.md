@@ -171,6 +171,14 @@ Die Wohnung war durchgehend vermietet: an die Vormieterin bis 31.07.2025 (Vermie
 | Nicht vereinbarte Kosten bei nur einem Mieter | Der Anteil dieses Mieters bleibt beim Vermieter und wird nicht auf den anderen umgelegt. |
 | Heizkosten beim Nutzerwechsel (§ 9b HeizkostenV) | Bestandteile aus der Heizkostenabrechnung: Grundkosten nach Zeit. Verbrauch nach Zwischenablesung, sonst Heizung nach Gradtagzahlen (Jan–Jul 596,7 ‰, Aug–Dez 403,3 ‰) und Warmwasser nach Zeit. |
 
+### Grundsteuer WE 09
+
+Der Feststellungsbescheid des Finanzamts vom 05.09.2025 nennt einen Grundsteuerwert von 112.200 € und eine Zurechnung an den neuen Eigentümer erst ab 01.01.2026 (bisher je ½ an die Eltern). Daraus folgt:
+
+- Messbetrag = 112.200 € × 0,31 ‰ = 34,78 €. Mit dem Hebesatz für Wohngrundstücke in Heinsberg ab 2026 (559 %) ergibt sich eine geschätzte Grundsteuer von 194,42 € pro Jahr. Die App nutzt das nur als Plausibilitätsprüfung.
+- Umgelegt wird der Jahresbetrag aus dem Grundsteuerbescheid der Stadt für 2025. Dieser ging an die bisherigen Eigentümer.
+- Für Aug–Dez 2025 ist zu klären, ob der neue Eigentümer die Grundsteuer intern getragen hat. Nur dann kann er sie seinem Mieter berechnen.
+
 Prognose 2025 aus dem Wirtschaftsplan: erwartete Kosten 495,73 € (1.182,62 € × 153/365) gegenüber 650 € Vorauszahlungen. Voraussichtlich also rund 154 € Guthaben, ohne Heizkosten-Saisoneffekt und ohne Grundsteuer.
 
 ### Nächste Schritte

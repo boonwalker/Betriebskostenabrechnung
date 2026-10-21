@@ -44,6 +44,9 @@ export function we09Property(): Property {
     wegUnitsCount: 11,
     wegMeaTotal: 1000,
     wegAreaTotal: 900,
+    // Feststellungsbescheid vom 05.09.2025 (Zurechnung ab 01.01.2026); Hebesatz Wohngrundstücke Heinsberg ab 2026
+    propertyTaxValue: 112200,
+    propertyTaxRate: 559,
   };
 }
 

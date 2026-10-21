@@ -34,7 +34,14 @@ export default function StatementEditor({ data, update, statementId }: PageProps
   const setCost = (id: string, patch: Partial<CostItem>) =>
     set({ costs: statement.costs.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
   const addCost = () =>
-    set({ costs: [...statement.costs, { id: uid(), category: 1, label: "Grundsteuer", amount: 0, key: "area" }] });
+    set({
+      costs: [
+        ...statement.costs,
+        property.type === "etw"
+          ? { id: uid(), category: 1, label: "Grundsteuer", amount: 0, key: "direct", directUnitId: property.units[0]?.id }
+          : { id: uid(), category: 1, label: "Grundsteuer", amount: 0, key: "area" },
+      ],
+    });
   const setOverride = (tenantId: string, value: number | null) => {
     const next = { ...statement.prepaymentOverrides };
     if (value === null) delete next[tenantId];
@@ -386,7 +393,14 @@ function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; prope
             onChange={(e) => {
               const cat = COST_CATEGORIES.find((c) => c.no === Number(e.target.value))!;
               const labelWasDefault = COST_CATEGORIES.some((c) => c.label === cost.label) || !cost.label;
-              onChange({ category: cat.no, key: cat.defaultKey, ...(labelWasDefault ? { label: cat.label } : {}) });
+              // Eigentumswohnung: Grundsteuer laut Einzelbescheid gehört direkt zur Wohnung
+              const direct = cat.no === 1 && property.type === "etw";
+              onChange({
+                category: cat.no,
+                key: direct ? "direct" : cat.defaultKey,
+                ...(direct ? { directUnitId: property.units[0]?.id } : {}),
+                ...(labelWasDefault ? { label: cat.label } : {}),
+              });
             }}
             aria-label="Kostenart"
           >

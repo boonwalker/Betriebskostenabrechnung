@@ -70,6 +70,10 @@ export interface Property {
   wegUnitsCount: number | null;
   wegMeaTotal: number | null;
   wegAreaTotal: number | null;
+  /** Grundsteuerwert laut Feststellungsbescheid des Finanzamts */
+  propertyTaxValue?: number | null;
+  /** Hebesatz der Gemeinde in % (Grundsteuer B, ggf. für Wohngrundstücke) */
+  propertyTaxRate?: number | null;
 }
 
 /** Mietstand ab einem Stichtag (Mietvertrag, Mieterhöhung, Anpassung der Vorauszahlung) */

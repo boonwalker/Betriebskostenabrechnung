@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { NumberInput, type PageProps } from "../components/ui";
 import { depreciationRate } from "../lib/finance";
+import { estimatePropertyTax } from "../lib/propertyTax";
 import { formatEUR, formatNum, formatPct } from "../lib/format";
 import { newProperty, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
 import type { Loan, Property, PropertyType, Unit } from "../lib/types";
@@ -180,6 +181,27 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
             Einstand gesamt: <strong>{formatEUR(invested)}</strong> · davon abschreibbar (Gebäude): {formatEUR(invested * (1 - p.landShare / 100))}
           </p>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Grundsteuer</h2>
+        <p className="hint">
+          Der Grundsteuerwert steht im Feststellungsbescheid des Finanzamts, der Hebesatz in der Satzung bzw. im Grundsteuerbescheid der Gemeinde. Daraus schätzt die App die
+          Jahressteuer zur Kontrolle – umgelegt wird immer der Betrag aus dem Bescheid der Gemeinde.
+        </p>
+        <div className="grid">
+          <Field label="Grundsteuerwert (€)">
+            <NumberInput value={p.propertyTaxValue ?? undefined} onChange={(v) => set({ propertyTaxValue: v || null })} />
+          </Field>
+          <Field label="Hebesatz der Gemeinde (%)" hint="Grundsteuer B, ggf. Satz für Wohngrundstücke">
+            <NumberInput value={p.propertyTaxRate ?? undefined} onChange={(v) => set({ propertyTaxRate: v || null })} />
+          </Field>
+          <div>
+            <div className="muted small">Geschätzte Grundsteuer pro Jahr</div>
+            <div className="kpi-value">{estimatePropertyTax(p) ? formatEUR(estimatePropertyTax(p)!.tax) : "–"}</div>
+            {estimatePropertyTax(p) && <div className="small muted">Messbetrag {formatEUR(estimatePropertyTax(p)!.baseAmount)} (× 0,31 ‰)</div>}
+          </div>
+        </div>
       </div>
 
       <div className="card">

@@ -1,6 +1,7 @@
 import { calculateStatement, type StatementResult } from "./calc";
 import { formatDate } from "./dates";
 import type { AppData, Statement, StatementRelease } from "./types";
+import { agreementFor } from "./lease";
 import { checkAnnual } from "./weg";
 
 const eur = (n: number) => new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n);
@@ -57,8 +58,27 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
     const annual = data.wegAnnuals.find((a) => a.id === c.sourceAnnualId);
     const pos = annual?.positions.find((p) => p.id === c.sourcePositionId);
     if (!pos) blockers.push(`„${c.label}“: Die Quellposition in der WEG-Jahresabrechnung existiert nicht mehr.`);
-    else if (pos.amount !== c.amount) blockers.push(`„${c.label}“: Betrag ${eur(c.amount)} weicht von der WEG-Jahresabrechnung (${eur(pos.amount)}) ab.`);
+    else if (pos.amount !== (c.sourceAmount ?? c.amount))
+      blockers.push(`„${c.label}“: Die WEG-Jahresabrechnung wurde geändert (jetzt ${eur(pos.amount)}). Bitte die Position neu übernehmen.`);
     else if (pos.classification !== "allocable") blockers.push(`„${c.label}“ ist in der WEG-Jahresabrechnung nicht mehr als umlagefähig bewertet.`);
+  }
+
+  // Mietvertrag: Ist jede Position vereinbart?
+  for (const t of result.tenants) {
+    const lease = t.tenant.lease;
+    if (!lease) {
+      hints.push(`Die Betriebskostenvereinbarung im Mietvertrag von ${t.tenant.name} ist nicht erfasst – die Umlagefähigkeit wurde nicht gegen den Vertrag geprüft.`);
+      continue;
+    }
+    for (const c of statement.costs) {
+      if (c.key === "direct" && c.directUnitId !== t.unit.id) continue;
+      const m = agreementFor(c.label, c.category, lease);
+      if (m.status === "not_agreed") blockers.push(`„${c.label}“ darf ${t.tenant.name} nicht berechnet werden: ${m.text}.`);
+      else if (m.status === "partial") hints.push(`„${c.label}“: ${m.text}. Bitte anhand der Rechnung bestätigen.`);
+    }
+    if (property.type === "etw" && lease.propertyTaxIndividual && lease.agreedCategories.includes(1) && !statement.costs.some((c) => c.category === 1)) {
+      hints.push("Die Grundsteuer ist vereinbart, aber nicht erfasst. Trage sie in Höhe des Grundsteuerbescheids für die Wohnung ein (direkt der Wohnung zugeordnet).");
+    }
   }
 
   // Tatsächlich geleistete Vorauszahlungen
@@ -75,7 +95,7 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
   if (!data.settings.landlord.name || !data.settings.landlord.address) blockers.push("Name und Anschrift des Vermieters fehlen (Einstellungen).");
   for (const w of result.warnings) hints.push(w);
 
-  return { blockers, hints, ready: blockers.length === 0 };
+  return { blockers: [...new Set(blockers)], hints: [...new Set(hints)], ready: blockers.length === 0 };
 }
 
 /** Eingangsdaten, die das Ergebnis bestimmen – Änderung nach Freigabe wird erkannt */

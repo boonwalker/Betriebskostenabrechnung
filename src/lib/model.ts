@@ -56,7 +56,7 @@ export function rentAt(tenant: Tenant, date: ISODate): RentPeriod | undefined {
   return sorted.filter((r) => r.validFrom <= date).pop() ?? sorted[0];
 }
 
-export const warmRent = (r: RentPeriod | undefined) => (r ? r.coldRent + r.prepaymentOperating + r.prepaymentHeating : 0);
+export const warmRent = (r: RentPeriod | undefined) => (r ? r.coldRent + (r.surcharge ?? 0) + r.prepaymentOperating + r.prepaymentHeating : 0);
 
 export function emptyData(): AppData {
   return {

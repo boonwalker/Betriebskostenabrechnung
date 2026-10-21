@@ -392,7 +392,7 @@ function Line({ label, value, sum }: { label: string; value: number; sum?: boole
   return (
     <tr className={sum ? "sum" : undefined}>
       <td>{label}</td>
-      <td className="num">{formatEUR0(value)}</td>
+      <td className="num">{formatEUR0(value === 0 ? 0 : value) /* kein „-0 €“ */}</td>
     </tr>
   );
 }

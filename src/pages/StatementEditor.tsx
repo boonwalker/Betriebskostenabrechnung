@@ -53,7 +53,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
     const notes: string[] = [];
     let added = 0;
     for (const a of annuals) {
-      const { items, skipped } = transferToStatement(a, { ...statement, costs });
+      const { items, skipped } = transferToStatement(a, { ...statement, costs }, { property, tenants: data.tenants });
       costs = [...costs, ...items];
       added += items.length;
       for (const sk of skipped) if (sk.reason !== "bereits übernommen" && sk.reason !== "nicht umlagefähig") notes.push(`• ${sk.position.label}: ${sk.reason}`);

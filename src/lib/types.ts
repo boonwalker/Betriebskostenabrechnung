@@ -82,6 +82,30 @@ export interface RentPeriod {
   prepaymentOperating: number;
   /** Vorauszahlung Heiz- und Warmwasserkosten je Monat */
   prepaymentHeating: number;
+  /** Zuschläge je Monat, z. B. Stellplatz (Teil der Miete, keine Betriebskosten) */
+  surcharge?: number;
+}
+
+/** Umlagemaßstab laut Mietvertrag */
+export type LeaseAllocationRule =
+  /** Schlüssel der WEG (§ 556a Abs. 3 BGB, wenn nichts anderes vereinbart) */
+  | "weg"
+  /** Verbrauch, soweit erfasst, im Übrigen Miteigentumsanteile */
+  | "consumption_mea";
+
+/** Betriebskostenvereinbarung des Mietvertrags */
+export interface LeaseAgreement {
+  /** Fundstelle, z. B. „Mietvertrag vom 10.07.2025, § 3 und § 6“ */
+  reference: string;
+  /** vereinbarte Kostenarten nach § 2 Nr. 1–16 BetrKV */
+  agreedCategories: number[];
+  /** namentlich vereinbarte sonstige Betriebskosten (§ 2 Nr. 17 BetrKV) */
+  otherCosts: string[];
+  allocationRule: LeaseAllocationRule;
+  /** Grundsteuer in Höhe des individuellen Bescheids für die Wohnung */
+  propertyTaxIndividual: boolean;
+  /** Fälligkeit von Nachzahlung/Guthaben */
+  paymentTerm: "30days" | "endOfNextMonth";
 }
 
 export interface Tenant {
@@ -97,6 +121,8 @@ export interface Tenant {
   persons: number;
   deposit: number;
   rentHistory: RentPeriod[];
+  /** Betriebskostenvereinbarung; null = noch nicht erfasst */
+  lease?: LeaseAgreement | null;
 }
 
 /**
@@ -140,6 +166,11 @@ export interface CostItem {
   /** Herkunft aus einer WEG-Jahresabrechnung (nie aus einem Wirtschaftsplan) */
   sourceAnnualId?: string;
   sourcePositionId?: string;
+  /** Anteil der Wohnung laut WEG-Abrechnung bei Übernahme (zur Erkennung späterer Änderungen) */
+  sourceAmount?: number;
+  /** Gesamtkosten und Schlüsselbasis, nach denen der Betrag ermittelt wurde (für das Anschreiben) */
+  totalAmount?: number;
+  basis?: { total: number; share: number; unit: string; label: string };
 }
 
 export interface Statement {

@@ -86,7 +86,11 @@ export function propertyMetrics(property: Property, allTenants: Tenant[], today:
   }
 
   const current = allTenants.filter((t) => t.propertyId === property.id && isCurrentTenant(t, today));
-  const annualColdRent = current.reduce((a, t) => a + (rentAt(t, today)?.coldRent ?? 0) * 12, 0);
+  // Nettokaltmiete inkl. Zuschlägen (z. B. Stellplatz) – Mieteinnahmen ohne Betriebskosten
+  const annualColdRent = current.reduce((a, t) => {
+    const r = rentAt(t, today);
+    return a + ((r?.coldRent ?? 0) + (r?.surcharge ?? 0)) * 12;
+  }, 0);
   const unitsLet = new Set(current.map((t) => t.unitId)).size;
 
   const reserve = property.hausgeldReserveMonthly * 12;

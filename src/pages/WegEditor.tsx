@@ -1,13 +1,11 @@
 import PositionsTable, { newPosition } from "../components/PositionsTable";
 import { Kpi, NumberInput, type PageProps } from "../components/ui";
 import { applyRules } from "../lib/classify";
-import { todayISO } from "../lib/dates";
-import { isCurrentTenant } from "../lib/finance";
 import { formatEUR, formatPct } from "../lib/format";
-import { newStatement, rentAt, uid } from "../lib/model";
+import { newStatement, uid } from "../lib/model";
 import { fromCents, sumCents, toCents } from "../lib/money";
 import type { AppData, EconomicPlan, HeatingBill, WegAnnualStatement } from "../lib/types";
-import { checkAnnual, checkPlan, comparePlanActual, explainDrivers, summarizeAnnual, summarizePlan, transferToStatement } from "../lib/weg";
+import { checkAnnual, checkPlan, comparePlanActual, explainDrivers, forecastForTenant, summarizeAnnual, summarizePlan, transferToStatement } from "../lib/weg";
 
 type Doc = WegAnnualStatement | EconomicPlan;
 
@@ -159,7 +157,8 @@ function AnnualSummaryCard({ data, update, annual }: { data: AppData; update: Pa
       return;
     }
     const base = statement ?? newStatement(annual.propertyId, `${annual.year}-01-01`, `${annual.year}-12-31`);
-    const { items, skipped } = transferToStatement(annual, base);
+    const property = data.properties.find((p) => p.id === annual.propertyId)!;
+    const { items, skipped } = transferToStatement(annual, base, { property, tenants: data.tenants });
     const next = { ...base, costs: [...base.costs, ...items] };
     update((d) => ({ ...d, statements: statement ? d.statements.map((x) => (x.id === next.id ? next : x)) : [...d.statements, next] }));
     const notTaken = skipped.filter((x) => x.reason !== "bereits übernommen" && x.reason !== "nicht umlagefähig");
@@ -222,11 +221,12 @@ function PlanSummaryCard({ data, plan }: { data: AppData; plan: EconomicPlan }) 
   const rows = comparePlanActual(plan, comparison);
   const drivers = explainDrivers(rows);
 
-  // Prognose für den aktuellen Mieter der Wohnung
-  const today = todayISO();
-  const tenant = data.tenants.find((t) => t.unitId === plan.unitId && isCurrentTenant(t, today));
-  const rent = tenant ? rentAt(tenant, today) : undefined;
-  const prepaymentYear = rent ? (rent.prepaymentOperating + rent.prepaymentHeating) * 12 : null;
+  // Prognose für den Mieter der Wohnung im Planjahr (zeitanteilig, nach Mietvertrag)
+  const property = data.properties.find((p) => p.id === plan.propertyId)!;
+  const tenant = data.tenants
+    .filter((t) => t.unitId === plan.unitId && t.moveIn <= `${plan.year}-12-31` && (!t.moveOut || t.moveOut >= `${plan.year}-01-01`))
+    .sort((a, b) => b.moveIn.localeCompare(a.moveIn))[0];
+  const forecast = tenant ? forecastForTenant(plan, property, tenant) : null;
   const expected = ours("allocable");
   const uncertain = ours("review");
 
@@ -270,16 +270,30 @@ function PlanSummaryCard({ data, plan }: { data: AppData; plan: EconomicPlan }) 
           Prognose auf Basis des Wirtschaftsplans – keine Abrechnung. Die tatsächliche Abrechnung erfolgt erst mit der Jahresabrechnung {plan.year}. Heizkosten werden nach
           der Heizkostenabrechnung verteilt und können vom Plan deutlich abweichen.
         </div>
-        <div className="kpi-row">
-          <Kpi label="erwartete umlagefähige Kosten" value={formatEUR(expected)} hint={uncertain ? `zzgl. bis zu ${formatEUR(uncertain)} ungeklärt` : undefined} />
-          <Kpi label="Vorauszahlungen pro Jahr" value={prepaymentYear !== null ? formatEUR(prepaymentYear) : "–"} hint={tenant ? tenant.name : "kein aktueller Mieter"} />
-          <Kpi
-            label="voraussichtliches Ergebnis"
-            value={prepaymentYear !== null ? formatEUR(Math.abs(expected - prepaymentYear)) : "–"}
-            hint={prepaymentYear === null ? undefined : expected > prepaymentYear ? "Nachzahlung (Prognose)" : "Guthaben (Prognose)"}
-          />
-          <Kpi label="empfohlene Vorauszahlung / Monat" value={formatEUR(Math.ceil(expected / 12))} hint="Anpassung nur nach einer Abrechnung (§ 560 Abs. 4 BGB)" />
-        </div>
+        {!forecast ? (
+          <p className="muted">Für {plan.year} ist kein Mieter dieser Wohnung erfasst.</p>
+        ) : (
+          <>
+            <div className="kpi-row">
+              <Kpi
+                label={`erwartete Kosten ${tenant!.name}`}
+                value={formatEUR(forecast.expectedShare)}
+                hint={`${formatEUR(forecast.expectedYear)} pro Jahr × ${forecast.days}/${forecast.yearDays} Tage${forecast.uncertainShare ? `, zzgl. bis zu ${formatEUR(forecast.uncertainShare)} ungeklärt` : ""}`}
+              />
+              <Kpi label="Vorauszahlungen im Zeitraum" value={formatEUR(forecast.prepayments)} hint={tenant!.lease ? "laut Mietvertrag" : "laut Mietverlauf"} />
+              <Kpi
+                label="voraussichtliches Ergebnis"
+                value={formatEUR(Math.abs(forecast.result))}
+                hint={forecast.result > 0 ? "Nachzahlung (Prognose)" : "Guthaben (Prognose)"}
+              />
+              <Kpi label="kostendeckende Vorauszahlung / Monat" value={formatEUR(Math.ceil(forecast.expectedYear / 12))} hint="Anpassung nur nach einer Abrechnung (§ 560 Abs. 4 BGB)" />
+            </div>
+            <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
+              {tenant!.lease ? "Nur im Mietvertrag vereinbarte Kosten, nach dem vertraglichen Umlagemaßstab. " : "Ohne erfassten Mietvertrag: alle als umlagefähig bewerteten Kosten. "}
+              Zeitanteilig gerechnet – Heizkosten hängen tatsächlich vom Verbrauch in der Mietzeit ab.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="card">

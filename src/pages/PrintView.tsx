@@ -133,19 +133,24 @@ function Letter({
   };
   const keyText = (item: ItemShare) => {
     const { annual, position } = sourceOf(item.costId);
+    const { cost } = sourceOf(item.costId);
+    if (item.key === "direct" && cost?.basis) return cost.basis.label;
     if (item.key === "direct" && annual) return position?.wegBasis?.unit === "cbm" ? "Verbrauch" : position?.wegKey ?? "WEG-Schlüssel";
     return KEY_LABELS[item.key];
   };
   // Bei Wohnungseigentum: Gesamtkosten der WEG und Anteil nach WEG-Schlüssel ausweisen, soweit bekannt
   const wegTotal = (item: ItemShare) => {
-    const { position } = sourceOf(item.costId);
-    return position?.totalAmount ? formatEUR(position.totalAmount) : null;
+    const { cost, position } = sourceOf(item.costId);
+    const total = cost?.totalAmount ?? position?.totalAmount;
+    return total ? formatEUR(total) : null;
   };
   const wegShare = (item: ItemShare) => {
     const { annual, position } = sourceOf(item.costId);
     if (!annual) return null;
     const time = r.days < periodDays ? ` × ${r.days}/${periodDays} Tage` : "";
     if (position?.heating === "total") return { total: "–", share: `lt. Heizkosten\u00ADabrechnung${time}` };
+    const own = sourceOf(item.costId).cost?.basis;
+    if (own) return { total: `${formatBasis(own.total)} ${own.unit}`, share: `${formatBasis(own.share)} ${own.unit}${time}` };
     // Nur die im Dokument ausgewiesene Schlüsselbasis zeigen – nichts aus dem Namen des Schlüssels ableiten
     if (position?.wegBasis) {
       const b = position.wegBasis;
@@ -244,7 +249,13 @@ function Letter({
         </p>
       )}
 
-      {fromWeg && (
+      {fromWeg && r.tenant.lease?.allocationRule === "consumption_mea" ? (
+        <p className="small">
+          Die Kosten sind gemäß Mietvertrag{r.tenant.lease.reference ? ` (${r.tenant.lease.reference})` : ""} nach dem erfassten Verbrauch, im Übrigen nach dem
+          Verhältnis der Miteigentumsanteile verteilt; die Heizkosten nach der Heizkostenverordnung. Grundlage ist die Jahresabrechnung der Hausverwaltung. Nicht
+          umlagefähige Kosten wie Verwaltung, Instandhaltung und die Erhaltungsrücklage sind nicht enthalten.
+        </p>
+      ) : fromWeg && (
         <p className="small">
           Die Kosten sind nach den in der Wohnungseigentümergemeinschaft geltenden Verteilungsschlüsseln auf Ihre Wohnung verteilt (§ 556a Abs. 3 BGB);
           Grundlage ist die Jahresabrechnung der Hausverwaltung{property.wegManager ? ` (${property.wegManager})` : ""}. Nicht umlagefähige Kosten wie Verwaltung,
@@ -288,11 +299,17 @@ function Letter({
       </div>
       {r.balance > 0 && (
         <p>
-          Bitte überweisen Sie den Nachzahlungsbetrag innerhalb von 30 Tagen nach Erhalt dieser Abrechnung
+          Bitte überweisen Sie den Nachzahlungsbetrag {r.tenant.lease?.paymentTerm === "endOfNextMonth" ? "bis zum Ende des auf den Zugang dieser Abrechnung folgenden Kalendermonats" : "innerhalb von 30 Tagen nach Erhalt dieser Abrechnung"}
           {landlord.iban ? <> auf das Konto IBAN {landlord.iban}</> : null} unter Angabe des Verwendungszwecks „Betriebskosten {statement.periodStart.slice(0, 4)}, {r.unit.name}“.
         </p>
       )}
-      {r.balance < 0 && <p>Das Guthaben überweisen wir Ihnen in den nächsten Tagen auf Ihr bekanntes Konto.</p>}
+      {r.balance < 0 && (
+        <p>
+          Das Guthaben überweisen wir Ihnen{" "}
+          {r.tenant.lease?.paymentTerm === "endOfNextMonth" ? "bis zum Ende des auf den Zugang dieser Abrechnung folgenden Kalendermonats" : "in den nächsten Tagen"} auf Ihr
+          bekanntes Konto.
+        </p>
+      )}
       {suggestAdjustment && stillLiving && newMonthly !== currentMonthly && (
         <p>
           Auf Grundlage dieser Abrechnung werden Ihre monatlichen Vorauszahlungen auf die Betriebs- und Heizkosten gemäß § 560 Abs. 4 BGB ab dem

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { calculateStatement } from "./calc";
 import { classifyLabel } from "./classify";
-import { we09Annual2024, we09Plan2025, we09Property, we09Statement, we09Tenant } from "./fixtures/we09";
+import { we09Annual2024, we09Lease, we09Plan2025, we09Property, we09Statement, we09Tenant, we09TrialTenant2024 } from "./fixtures/we09";
 import { emptyData } from "./model";
+import { agreementFor } from "./lease";
 import { changedSinceRelease, releaseStatement, statementReadiness } from "./release";
 import type { AppData, WegAnnualStatement } from "./types";
 import {
@@ -11,6 +12,7 @@ import {
   checkPlan,
   comparePlanActual,
   explainDrivers,
+  forecastForTenant,
   includedInHeatingBill,
   summarizeAnnual,
   summarizePlan,
@@ -30,7 +32,7 @@ function appData(partial: Partial<AppData> = {}): AppData {
     ...emptyData(),
     settings: { ...emptyData().settings, landlord: { name: "Vermieter", address: "Straße 1\n12345 Ort", iban: "" } },
     properties: [we09Property()],
-    tenants: [we09Tenant()],
+    tenants: [we09TrialTenant2024(), we09Tenant()],
     ...partial,
   };
 }
@@ -125,7 +127,7 @@ describe("Testfall 4 – Trennung Vermieter/Mieter", () => {
     const st = we09Statement(2024);
     const { items } = transferToStatement(a, st);
     expect(items.some((i) => Math.round(i.amount * 100) === 11065 || /deckung|r(ü|ue)cklage/i.test(i.label))).toBe(false);
-    const result = calculateStatement({ ...st, costs: items }, we09Property(), [we09Tenant()]);
+    const result = calculateStatement({ ...st, costs: items }, we09Property(), [we09TrialTenant2024()]);
     expect(result.tenants[0].totalCosts).toBe(1056.35);
   });
 
@@ -154,13 +156,13 @@ describe("Testfall 5 – fehlende Informationen", () => {
     const annual = reviewedAnnual();
     const resolved = { ...annual, positions: annual.positions.map((p) => (p.label === "Wartung Dach" ? { ...p, classification: "non_allocable" as const, origin: "user" as const, reviewed: true } : p)) };
     const data = appData({ wegAnnuals: [resolved] });
-    const st = { ...we09Statement(2024), prepaymentsConfirmed: { "we09-t": true }, prepaymentOverrides: { "we09-t": 960 } };
+    const st = { ...we09Statement(2024), prepaymentsConfirmed: { "we09-probe": true }, prepaymentOverrides: { "we09-probe": 960 } };
     const withCosts = { ...st, costs: transferToStatement(resolved, st).items };
     expect(statementReadiness(withCosts, data).blockers).toEqual([]);
     const released = releaseStatement(withCosts, data);
     expect(released.status).toBe("released");
     expect(changedSinceRelease(released, data)).toBe(false);
-    const changedData = { ...data, tenants: [{ ...we09Tenant(), persons: 2 }] };
+    const changedData = { ...data, tenants: [{ ...we09TrialTenant2024(), persons: 2 }, we09Tenant()] };
     expect(changedSinceRelease(released, changedData)).toBe(true);
   });
 });
@@ -254,5 +256,86 @@ describe("Abgleich mit den Originaldokumenten", () => {
     expect(f).toHaveLength(1);
     expect(f[0].level).toBe("info");
     expect(f[0].text).toContain("160,32");
+  });
+});
+
+describe("Mietvertrag WE 09 (§ 3, § 6)", () => {
+  // Probelauf: Ist-Daten 2024, als hätte der Mietvertrag schon gegolten
+  const tenantWithLease = () => ({ ...we09TrialTenant2024(), lease: we09Lease() });
+  const context = () => ({ property: we09Property(), tenants: [tenantWithLease()] });
+
+  it("erkennt vereinbarte und nicht vereinbarte Kostenarten", () => {
+    const lease = we09Lease();
+    expect(agreementFor("Gebäudeversicherung", 13, lease).status).toBe("agreed");
+    expect(agreementFor("Winterdienst", 8, lease).status).toBe("agreed");
+    expect(agreementFor("Wartung Dach", 17, lease)).toMatchObject({ status: "partial" });
+    expect(agreementFor("Wartung Dach", 17, lease).text).toContain("Dachrinnenreinigung");
+    expect(agreementFor("Dachrinnenreinigung", 17, lease).status).toBe("agreed");
+    expect(agreementFor("Wartung Rauchwarnmelder", 17, lease).status).toBe("not_agreed");
+    expect(agreementFor("Sonstige Ausgaben", null, lease).status).toBe("not_agreed");
+    expect(agreementFor("Kabelfernsehen", 15, { ...lease, agreedCategories: [1, 2, 3] }).status).toBe("not_agreed");
+  });
+
+  it("legt nach Verbrauch bzw. Miteigentumsanteil um statt nach dem Gruppenschlüssel der WEG", () => {
+    const { items } = transferToStatement(reviewedAnnual(), we09Statement(2024), context());
+    const amount = (label: string) => items.find((i) => i.label === label)?.amount;
+    // Treppenhausreinigung: WEG-Gruppenschlüssel 126,10 €, laut Vertrag 2.125,10 € × 49/1.000
+    expect(amount("Treppenhausreinigung")).toBe(104.13);
+    expect(items.find((i) => i.label === "Treppenhausreinigung")?.note).toContain("126,10");
+    // Verbrauch (cbm) und MEA bleiben, Heizkosten folgen der Heizkostenabrechnung
+    expect(amount("Wasser")).toBe(60.23);
+    expect(amount("Gebäudeversicherung")).toBe(180.75);
+    expect(amount("Heiz- und Warmwasserkosten")).toBe(417.86);
+    // Einzelkosten von WE 06 werden nicht per MEA auf WE 09 verteilt
+    expect(amount("Treppenhausreinigung WE 06")).toBeUndefined();
+    expect(items.reduce((a, i) => a + Math.round(i.amount * 100), 0)).toBe(103438);
+  });
+
+  it("übernimmt die Dachwartung nur nach ausdrücklicher Bestätigung und weist auf den Vertragswortlaut hin", () => {
+    const a = reviewedAnnual();
+    const skipped = transferToStatement(a, we09Statement(2024), context()).skipped.find((s) => s.position.label === "Wartung Dach");
+    expect(skipped?.reason).toBe("Prüfung erforderlich");
+    const confirmed = { ...a, positions: a.positions.map((p) => (p.label === "Wartung Dach" ? { ...p, classification: "allocable" as const, origin: "user" as const, reviewed: true } : p)) };
+    const st = we09Statement(2024);
+    const { items } = transferToStatement(confirmed, st, context());
+    expect(items.some((i) => i.label === "Wartung Dach")).toBe(true);
+    const data = appData({ tenants: [tenantWithLease()], wegAnnuals: [confirmed] });
+    const r = statementReadiness({ ...st, costs: items }, data);
+    expect(r.hints.some((h) => h.includes("Dachrinnenreinigung"))).toBe(true);
+    expect(r.hints.some((h) => h.includes("Grundsteuer"))).toBe(true);
+  });
+
+  it("schließt nicht vereinbarte sonstige Betriebskosten aus", () => {
+    const a = reviewedAnnual();
+    const extra = {
+      ...a,
+      managementCostsActual: null,
+      positions: [...a.positions, { ...a.positions[0], id: "rw", label: "Wartung Rauchwarnmelder", amount: 12.5, category: 17, classification: "allocable" as const, origin: "user" as const, reviewed: true }],
+    };
+    const { items, skipped } = transferToStatement(extra, we09Statement(2024), context());
+    expect(items.some((i) => i.label === "Wartung Rauchwarnmelder")).toBe(false);
+    expect(skipped.find((s) => s.position.id === "rw")?.reason).toContain("nicht umlegbar");
+  });
+
+  it("2025: Mietbeginn 01.08., Vorauszahlungen 5 × 130 €, Leerstand Jan–Jul trägt der Vermieter", () => {
+    const st = { ...we09Statement(2025), costs: [{ id: "x", category: 13, label: "Gebäudeversicherung", amount: 196, key: "direct" as const, directUnitId: "we09-u" }] };
+    const r = calculateStatement(st, we09Property(), [we09Tenant()]);
+    expect(r.tenants[0].days).toBe(153);
+    expect(r.tenants[0].prepayments).toBe(650);
+    expect(r.tenants[0].totalCosts).toBe(82.16);
+    expect(r.landlordShare).toBe(113.84);
+  });
+});
+
+describe("Prognose 2025 für den Mieter WE 09", () => {
+  it("rechnet zeitanteilig ab Mietbeginn und nach dem Vertragsschlüssel", () => {
+    const f = forecastForTenant(we09Plan2025(), we09Property(), we09Tenant())!;
+    // Plan umlagefähig 1.228,20 € − Dachwartung (ungeklärt) 19,60 € − Wohnungsstationen nach WE 56,36 € + nach MEA 30,38 €
+    expect(f.expectedYear).toBe(1182.62);
+    expect(f.uncertainYear).toBe(19.6);
+    expect(f.days).toBe(153);
+    expect(f.prepayments).toBe(650);
+    expect(f.expectedShare).toBe(495.73);
+    expect(f.result).toBe(-154.27);
   });
 });

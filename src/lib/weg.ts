@@ -1,7 +1,10 @@
 import { categoryLabel } from "./betrkv";
 import { CLASSIFICATION_LABELS } from "./classify";
 import { fromCents, sumCents, toCents } from "./money";
-import type { CostItem, EconomicPlan, HeatingBill, LedgerPosition, Statement, WegAnnualStatement } from "./types";
+import { calcPrepayments } from "./calc";
+import { daysInclusive, intersect } from "./dates";
+import { agreementFor, amountByLease, leaseForUnit } from "./lease";
+import type { CostItem, EconomicPlan, HeatingBill, LedgerPosition, Property, Statement, Tenant, WegAnnualStatement } from "./types";
 import { uid } from "./model";
 
 /*
@@ -323,6 +326,60 @@ export function explainDrivers(rows: ComparisonRow[], limit = 3): string[] {
     });
 }
 
+/* ---------- Prognose für einen Mieter ---------- */
+
+export interface TenantForecast {
+  /** erwartete umlagefähige Kosten der Wohnung im Planjahr (vereinbart, nach Vertragsschlüssel) */
+  expectedYear: number;
+  /** ungeklärte Positionen (Prüfung erforderlich oder nur ähnlich vereinbart) */
+  uncertainYear: number;
+  days: number;
+  yearDays: number;
+  /** zeitanteilig auf die Mietzeit im Planjahr */
+  expectedShare: number;
+  uncertainShare: number;
+  prepayments: number;
+  /** > 0: voraussichtliche Nachzahlung, < 0: voraussichtliches Guthaben */
+  result: number;
+}
+
+/**
+ * Prognose der Mieterabrechnung aus einem Wirtschaftsplan – nur zur Orientierung.
+ * Zeitanteilige Umlage; Heizkosten fallen in Wirklichkeit nach Verbrauch an (Heizperiode).
+ */
+export function forecastForTenant(plan: EconomicPlan, property: Property, tenant: Tenant): TenantForecast | null {
+  const unit = property.units.find((u) => u.id === plan.unitId);
+  if (!unit) return null;
+  const yearStart = `${plan.year}-01-01`;
+  const yearEnd = `${plan.year}-12-31`;
+  const range = intersect(tenant.moveIn, tenant.moveOut ?? yearEnd, yearStart, yearEnd);
+  if (!range) return null;
+  let expected = 0;
+  let uncertain = 0;
+  for (const p of plan.positions) {
+    if (p.classification === "non_allocable") continue;
+    const agreement = tenant.lease ? agreementFor(p.label, p.category, tenant.lease) : null;
+    if (agreement?.status === "not_agreed") continue;
+    const cents = toCents(amountByLease(p, tenant.lease, unit, property).amount);
+    if (p.classification === "review" || agreement?.status === "partial") uncertain += cents;
+    else expected += cents;
+  }
+  const days = daysInclusive(range.start, range.end);
+  const yearDays = daysInclusive(yearStart, yearEnd);
+  const prepayments = calcPrepayments(tenant, range.start, range.end).total;
+  const expectedShare = Math.round((expected * days) / yearDays) / 100;
+  return {
+    expectedYear: fromCents(expected),
+    uncertainYear: fromCents(uncertain),
+    days,
+    yearDays,
+    expectedShare,
+    uncertainShare: Math.round((uncertain * days) / yearDays) / 100,
+    prepayments,
+    result: fromCents(toCents(expectedShare) - toCents(prepayments)),
+  };
+}
+
 /* ---------- Übernahme in die Mieterabrechnung ---------- */
 
 export interface TransferResult {
@@ -337,7 +394,11 @@ export interface TransferResult {
  * - bereits übernommene Positionen werden nicht doppelt angelegt
  * - Umlage direkt auf die Wohnung: Der Anteil laut Einzelabrechnung folgt dem WEG-Schlüssel (§ 556a Abs. 3 BGB)
  */
-export function transferToStatement(annual: WegAnnualStatement | EconomicPlan, statement: Statement): TransferResult {
+export function transferToStatement(
+  annual: WegAnnualStatement | EconomicPlan,
+  statement: Statement,
+  context?: { property: Property; tenants: Tenant[] },
+): TransferResult {
   if (annual.kind !== "annual") {
     // Harte Sperre: Ein Wirtschaftsplan ist eine Prognose und nie Grundlage einer Mieterabrechnung
     throw new Error("Ein Wirtschaftsplan kann nicht in eine Mieterabrechnung übernommen werden.");
@@ -346,6 +407,9 @@ export function transferToStatement(annual: WegAnnualStatement | EconomicPlan, s
   const hasHeatingTotal = annual.positions.some((p) => p.heating === "total") || annual.heating !== null;
   const items: CostItem[] = [];
   const skipped: TransferResult["skipped"] = [];
+  // Mietvertrag des Mieters dieser Wohnung: vereinbarte Kostenarten und Umlagemaßstab
+  const unit = context?.property.units.find((u) => u.id === annual.unitId);
+  const lease = context ? leaseForUnit(annual.unitId, statement, context.tenants)?.lease : undefined;
   for (const p of annual.positions) {
     if (already.has(p.id)) skipped.push({ position: p, reason: "bereits übernommen" });
     else if (p.classification !== "allocable") skipped.push({ position: p, reason: CLASSIFICATION_LABELS[p.classification] });
@@ -363,20 +427,38 @@ export function transferToStatement(annual: WegAnnualStatement | EconomicPlan, s
               ? "möglicherweise in den Heizkosten enthalten – bitte selbst bewerten"
               : "Heizungsposition – bitte selbst bewerten",
       });
+    // Anteil 0 laut WEG (z. B. Einzelkosten einer anderen Wohnung) bleibt 0 – auch bei anderem Vertragsschlüssel
     else if (p.amount === 0) skipped.push({ position: p, reason: "Betrag 0" });
     else {
+      const agreement = lease ? agreementFor(p.label, p.category, lease) : null;
+      if (agreement?.status === "not_agreed") {
+        skipped.push({ position: p, reason: `laut Mietvertrag nicht umlegbar: ${agreement.text}` });
+        continue;
+      }
+      if (agreement?.status === "partial" && p.origin !== "user") {
+        skipped.push({ position: p, reason: `Mietvertrag prüfen: ${agreement.text}` });
+        continue;
+      }
+      const byLease = unit && context ? amountByLease(p, lease, unit, context.property) : { amount: p.amount };
+      if (byLease.amount === 0) {
+        skipped.push({ position: p, reason: "Betrag 0" });
+        continue;
+      }
       const h = p.heating === "total" ? annual.heating : null;
       items.push({
         id: uid(),
         category: p.category ?? 17,
         label: p.label,
-        amount: p.amount,
+        amount: byLease.amount,
         key: "direct",
         directUnitId: annual.unitId,
-        note: p.reason,
+        note: [p.reason, byLease.note, "problem" in byLease ? byLease.problem : undefined].filter(Boolean).join(" "),
         source: p.provenance?.document ?? `WEG-Jahresabrechnung ${annual.year}`,
         sourceAnnualId: annual.id,
         sourcePositionId: p.id,
+        sourceAmount: p.amount,
+        ...("totalAmount" in byLease && byLease.totalAmount !== undefined ? { totalAmount: byLease.totalAmount } : {}),
+        ...("basis" in byLease && byLease.basis ? { basis: byLease.basis } : {}),
         ...(h && h.co2Applicable && h.co2Cost && h.co2Kg ? { co2Cost: h.co2Cost, co2Kg: h.co2Kg } : {}),
       });
     }

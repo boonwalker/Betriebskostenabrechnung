@@ -115,7 +115,7 @@ Grundregeln:
 | 1.6 Entwurf/Freigabe, Freigabe-Prüfung, eingefrorene Freigabe, Entwurfs-Wasserzeichen | ✅ | `src/lib/release.ts`, `StatementEditor.tsx`, `PrintView.tsx` |
 | 1.7 WEG-Kennzahlen und MEA | ✅ | `PropertyEditor.tsx` |
 | 1.8 KI-Import Jahresabrechnung/Wirtschaftsplan mit Seite, Zeile, Konfidenz | ✅ (mit simulierter API-Antwort getestet) | `extract.ts`, `wegImport.ts`, `WegImport.tsx` |
-| 1.9 Mietvertrag: vereinbarte Kostenarten | offen | – |
+| 1.9 Mietvertrag: vereinbarte Kostenarten, Umlagemaßstab, Fälligkeit | ✅ | `src/lib/lease.ts`, `Tenants.tsx` |
 | 1.10 Vorauszahlungen bestätigen | ✅ einfache Form (Gesamtbetrag + Bestätigung) | `StatementEditor.tsx` |
 | 2.1–2.4 Wirtschaftsplan, Plan-Ist, Prognose, Vorauszahlungsempfehlung | ✅ Grundversion | `weg.ts`, `WegEditor.tsx` |
 
@@ -149,10 +149,21 @@ Die Testwerte des Briefings wurden mit den Originalen nachgerechnet und stimmen.
 
 Die Fotos enthalten Namen anderer Eigentümer und Kontonummern. Sie werden deshalb nicht im Repository gespeichert, der Testfall enthält nur die Beträge der WE 09.
 
+### Mietvertrag WE 09 (Stand 10.07.2025)
+
+| Vertragsinhalt | Folge in der App |
+|---|---|
+| Mietbeginn 01.08.2025, 1 Person | 2025 werden 153 von 365 Tagen abgerechnet. Den Rest des Jahres (Leerstand) trägt der Vermieter. Für die Heizkosten ist eine Zwischenablesung zum 01.08.2025 nötig (§ 9b HeizkostenV). |
+| 480 € Nettokaltmiete + 20 € Stellplatz + 130 € Vorauszahlung für Betriebs- und Heizkosten (§ 3 Nr. 1) | Mietverlauf mit Zuschlag. Vorauszahlungen 2025: 5 × 130 € = 650 €. |
+| § 2 Nr. 1–16 BetrKV vereinbart. Sonstige Betriebskosten namentlich: Schnee/Eis, Dachrinnenreinigung, Blitzschutz/Steigleitungen, Lüftung, Trockenleitungen, Elektro, Trinkwasserprüfung, Treppenhausreinigung (§ 3 Nr. 2–3) | Jede Position wird gegen die Vereinbarung geprüft. „Wartung Dach“ ist nur ähnlich vereinbart (Dachrinnenreinigung) und wird nur nach Bestätigung übernommen. Nicht vereinbarte sonstige Kosten werden ausgeschlossen. |
+| Maßstab: Grundsteuer laut Einzelbescheid, sonst Verbrauch, im Übrigen Miteigentumsanteile (§ 6 Nr. 3) | Abweichende Vereinbarung im Sinne von § 556a Abs. 3 BGB. Positionen mit anderem WEG-Schlüssel werden auf MEA umgerechnet (Treppenhausreinigung 2024: 104,13 € statt 126,10 €). Heizkosten folgen der Heizkostenabrechnung. |
+| Nachzahlung/Guthaben fällig bis Ende des Folgemonats (§ 6 Nr. 4) | Formulierung im Anschreiben. |
+
+Prognose 2025 aus dem Wirtschaftsplan: erwartete Kosten 495,73 € (1.182,62 € × 153/365) gegenüber 650 € Vorauszahlungen. Voraussichtlich also rund 154 € Guthaben, ohne Heizkosten-Saisoneffekt und ohne Grundsteuer.
+
 ### Nächste Schritte
 
-1. **Mietvertrag (1.9):** vereinbarte Kostenarten und abweichende Umlageschlüssel je Mietverhältnis. Nicht vereinbarte Positionen werden nicht übernommen.
-2. **Zahlungseingänge (1.10 ausbauen):** monatliche Ist-Vorauszahlungen statt nur eines Jahresbetrags, optional per Kontoauszug-Import.
-3. **Dokumentenarchiv:** Originale in IndexedDB speichern und Herkunftsangaben mit der Seite im Dokument verlinken.
-4. **KI-Auslese mit echten Unterlagen testen:** die WE-09-Fotos 2024 mit API-Schlüssel einlesen und das Ergebnis mit `src/lib/fixtures/we09.ts` vergleichen (Genauigkeit messen).
-5. **Grundsteuer und separat abgerechnete Kosten** (z. B. Müll) für Eigentumswohnungen: eigene Belege neben der WEG-Abrechnung.
+1. **Zahlungseingänge (1.10 ausbauen):** monatliche Ist-Vorauszahlungen statt nur eines Jahresbetrags, optional per Kontoauszug-Import.
+2. **Dokumentenarchiv:** Originale in IndexedDB speichern und Herkunftsangaben mit der Seite im Dokument verlinken.
+3. **KI-Auslese mit echten Unterlagen testen:** die WE-09-Fotos 2024 mit API-Schlüssel einlesen und das Ergebnis mit `src/lib/fixtures/we09.ts` vergleichen (Genauigkeit messen).
+4. **Grundsteuer und separat abgerechnete Kosten** (z. B. Müll) für Eigentumswohnungen: eigene Belege neben der WEG-Abrechnung.

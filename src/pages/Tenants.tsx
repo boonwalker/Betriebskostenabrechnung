@@ -3,7 +3,9 @@ import { Modal, NumberInput, type PageProps } from "../components/ui";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR } from "../lib/format";
 import { newRentPeriod, rentAt, uid, warmRent } from "../lib/model";
-import type { AppData, RentPeriod, Tenant } from "../lib/types";
+import { COST_CATEGORIES } from "../lib/betrkv";
+import { ALLOCATION_RULE_LABELS, defaultLease } from "../lib/lease";
+import type { AppData, LeaseAgreement, RentPeriod, Tenant } from "../lib/types";
 
 export function newTenant(data: AppData, propertyId?: string, unitId?: string): Tenant | null {
   const p = data.properties.find((x) => x.id === propertyId) ?? data.properties[0];
@@ -214,6 +216,7 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
                 <tr>
                   <th>gültig ab</th>
                   <th className="num">Kaltmiete</th>
+                  <th className="num">Zuschlag</th>
                   <th className="num">BK-Vorausz.</th>
                   <th className="num">HK-Vorausz.</th>
                   <th className="num">Warmmiete</th>
@@ -227,6 +230,9 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
                       <input type="date" value={r.validFrom} disabled={i === 0} onChange={(e) => e.target.value && setRent(r.id, { validFrom: e.target.value })} aria-label="gültig ab" />
                     </td>
                     <td style={{ minWidth: 95 }}><NumberInput value={r.coldRent} onChange={(coldRent) => setRent(r.id, { coldRent })} ariaLabel="Kaltmiete" /></td>
+                    <td style={{ minWidth: 85 }} title="z. B. Stellplatz – Teil der Miete, keine Betriebskosten">
+                      <NumberInput value={r.surcharge ?? 0} onChange={(surcharge) => setRent(r.id, { surcharge })} ariaLabel="Zuschlag" />
+                    </td>
                     <td style={{ minWidth: 95 }}><NumberInput value={r.prepaymentOperating} onChange={(v) => setRent(r.id, { prepaymentOperating: v })} ariaLabel="Betriebskostenvorauszahlung" /></td>
                     <td style={{ minWidth: 95 }}><NumberInput value={r.prepaymentHeating} onChange={(v) => setRent(r.id, { prepaymentHeating: v })} ariaLabel="Heizkostenvorauszahlung" /></td>
                     <td className="num">{formatEUR(warmRent(r))}</td>
@@ -254,6 +260,8 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
           </p>
         </div>
 
+        <LeaseSection lease={t.lease ?? null} onChange={(lease) => setT({ ...t, lease })} />
+
         <label className="field">
           Anschrift für die Abrechnung (leer = Anschrift der Wohnung; nach Auszug die neue Anschrift)
           <textarea rows={2} value={t.mailingAddress} onChange={(e) => setT({ ...t, mailingAddress: e.target.value })} />
@@ -265,5 +273,86 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** Betriebskostenvereinbarung aus dem Mietvertrag */
+function LeaseSection({ lease, onChange }: { lease: LeaseAgreement | null; onChange: (l: LeaseAgreement | null) => void }) {
+  if (!lease) {
+    return (
+      <div className="card" style={{ marginBottom: 0 }}>
+        <h3 style={{ marginBottom: 2 }}>Betriebskosten laut Mietvertrag</h3>
+        <p className="hint">
+          Umgelegt werden darf nur, was im Mietvertrag vereinbart ist. Sonstige Betriebskosten (§ 2 Nr. 17 BetrKV) müssen namentlich genannt sein.
+        </p>
+        <button onClick={() => onChange(defaultLease())}>Vereinbarung erfassen</button>
+      </div>
+    );
+  }
+  const set = (patch: Partial<LeaseAgreement>) => onChange({ ...lease, ...patch });
+  const toggle = (no: number) =>
+    set({ agreedCategories: lease.agreedCategories.includes(no) ? lease.agreedCategories.filter((x) => x !== no) : [...lease.agreedCategories, no].sort((a, b) => a - b) });
+  return (
+    <div className="card stack" style={{ marginBottom: 0 }}>
+      <div className="row">
+        <h3 style={{ margin: 0 }}>Betriebskosten laut Mietvertrag</h3>
+        <span className="spacer" />
+        <button className="ghost" onClick={() => confirm("Vereinbarung entfernen?") && onChange(null)}>Entfernen</button>
+      </div>
+      <label className="field">
+        Fundstelle
+        <input value={lease.reference} onChange={(e) => set({ reference: e.target.value })} placeholder="z. B. Mietvertrag vom 10.07.2025, § 3 und § 6" />
+      </label>
+      <div>
+        <div className="row small muted" style={{ marginBottom: 4 }}>
+          Vereinbarte Kostenarten (§ 2 Nr. 1–16 BetrKV)
+          <span className="spacer" />
+          <button className="ghost small" onClick={() => set({ agreedCategories: Array.from({ length: 16 }, (_, i) => i + 1) })}>alle</button>
+          <button className="ghost small" onClick={() => set({ agreedCategories: [] })}>keine</button>
+        </div>
+        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 4 }}>
+          {COST_CATEGORIES.filter((c) => c.no <= 16).map((c) => (
+            <label key={c.no} className="row small" style={{ flexWrap: "nowrap" }}>
+              <input type="checkbox" checked={lease.agreedCategories.includes(c.no)} onChange={() => toggle(c.no)} />
+              {c.no}. {c.label}
+            </label>
+          ))}
+        </div>
+      </div>
+      <label className="field">
+        Sonstige Betriebskosten (§ 2 Nr. 17 BetrKV), je Zeile eine – nur was namentlich im Vertrag steht
+        <textarea
+          rows={4}
+          value={lease.otherCosts.join("\n")}
+          onChange={(e) => set({ otherCosts: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) })}
+          placeholder={"z. B.\nDachrinnenreinigung\nWartung der Rauchwarnmelder"}
+        />
+      </label>
+      <div className="grid">
+        <label className="field">
+          Umlagemaßstab
+          <select value={lease.allocationRule} onChange={(e) => set({ allocationRule: e.target.value as LeaseAgreement["allocationRule"] })}>
+            {Object.entries(ALLOCATION_RULE_LABELS).map(([k, l]) => (
+              <option key={k} value={k}>{l}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          Fälligkeit Nachzahlung/Guthaben
+          <select value={lease.paymentTerm} onChange={(e) => set({ paymentTerm: e.target.value as LeaseAgreement["paymentTerm"] })}>
+            <option value="30days">innerhalb von 30 Tagen nach Zugang</option>
+            <option value="endOfNextMonth">bis Ende des Folgemonats nach Zugang</option>
+          </select>
+        </label>
+      </div>
+      <label className="row small">
+        <input type="checkbox" checked={lease.propertyTaxIndividual} onChange={(e) => set({ propertyTaxIndividual: e.target.checked })} />
+        Grundsteuer in Höhe des Bescheids für die Wohnung
+      </label>
+      <p className="hint" style={{ margin: 0 }}>
+        Bei „Verbrauch, im Übrigen Miteigentumsanteile“ rechnet die App Positionen, die die WEG nach einem anderen Schlüssel verteilt (z. B. Wohneinheiten oder
+        Gruppen), auf Miteigentumsanteile um. Heizkosten folgen immer der Heizkostenabrechnung.
+      </p>
+    </div>
   );
 }

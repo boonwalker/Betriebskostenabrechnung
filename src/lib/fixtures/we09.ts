@@ -1,6 +1,6 @@
 import { applyRules } from "../classify";
 import { newProperty, newStatement } from "../model";
-import type { EconomicPlan, LedgerPosition, Property, Statement, Tenant, WegAnnualStatement } from "../types";
+import type { EconomicPlan, LeaseAgreement, LedgerPosition, Property, Statement, Tenant, WegAnnualStatement } from "../types";
 
 /**
  * Realer Testfall „WE 09“ (anonymisiert: ohne Anschrift, Verwaltung und Namen).
@@ -153,7 +153,10 @@ export function we09Plan2025(): EconomicPlan {
   };
 }
 
-/** Mieter mit bekannten Daten; Kaltmiete und Vorauszahlungen sind noch nicht bekannt (0) */
+/**
+ * Mieter laut Mietvertrag (Stand 10.07.2025): Beginn 01.08.2025, 1 Person, 480 € Nettokaltmiete,
+ * 20 € Stellplatz, 130 € Vorauszahlung gemeinsam für Betriebs- und Heizkosten (§ 3, § 6 Mietvertrag).
+ */
 export function we09Tenant(): Tenant {
   return {
     id: "we09-t",
@@ -161,11 +164,45 @@ export function we09Tenant(): Tenant {
     mailingAddress: "",
     propertyId: "we09-p",
     unitId: "we09-u",
-    moveIn: "2023-01-01",
+    moveIn: "2025-08-01",
     moveOut: null,
     persons: 1,
     deposit: 0,
-    rentHistory: [{ id: "we09-r", validFrom: "2023-01-01", coldRent: 0, prepaymentOperating: 0, prepaymentHeating: 0 }],
+    rentHistory: [{ id: "we09-r", validFrom: "2025-08-01", coldRent: 480, surcharge: 20, prepaymentOperating: 130, prepaymentHeating: 0 }],
+    lease: we09Lease(),
+  };
+}
+
+export function we09Lease(): LeaseAgreement {
+  return {
+    reference: "Mietvertrag Stand 10.07.2025, § 3 Nr. 2–3, § 6 Nr. 3–4",
+    agreedCategories: Array.from({ length: 16 }, (_, i) => i + 1),
+    otherCosts: [
+      "Schnee- und Eisbeseitigung",
+      "Dachrinnenreinigung",
+      "Wartung von Blitzschutzanlagen/Steigleitungen",
+      "Wartung der Be- und Entlüftungsanlagen",
+      "Inspektion der Trockenleitungen",
+      "Wartung der Elektroinstallationen",
+      "Trinkwasserversorgung (jährliche Prüfung der Anlage)",
+      "Reinigung des Treppenhauses",
+    ],
+    allocationRule: "consumption_mea",
+    propertyTaxIndividual: true,
+    paymentTerm: "endOfNextMonth",
+  };
+}
+
+/** Fiktiver ganzjähriger Mieter für den Probelauf mit den Ist-Daten 2024 (ohne Mietvertrag) */
+export function we09TrialTenant2024(): Tenant {
+  return {
+    ...we09Tenant(),
+    id: "we09-probe",
+    name: "Probelauf-Mieter",
+    moveIn: "2024-01-01",
+    moveOut: "2024-12-31",
+    rentHistory: [{ id: "we09-probe-r", validFrom: "2024-01-01", coldRent: 480, surcharge: 20, prepaymentOperating: 130, prepaymentHeating: 0 }],
+    lease: null,
   };
 }
 

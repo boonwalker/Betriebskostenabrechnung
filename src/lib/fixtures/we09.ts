@@ -44,6 +44,10 @@ export function we09Property(): Property {
     wegUnitsCount: 11,
     wegMeaTotal: 1000,
     wegAreaTotal: 900,
+    // Schenkung der Eltern, Übergang von Nutzen und Lasten am 01.08.2025; Startwert vorerst der Grundsteuerwert
+    acquisitionType: "gift",
+    purchaseDate: "2025-08-01",
+    purchasePrice: 112200,
     // Feststellungsbescheid vom 05.09.2025 (Zurechnung ab 01.01.2026); Hebesatz Wohngrundstücke Heinsberg ab 2026
     propertyTaxValue: 112200,
     propertyTaxRate: 559,

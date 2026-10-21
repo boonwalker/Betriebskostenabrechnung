@@ -95,3 +95,24 @@ describe("Vermögensentwicklung", () => {
     expect(wealthSeries({ ...etw, purchaseDate: null }, data(), "2025-01-01")).toBeNull();
   });
 });
+
+describe("WE 09: Schenkung zum 01.08.2025", () => {
+  it("rechnet ab August 2025 mit Miete, Vorauszahlungen, Hausgeld laut Plan und Grundsteuer", async () => {
+    const f = await import("./fixtures/we09");
+    const p = f.we09Property();
+    const d: AppData = {
+      ...emptyData(),
+      properties: [p],
+      tenants: [f.we09PreviousTenant(), f.we09Tenant()],
+      economicPlans: [f.we09Plan2025()],
+    };
+    const s = wealthSeries(p, d, "2025-12-31")!;
+    expect(s.points[0].date).toBe("2025-08-31");
+    expect(s.points).toHaveLength(5);
+    // 480 + 20 Stellplatz + 130 Vorauszahlung − 160,31 Hausgeld − 194,43/12 Grundsteuer (Schätzung)
+    expect(s.points[0].cashflow).toBeCloseTo(630 - 160.31 - 194.43 / 12, 1);
+    // Schenkung: kein eigenes Geld eingesetzt außer Nebenkosten; Startwert = Grundsteuerwert
+    expect(s.baseline).toBe(112200);
+    expect(s.current.value).toBe(112200);
+  });
+});

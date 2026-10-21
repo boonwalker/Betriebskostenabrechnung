@@ -184,6 +184,10 @@ Der Feststellungsbescheid des Finanzamts vom 05.09.2025 nennt einen Grundsteuerw
 
 Prognose 2025 aus dem Wirtschaftsplan: erwartete Kosten 495,73 € (1.182,62 € × 153/365) gegenüber 650 € Vorauszahlungen. Voraussichtlich also rund 154 € Guthaben, ohne Heizkosten-Saisoneffekt und ohne Grundsteuer.
 
+### Erwerb WE 09
+
+Schenkung der Eltern mit Übergang von Nutzen und Lasten am 01.08.2025 – zeitgleich mit dem Mieterwechsel. Die Vermögensentwicklung beginnt im August 2025; Startwert ist vorerst der Grundsteuerwert (112.200 €) als Untergrenze. Für die Abschreibung fehlen noch die Anschaffungskosten der Eltern und deren Erwerbsjahr (§ 11d EStDV), z. B. aus deren Anlage V oder Kaufvertrag.
+
 ### Nächste Schritte
 
 1. **Zahlungseingänge (1.10 ausbauen):** monatliche Ist-Vorauszahlungen statt nur eines Jahresbetrags, optional per Kontoauszug-Import.

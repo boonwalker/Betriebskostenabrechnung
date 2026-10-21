@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { calculateStatement } from "./calc";
 import { classifyLabel } from "./classify";
-import { we09Annual2024, we09Lease, we09Plan2025, we09Property, we09Statement, we09Tenant, we09TrialTenant2024 } from "./fixtures/we09";
+import {
+  we09Annual2024,
+  we09Lease,
+  we09Plan2025,
+  we09PreviousTenant,
+  we09Property,
+  we09Statement,
+  we09Tenant,
+  we09TrialTenant2024,
+} from "./fixtures/we09";
+import { degreeDays } from "./degreeDays";
 import { emptyData } from "./model";
 import { agreementFor } from "./lease";
 import { changedSinceRelease, releaseStatement, statementReadiness } from "./release";
-import type { AppData, WegAnnualStatement } from "./types";
+import type { AppData, Statement, WegAnnualStatement } from "./types";
 import {
   checkAnnual,
   checkKeyMath,
@@ -277,18 +287,25 @@ describe("Mietvertrag WE 09 (§ 3, § 6)", () => {
   });
 
   it("legt nach Verbrauch bzw. Miteigentumsanteil um statt nach dem Gruppenschlüssel der WEG", () => {
-    const { items } = transferToStatement(reviewedAnnual(), we09Statement(2024), context());
-    const amount = (label: string) => items.find((i) => i.label === label)?.amount;
-    // Treppenhausreinigung: WEG-Gruppenschlüssel 126,10 €, laut Vertrag 2.125,10 € × 49/1.000
-    expect(amount("Treppenhausreinigung")).toBe(104.13);
-    expect(items.find((i) => i.label === "Treppenhausreinigung")?.note).toContain("126,10");
-    // Verbrauch (cbm) und MEA bleiben, Heizkosten folgen der Heizkostenabrechnung
-    expect(amount("Wasser")).toBe(60.23);
-    expect(amount("Gebäudeversicherung")).toBe(180.75);
-    expect(amount("Heiz- und Warmwasserkosten")).toBe(417.86);
+    const st = we09Statement(2024);
+    const { items } = transferToStatement(reviewedAnnual(), st, context());
+    const item = (label: string) => items.find((i) => i.label === label);
+    // Position behält den Anteil laut WEG (das zahlt der Vermieter) …
+    expect(item("Treppenhausreinigung")?.amount).toBe(126.1);
+    // … der Mieter trägt laut Vertrag 2.125,10 € × 49/1.000
+    expect(item("Treppenhausreinigung")?.leaseAmounts?.consumption_mea?.amount).toBe(104.13);
+    expect(item("Treppenhausreinigung")?.note).toContain("126,10");
     // Einzelkosten von WE 06 werden nicht per MEA auf WE 09 verteilt
-    expect(amount("Treppenhausreinigung WE 06")).toBeUndefined();
-    expect(items.reduce((a, i) => a + Math.round(i.amount * 100), 0)).toBe(103438);
+    expect(item("Treppenhausreinigung WE 06")).toBeUndefined();
+    const r = calculateStatement({ ...st, costs: items }, we09Property(), [tenantWithLease()]);
+    const share = (label: string) => r.tenants[0].items.find((i) => i.label === label)?.amount;
+    expect(share("Treppenhausreinigung")).toBe(104.13);
+    // Verbrauch (cbm) und MEA bleiben, Heizkosten folgen der Heizkostenabrechnung
+    expect(share("Wasser")).toBe(60.23);
+    expect(share("Gebäudeversicherung")).toBe(180.75);
+    expect(share("Heiz- und Warmwasserkosten")).toBe(417.86);
+    expect(r.tenants[0].totalCosts).toBe(1034.38);
+    expect(r.landlordItems).toEqual([expect.objectContaining({ label: "Treppenhausreinigung", amount: 21.97 })]);
   });
 
   it("übernimmt die Dachwartung nur nach ausdrücklicher Bestätigung und weist auf den Vertragswortlaut hin", () => {
@@ -337,5 +354,60 @@ describe("Prognose 2025 für den Mieter WE 09", () => {
     expect(f.prepayments).toBe(650);
     expect(f.expectedShare).toBe(495.73);
     expect(f.result).toBe(-154.27);
+  });
+});
+
+describe("2025: Mieterwechsel am 31.07./01.08.", () => {
+  // Stellvertretend die Ist-Daten 2024 als Kosten 2025 – die echten Werte kommen mit der Jahresabrechnung 2025
+  const annual2025 = (): WegAnnualStatement => {
+    const a = reviewedAnnual();
+    return { ...a, id: "we09-a2025-probe", year: 2025 };
+  };
+  const tenants = () => [we09PreviousTenant(), we09Tenant()];
+  const statementWithCosts = (extra: Partial<Statement> = {}) => {
+    const st = { ...we09Statement(2025), ...extra };
+    return { ...st, costs: transferToStatement(annual2025(), st, { property: we09Property(), tenants: tenants() }).items };
+  };
+
+  it("teilt die Heizkosten ohne Zwischenablesung nach § 9b Abs. 2 HeizkostenV", () => {
+    expect(degreeDays("2025-01-01", "2025-07-31")).toBeCloseTo(596.667, 2);
+    expect(degreeDays("2025-08-01", "2025-12-31")).toBeCloseTo(403.333, 2);
+    const r = calculateStatement(statementWithCosts(), we09Property(), tenants());
+    const [before, after] = r.tenants;
+    const heat = (t: typeof before) => t.items.filter((i) => i.label.startsWith("Heiz- und Warmwasserkosten"));
+    expect(heat(before).map((i) => i.amount)).toEqual([66.54, 135.14, 7.36, 37.25]);
+    expect(heat(after).map((i) => i.amount)).toEqual([48.02, 91.35, 5.32, 26.88]);
+    const sum = [...heat(before), ...heat(after)].reduce((a, i) => a + Math.round(i.amount * 100), 0);
+    expect(sum).toBe(41786);
+    expect(r.warnings.some((w) => w.includes("Gradtagzahlen"))).toBe(true);
+  });
+
+  it("nutzt die Zwischenablesung, wenn sie für beide Mieter vorliegt", () => {
+    const st = statementWithCosts({ interimReadings: { "we09-vormieterin": { heating: 1200, water: 250 }, "we09-t": { heating: 385, water: 198.8 } } });
+    const r = calculateStatement(st, we09Property(), tenants());
+    const consumption = (i: number) => r.tenants[i].items.find((x) => x.label.includes("Verbrauchskosten Heizung"))!;
+    expect(consumption(0).key).toBe("reading");
+    expect(consumption(0).amount).toBe(171.48);
+    expect(consumption(1).amount).toBe(55.01);
+  });
+
+  it("verteilt je Mieter nach dem eigenen Vertrag; die Differenz trägt der Vermieter", () => {
+    const r = calculateStatement(statementWithCosts(), we09Property(), tenants());
+    const stairs = (i: number) => r.tenants[i].items.find((x) => x.label === "Treppenhausreinigung")!.amount;
+    // Vormieterin ohne erfassten Vertrag: WEG-Schlüssel 126,10 € × 212/365
+    expect(stairs(0)).toBe(73.24);
+    // neuer Mieter laut § 6 Nr. 3: 104,13 € × 153/365
+    expect(stairs(1)).toBe(43.65);
+    expect(r.landlordItems.find((x) => x.label === "Treppenhausreinigung")?.amount).toBe(9.21);
+    // Vorauszahlungen: neuer Mieter 5 × 130 €
+    expect(r.tenants[1].prepayments).toBe(650);
+  });
+
+  it("verlangt Vermieterangaben je Mietverhältnis und keine erfundenen Vorauszahlungen", () => {
+    const data = appData({ tenants: tenants(), wegAnnuals: [annual2025()] });
+    const st = { ...statementWithCosts(), prepaymentsConfirmed: { "we09-vormieterin": true, "we09-t": true } };
+    const r = statementReadiness(st, data);
+    expect(r.blockers.some((b) => b.includes("Vermieters von Vormieterin"))).toBe(true);
+    expect(r.hints.some((h) => h.includes("keine Vorauszahlungen hinterlegt"))).toBe(true);
   });
 });

@@ -123,6 +123,8 @@ export interface Tenant {
   rentHistory: RentPeriod[];
   /** Betriebskostenvereinbarung; null = noch nicht erfasst */
   lease?: LeaseAgreement | null;
+  /** Vermieter dieses Mietverhältnisses, falls abweichend von den Einstellungen (z. B. Voreigentümer) */
+  landlord?: Landlord | null;
 }
 
 /**
@@ -171,6 +173,14 @@ export interface CostItem {
   /** Gesamtkosten und Schlüsselbasis, nach denen der Betrag ermittelt wurde (für das Anschreiben) */
   totalAmount?: number;
   basis?: { total: number; share: number; unit: string; label: string };
+  /**
+   * Anteil der Wohnung je Umlagemaßstab, wenn Mietverträge im Zeitraum verschiedene Maßstäbe
+   * vereinbaren. Jeder Mieter trägt seinen Anteil nach seinem Vertrag; die Differenz zum
+   * Anteil laut WEG (amount) trägt der Vermieter.
+   */
+  leaseAmounts?: Partial<Record<LeaseAllocationRule, { amount: number; basis?: { total: number; share: number; unit: string; label: string } }>>;
+  /** Bestandteile der Heizkostenabrechnung der Wohnung – für die Aufteilung beim Nutzerwechsel (§ 9b HeizkostenV) */
+  heatingParts?: { baseHeating: number; consumptionHeating: number; baseWater: number; consumptionWater: number };
 }
 
 export interface Statement {
@@ -183,6 +193,8 @@ export interface Statement {
   prepaymentOverrides: Record<string, number>;
   /** Vermieter hat die Vorauszahlungen des Mieters anhand der Zahlungseingänge bestätigt */
   prepaymentsConfirmed: Record<string, boolean>;
+  /** Verbrauch je Mieter laut Zwischenablesung beim Nutzerwechsel (kWh bzw. Einheiten) */
+  interimReadings?: Record<string, { heating: number | null; water: number | null }>;
   status: "draft" | "released";
   /** eingefrorener Stand bei Freigabe – spätere Änderungen an Daten ändern ihn nicht */
   release: StatementRelease | null;

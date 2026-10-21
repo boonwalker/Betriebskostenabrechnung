@@ -2,7 +2,9 @@ import { categoryLabel, isHeatingCategory } from "./betrkv";
 import { co2Stage } from "./co2";
 import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
 import { allocate, fromCents, sumEuro, toCents, type Cents } from "./money";
-import type { CostItem, ISODate, Property, Section35aKind, Statement, Tenant, Unit } from "./types";
+import { degreeDays } from "./degreeDays";
+import { agreementFor } from "./lease";
+import type { CostItem, ISODate, LeaseAllocationRule, Property, Section35aKind, Statement, Tenant, Unit } from "./types";
 
 /** Belegungsabschnitt einer Einheit: ein Mieter oder Leerstand (tenantId = null) */
 export interface Segment {
@@ -15,7 +17,16 @@ export interface Segment {
 }
 
 /** Schlüssel, nach dem eine (ggf. aufgeteilte) Position tatsächlich verteilt wird */
-export type DistributionKey = "area" | "persons" | "units" | "consumption" | "direct";
+export type DistributionKey =
+  | "area"
+  | "persons"
+  | "units"
+  | "consumption"
+  | "direct"
+  /** Heizkosten beim Nutzerwechsel (§ 9b HeizkostenV): nach Zeit, Gradtagzahlen oder Zwischenablesung */
+  | "time"
+  | "degreedays"
+  | "reading";
 
 export interface ItemShare {
   costId: string;
@@ -34,6 +45,16 @@ export interface ItemShare {
   laborKind?: Section35aKind;
   /** Anteil an den CO2-Kosten (Mieteranteil) */
   co2Amount: number;
+  /** gesetzt, wenn basisTotal/basisShare Rohwerte in dieser Einheit sind (z. B. ‰, Tage, kWh) */
+  basisUnit?: string;
+}
+
+/** Kosten, die beim Vermieter bleiben (außer Leerstand) */
+export interface LandlordItem {
+  costId: string;
+  label: string;
+  amount: number;
+  reason: string;
 }
 
 export interface Co2Result {
@@ -86,7 +107,9 @@ export interface StatementResult {
   tenants: TenantResult[];
   vacancies: VacancyResult[];
   co2: Co2Result[];
-  /** Kosten, die beim Vermieter verbleiben: Leerstand + Vermieteranteil CO2 */
+  /** weitere Kosten beim Vermieter: nicht vereinbarte Kosten, Differenz Vertragsschlüssel */
+  landlordItems: LandlordItem[];
+  /** Kosten, die beim Vermieter verbleiben: Leerstand + Vermieteranteil CO2 + landlordItems */
   landlordShare: number;
   warnings: string[];
   /** Spätester Zugang der Abrechnung beim Mieter (§ 556 Abs. 3 BGB) */
@@ -166,6 +189,9 @@ function weight(part: Part, seg: Segment, unit: Unit): number {
       return (part.item.consumption?.[unit.id] ?? 0) * seg.days;
     case "direct":
       return part.item.directUnitId === unit.id ? seg.days : 0;
+    default:
+      // time/degreedays/reading werden nur für Heizkosten beim Nutzerwechsel gesondert verteilt
+      return seg.days;
   }
 }
 
@@ -244,20 +270,133 @@ export function calculateStatement(statement: Statement, property: Property, all
   }
 
   const shares = new Map<Segment, ItemShare[]>(segments.map((s) => [s, []]));
+  const landlordItems: LandlordItem[] = [];
+  const tenantOf = (seg: Segment) => (seg.tenantId ? tenants.find((t) => t.id === seg.tenantId) : undefined);
+
   for (const item of statement.costs) {
     const itemDistributable = distributable.get(item.id)!;
     const landlordCo2 = toCents(co2.find((c) => c.costId === item.id)?.landlordAmount ?? 0);
     const tenantCo2 = toCents(item.co2Cost ?? 0) - landlordCo2;
+    const label = item.label || categoryLabel(item.category);
+    const unitSegs = item.key === "direct" ? segments.filter((s) => s.unitId === item.directUnitId) : [];
+    if (item.key === "heating" && Object.values(item.consumption ?? {}).every((v) => !v)) {
+      warnings.push(`„${item.label}“: Für die Heizkostenverteilung fehlen die Verbrauchswerte der Einheiten (§ 7 HeizkostenV).`);
+    }
+
+    // Mieter, mit denen diese Kostenart nicht vereinbart ist: Ihr Anteil bleibt beim Vermieter
+    const notAgreed = (seg: Segment) => {
+      const lease = tenantOf(seg)?.lease;
+      return !!lease && agreementFor(item.label, item.category, lease).status === "not_agreed";
+    };
+
+    /** verteilt Centbeträge auf Abschnitte und bucht nicht vereinbarte Anteile zum Vermieter */
+    const book = (
+      segs: Segment[],
+      amounts: Cents[],
+      labor: Cents[],
+      co2Shares: Cents[],
+      display: { label: string; key: DistributionKey; total: Cents; basisTotal: number; basis: number[]; basisUnit?: string },
+    ) => {
+      segs.forEach((seg, i) => {
+        if (amounts[i] !== 0 && notAgreed(seg)) {
+          landlordItems.push({ costId: item.id, label: display.label, amount: fromCents(amounts[i]), reason: `mit ${tenantOf(seg)!.name} nicht vereinbart` });
+          return;
+        }
+        shares.get(seg)!.push({
+          costId: item.id,
+          category: item.category,
+          label: display.label,
+          key: display.key,
+          total: fromCents(display.total),
+          basisTotal: display.basisTotal,
+          basisShare: display.basis[i],
+          basisUnit: display.basisUnit,
+          amount: fromCents(amounts[i]),
+          laborAmount: fromCents(labor[i]),
+          laborKind: item.laborKind,
+          co2Amount: fromCents(co2Shares[i]),
+        });
+      });
+    };
+
+    // 1. Heizkosten einer Wohnung mit Nutzerwechsel: Bestandteile nach § 9b HeizkostenV
+    if (item.key === "direct" && item.heatingParts && unitSegs.length > 1) {
+      const hp = item.heatingParts;
+      const parts = allocate(itemDistributable, [hp.baseHeating, hp.consumptionHeating, hp.baseWater, hp.consumptionWater].map(toCents));
+      const readings = statement.interimReadings ?? {};
+      // Ablesung gilt nur, wenn für jeden Mieter der Wohnung ein Wert > 0 vorliegt (leeres Feld = keine Ablesung)
+      const complete = (k: "heating" | "water") => unitSegs.every((sg) => sg.tenantId && (readings[sg.tenantId]?.[k] ?? 0) > 0);
+      const days = unitSegs.map((sg) => sg.days);
+      const heatW = complete("heating") ? unitSegs.map((sg) => readings[sg.tenantId!]!.heating!) : unitSegs.map((sg) => degreeDays(sg.start, sg.end));
+      const waterW = complete("water") ? unitSegs.map((sg) => readings[sg.tenantId!]!.water!) : days;
+      const defs: { name: string; amount: Cents; w: number[]; key: DistributionKey; unit: string }[] = [
+        { name: "Grundkosten Heizung (nach Zeit)", amount: parts[0], w: days, key: "time", unit: "Tage" },
+        complete("heating")
+          ? { name: "Verbrauchskosten Heizung (Zwischenablesung)", amount: parts[1], w: heatW, key: "reading", unit: "Einh." }
+          : { name: "Verbrauchskosten Heizung (Gradtagzahlen, § 9b HeizkostenV)", amount: parts[1], w: heatW, key: "degreedays", unit: "‰" },
+        { name: "Grundkosten Warmwasser (nach Zeit)", amount: parts[2], w: days, key: "time", unit: "Tage" },
+        complete("water")
+          ? { name: "Verbrauchskosten Warmwasser (Zwischenablesung)", amount: parts[3], w: waterW, key: "reading", unit: "Einh." }
+          : { name: "Verbrauchskosten Warmwasser (nach Zeit, § 9b HeizkostenV)", amount: parts[3], w: waterW, key: "time", unit: "Tage" },
+      ];
+      if (!complete("heating")) {
+        warnings.push(
+          `„${label}“: Ohne Zwischenablesung beim Nutzerwechsel werden die Verbrauchskosten Heizung nach Gradtagzahlen, Warmwasser nach Zeit aufgeteilt (§ 9b Abs. 2 HeizkostenV). Liegt eine Ablesung vor, trage die Werte bei den Mietern ein.`,
+        );
+      }
+      const laborParts = allocate(toCents(item.laborCost ?? 0), parts);
+      const co2Parts = allocate(tenantCo2, parts);
+      defs.forEach((d, k) => {
+        const total = d.w.reduce((a, b) => a + b, 0);
+        if (total === 0) return;
+        book(unitSegs, allocate(d.amount, d.w), allocate(laborParts[k], d.w), allocate(co2Parts[k], d.w), {
+          label: `${label} – ${d.name}`,
+          key: d.key,
+          total: d.amount,
+          basisTotal: total,
+          basis: d.w,
+          basisUnit: d.unit,
+        });
+      });
+      continue;
+    }
+
+    // 2. Anteil der Wohnung, der je Mietvertrag nach unterschiedlichem Maßstab ermittelt wird
+    if (item.key === "direct" && item.leaseAmounts && unitSegs.length > 0) {
+      const days = unitSegs.map((sg) => sg.days);
+      const byRule = new Map<string, Cents[]>();
+      const amountFor = (rule: LeaseAllocationRule) => {
+        if (!byRule.has(rule)) {
+          const la = item.leaseAmounts![rule];
+          byRule.set(rule, allocate(la ? toCents(la.amount) : itemDistributable, days));
+        }
+        return byRule.get(rule)!;
+      };
+      const amounts = unitSegs.map((sg, i) => amountFor(tenantOf(sg)?.lease?.allocationRule ?? "weg")[i]);
+      const diff = itemDistributable - amounts.reduce((a, b) => a + b, 0);
+      if (diff !== 0) landlordItems.push({ costId: item.id, label, amount: fromCents(diff), reason: "Differenz zwischen WEG-Schlüssel und Umlagemaßstab des Mietvertrags" });
+      book(unitSegs, amounts, allocate(toCents(item.laborCost ?? 0), days), allocate(tenantCo2, days), {
+        label,
+        key: "direct",
+        total: itemDistributable,
+        basisTotal: periodDays,
+        basis: days,
+        basisUnit: undefined,
+      });
+      if (isHeatingCategory(item.category) && unitSegs.length > 1) {
+        warnings.push(`„${label}“: Bei Nutzerwechsel ist eine Zwischenablesung nötig (§ 9b HeizkostenV). Ohne sie wird hier nur zeitanteilig aufgeteilt.`);
+      }
+      continue;
+    }
+
+    // 3. Regelfall: Verteilung nach Schlüssel über alle Abschnitte des Objekts
     if (isHeatingCategory(item.category) && (item.key === "direct" || item.key === "area")) {
       const unitsWithChange = units.filter((u) => segments.filter((s) => s.unitId === u.id).length > 1);
-      if (unitsWithChange.length) {
+      if (unitsWithChange.length && !(item.key === "direct" && unitSegs.length <= 1)) {
         warnings.push(
           `„${item.label}“: Bei Mieterwechsel oder Leerstand in ${unitsWithChange.map((u) => u.name).join(", ")} ist eine Zwischenablesung nötig (§ 9b HeizkostenV). Ohne sie wird hier nur zeitanteilig aufgeteilt.`,
         );
       }
-    }
-    if (item.key === "heating" && Object.values(item.consumption ?? {}).every((v) => !v)) {
-      warnings.push(`„${item.label}“: Für die Heizkostenverteilung fehlen die Verbrauchswerte der Einheiten (§ 7 HeizkostenV).`);
     }
     for (const part of splitItem(item, itemDistributable, toCents(item.laborCost ?? 0), tenantCo2)) {
       const weights = segments.map((s) => weight(part, s, unitById.get(s.unitId)!));
@@ -267,23 +406,12 @@ export function calculateStatement(statement: Statement, property: Property, all
         continue;
       }
       // Cent-genaue Verteilung: Die Anteile ergeben exakt den Betrag der Position
-      const amounts = allocate(part.amount, weights);
-      const labor = allocate(part.labor, weights);
-      const co2Shares = allocate(part.co2, weights);
-      segments.forEach((seg, i) => {
-        shares.get(seg)!.push({
-          costId: item.id,
-          category: item.category,
-          label: part.label,
-          key: part.key,
-          total: fromCents(part.amount),
-          basisTotal: totalWeight / periodDays,
-          basisShare: weights[i] / periodDays,
-          amount: fromCents(amounts[i]),
-          laborAmount: fromCents(labor[i]),
-          laborKind: item.laborKind,
-          co2Amount: fromCents(co2Shares[i]),
-        });
+      book(segments, allocate(part.amount, weights), allocate(part.labor, weights), allocate(part.co2, weights), {
+        label: part.label,
+        key: part.key,
+        total: part.amount,
+        basisTotal: totalWeight / periodDays,
+        basis: weights.map((w) => w / periodDays),
       });
     }
   }
@@ -319,13 +447,15 @@ export function calculateStatement(statement: Statement, property: Property, all
 
   const vacancyTotal = sumEuro(vacancies.map((v) => v.amount));
   const co2Total = sumEuro(co2.map((c) => c.landlordAmount));
+  const extraTotal = sumEuro(landlordItems.map((x) => x.amount));
   return {
     periodDays,
     totalCosts: sumEuro(statement.costs.map((c) => c.amount)),
     tenants: tenantResults,
     vacancies,
     co2,
-    landlordShare: sumEuro([vacancyTotal, co2Total]),
+    landlordItems,
+    landlordShare: sumEuro([vacancyTotal, co2Total, extraTotal]),
     warnings,
     deadline: addMonths(periodEnd, 12),
   };

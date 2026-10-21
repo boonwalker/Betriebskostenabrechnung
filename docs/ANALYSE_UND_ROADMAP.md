@@ -117,6 +117,7 @@ Grundregeln:
 | 1.8 KI-Import Jahresabrechnung/Wirtschaftsplan mit Seite, Zeile, Konfidenz | ✅ (mit simulierter API-Antwort getestet) | `extract.ts`, `wegImport.ts`, `WegImport.tsx` |
 | 1.9 Mietvertrag: vereinbarte Kostenarten, Umlagemaßstab, Fälligkeit | ✅ | `src/lib/lease.ts`, `Tenants.tsx` |
 | 1.10 Vorauszahlungen bestätigen | ✅ einfache Form (Gesamtbetrag + Bestätigung) | `StatementEditor.tsx` |
+| Mieterwechsel: Vermieter je Mieter, Vertragsmaßstab je Mieter, § 9b HeizkostenV | ✅ | `calc.ts`, `degreeDays.ts`, `Tenants.tsx` |
 | 2.1–2.4 Wirtschaftsplan, Plan-Ist, Prognose, Vorauszahlungsempfehlung | ✅ Grundversion | `weg.ts`, `WegEditor.tsx` |
 
 ### Akzeptanztests (automatisiert, `src/lib/we09.test.ts`)
@@ -159,11 +160,23 @@ Die Fotos enthalten Namen anderer Eigentümer und Kontonummern. Sie werden desha
 | Maßstab: Grundsteuer laut Einzelbescheid, sonst Verbrauch, im Übrigen Miteigentumsanteile (§ 6 Nr. 3) | Abweichende Vereinbarung im Sinne von § 556a Abs. 3 BGB. Positionen mit anderem WEG-Schlüssel werden auf MEA umgerechnet (Treppenhausreinigung 2024: 104,13 € statt 126,10 €). Heizkosten folgen der Heizkostenabrechnung. |
 | Nachzahlung/Guthaben fällig bis Ende des Folgemonats (§ 6 Nr. 4) | Formulierung im Anschreiben. |
 
+### 2025: Mieterwechsel zum 01.08.2025
+
+Die Wohnung war durchgehend vermietet: an die Vormieterin bis 31.07.2025 (Vermieter: Vater des Eigentümers), ab 01.08.2025 an den neuen Mieter. Das bedeutet für die App:
+
+| Anforderung | Umsetzung |
+|---|---|
+| Zwei Anschreiben mit unterschiedlichem Vermieter | Vermieter je Mietverhältnis (`Tenant.landlord`). Ohne Angaben ist keine Freigabe möglich. |
+| Verschiedene Umlagemaßstäbe im selben Jahr | Kostenpositionen behalten den Anteil laut WEG und zusätzlich den Anteil je Vertragsmaßstab (`leaseAmounts`). Jeder Mieter trägt seinen Anteil nach seinem Vertrag; die Differenz trägt der Vermieter. |
+| Nicht vereinbarte Kosten bei nur einem Mieter | Der Anteil dieses Mieters bleibt beim Vermieter und wird nicht auf den anderen umgelegt. |
+| Heizkosten beim Nutzerwechsel (§ 9b HeizkostenV) | Bestandteile aus der Heizkostenabrechnung: Grundkosten nach Zeit. Verbrauch nach Zwischenablesung, sonst Heizung nach Gradtagzahlen (Jan–Jul 596,7 ‰, Aug–Dez 403,3 ‰) und Warmwasser nach Zeit. |
+
 Prognose 2025 aus dem Wirtschaftsplan: erwartete Kosten 495,73 € (1.182,62 € × 153/365) gegenüber 650 € Vorauszahlungen. Voraussichtlich also rund 154 € Guthaben, ohne Heizkosten-Saisoneffekt und ohne Grundsteuer.
 
 ### Nächste Schritte
 
-1. **Zahlungseingänge (1.10 ausbauen):** monatliche Ist-Vorauszahlungen statt nur eines Jahresbetrags, optional per Kontoauszug-Import.
-2. **Dokumentenarchiv:** Originale in IndexedDB speichern und Herkunftsangaben mit der Seite im Dokument verlinken.
-3. **KI-Auslese mit echten Unterlagen testen:** die WE-09-Fotos 2024 mit API-Schlüssel einlesen und das Ergebnis mit `src/lib/fixtures/we09.ts` vergleichen (Genauigkeit messen).
-4. **Grundsteuer und separat abgerechnete Kosten** (z. B. Müll) für Eigentumswohnungen: eigene Belege neben der WEG-Abrechnung.
+1. **Freigabe je Mietverhältnis:** Eine Abrechnung mit zwei Mietern lässt sich bisher nur gemeinsam freigeben. Fehlen Angaben zur Vormieterin, hält das auch das Anschreiben an den neuen Mieter auf.
+2. **Zahlungseingänge (1.10 ausbauen):** monatliche Ist-Vorauszahlungen statt nur eines Jahresbetrags, optional per Kontoauszug-Import.
+3. **Dokumentenarchiv:** Originale in IndexedDB speichern und Herkunftsangaben mit der Seite im Dokument verlinken.
+4. **KI-Auslese mit echten Unterlagen testen:** die WE-09-Fotos 2024 mit API-Schlüssel einlesen und das Ergebnis mit `src/lib/fixtures/we09.ts` vergleichen (Genauigkeit messen).
+5. **Grundsteuer und separat abgerechnete Kosten** (z. B. Müll) für Eigentumswohnungen: eigene Belege neben der WEG-Abrechnung.

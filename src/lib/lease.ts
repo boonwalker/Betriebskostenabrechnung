@@ -110,9 +110,7 @@ export function amountByLease(p: LedgerPosition, lease: LeaseAgreement | null | 
   };
 }
 
-/** Mietvertrag, der für die Wohnung im Abrechnungszeitraum maßgeblich ist (jüngster Mieter mit Vereinbarung) */
-export function leaseForUnit(unitId: string, statement: Statement, tenants: Tenant[]): Tenant | undefined {
-  return tenants
-    .filter((t) => t.unitId === unitId && t.moveIn <= statement.periodEnd && (!t.moveOut || t.moveOut >= statement.periodStart) && t.lease)
-    .sort((a, b) => b.moveIn.localeCompare(a.moveIn))[0];
+/** Mieter der Wohnung im Abrechnungszeitraum */
+export function tenantsInPeriod(unitId: string, statement: Statement, tenants: Tenant[]): Tenant[] {
+  return tenants.filter((t) => t.unitId === unitId && t.moveIn <= statement.periodEnd && (!t.moveOut || t.moveOut >= statement.periodStart));
 }

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { NumberInput, type PageProps } from "../components/ui";
 import { demoData } from "../lib/demo";
-import { we09Annual2024, we09Plan2025, we09Property, we09Tenant } from "../lib/fixtures/we09";
+import { we09Annual2024, we09Plan2025, we09PreviousTenant, we09Property, we09Tenant } from "../lib/fixtures/we09";
 import { emptyData, exportData, parseBackup } from "../lib/store";
 import type { AppData, Landlord } from "../lib/types";
 
@@ -139,7 +139,7 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
               update((d) => ({
                 ...d,
                 properties: [...d.properties, we09Property()],
-                tenants: [...d.tenants, we09Tenant()],
+                tenants: [...d.tenants, we09PreviousTenant(), we09Tenant()],
                 wegAnnuals: [...d.wegAnnuals, we09Annual2024()],
                 economicPlans: [...d.economicPlans, we09Plan2025()],
               }));

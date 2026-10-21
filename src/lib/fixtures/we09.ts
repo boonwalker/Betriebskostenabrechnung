@@ -193,6 +193,29 @@ export function we09Lease(): LeaseAgreement {
   };
 }
 
+/**
+ * Vormieterin bis 31.07.2025 (Vermieter: Vater des Eigentümers). Bekannt ist nur: Mietende 31.07.2025,
+ * Kaltmiete „etwa 50 € weniger“. Vorauszahlungen, Vertrag und Vermieterdaten fehlen und werden
+ * von der App abgefragt – nichts davon ist hier erfunden.
+ */
+export function we09PreviousTenant(): Tenant {
+  return {
+    id: "we09-vormieterin",
+    name: "Vormieterin",
+    mailingAddress: "",
+    propertyId: "we09-p",
+    unitId: "we09-u",
+    // tatsächlicher Einzug liegt früher und ist für 2025 ohne Bedeutung
+    moveIn: "2025-01-01",
+    moveOut: "2025-07-31",
+    persons: 1,
+    deposit: 0,
+    rentHistory: [{ id: "we09-vm-r", validFrom: "2025-01-01", coldRent: 430, surcharge: 0, prepaymentOperating: 0, prepaymentHeating: 0 }],
+    lease: null,
+    landlord: { name: "", address: "", iban: "" },
+  };
+}
+
 /** Fiktiver ganzjähriger Mieter für den Probelauf mit den Ist-Daten 2024 (ohne Mietvertrag) */
 export function we09TrialTenant2024(): Tenant {
   return {

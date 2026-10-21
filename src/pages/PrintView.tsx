@@ -5,9 +5,13 @@ import { calculateStatement, type Co2Result, type DistributionKey, type ItemShar
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
 import { rentAt } from "../lib/model";
+import { landlordFor } from "../lib/release";
 import type { AppData, Property, Statement } from "../lib/types";
 
 const BASIS_UNIT: Record<DistributionKey, string> = {
+  time: "Tage",
+  degreedays: "‰",
+  reading: "Einh.",
   area: "m²",
   persons: "Pers.",
   units: "WE",
@@ -89,7 +93,10 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
 
 const formatBasis = (n: number) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(n);
 
+const RAW_KEY_LABELS: Partial<Record<DistributionKey, string>> = { time: "Zeit", degreedays: "Gradtagzahlen", reading: "Zwischenablesung" };
+
 function shareText(item: ItemShare, r: TenantResult, periodDays: number): string {
+  if (item.basisUnit) return `${formatBasis(item.basisShare)} ${item.basisUnit}`;
   if (item.key === "direct") return r.days < periodDays ? `${r.days}/${periodDays} Tage` : "100 %";
   const raw = (item.basisShare * periodDays) / r.days;
   const base = `${formatNum(raw)} ${BASIS_UNIT[item.key]}`;
@@ -115,7 +122,8 @@ function Letter({
   suggestAdjustment: boolean;
   draft: boolean;
 }) {
-  const { landlord } = data.settings;
+  const landlord = landlordFor(r.tenant, data);
+  const rule = r.tenant.lease?.allocationRule ?? "weg";
   const address = r.tenant.mailingAddress.trim() || `${r.unit.name}\n${property.address.replace(/,\s*/g, "\n")}`;
   const stillLiving = !r.tenant.moveOut || r.tenant.moveOut > statement.periodEnd;
   // Hochrechnung auf 12 Monate, aufgerundet auf volle Euro
@@ -134,9 +142,10 @@ function Letter({
   const keyText = (item: ItemShare) => {
     const { annual, position } = sourceOf(item.costId);
     const { cost } = sourceOf(item.costId);
-    if (item.key === "direct" && cost?.basis) return cost.basis.label;
+    const ruleBasis = cost?.leaseAmounts?.[rule]?.basis ?? cost?.basis;
+    if (item.key === "direct" && ruleBasis) return ruleBasis.label;
     if (item.key === "direct" && annual) return position?.wegBasis?.unit === "cbm" ? "Verbrauch" : position?.wegKey ?? "WEG-Schlüssel";
-    return KEY_LABELS[item.key];
+    return KEY_LABELS[item.key as keyof typeof KEY_LABELS];
   };
   // Bei Wohnungseigentum: Gesamtkosten der WEG und Anteil nach WEG-Schlüssel ausweisen, soweit bekannt
   const wegTotal = (item: ItemShare) => {
@@ -149,7 +158,8 @@ function Letter({
     if (!annual) return null;
     const time = r.days < periodDays ? ` × ${r.days}/${periodDays} Tage` : "";
     if (position?.heating === "total") return { total: "–", share: `lt. Heizkosten\u00ADabrechnung${time}` };
-    const own = sourceOf(item.costId).cost?.basis;
+    const cost = sourceOf(item.costId).cost;
+    const own = cost?.leaseAmounts?.[rule]?.basis ?? cost?.basis;
     if (own) return { total: `${formatBasis(own.total)} ${own.unit}`, share: `${formatBasis(own.share)} ${own.unit}${time}` };
     // Nur die im Dokument ausgewiesene Schlüsselbasis zeigen – nichts aus dem Namen des Schlüssels ableiten
     if (position?.wegBasis) {
@@ -211,10 +221,14 @@ function Letter({
           {r.items.map((item) => (
             <tr key={item.costId + item.label}>
               <td>{item.label}</td>
-              <td className="num">{wegTotal(item) ?? formatEUR(item.total)}</td>
-              <td>{keyText(item)}</td>
-              <td className="num">{wegShare(item)?.total ?? (item.key === "direct" ? "–" : `${formatNum(item.basisTotal)} ${BASIS_UNIT[item.key]}`)}</td>
-              <td className="num">{wegShare(item)?.share ?? shareText(item, r, periodDays)}</td>
+              <td className="num">{item.basisUnit ? formatEUR(item.total) : wegTotal(item) ?? formatEUR(item.total)}</td>
+              <td>{item.basisUnit ? RAW_KEY_LABELS[item.key] ?? KEY_LABELS[item.key as keyof typeof KEY_LABELS] : keyText(item)}</td>
+              <td className="num">
+                {item.basisUnit
+                  ? `${formatBasis(item.basisTotal)} ${item.basisUnit}`
+                  : wegShare(item)?.total ?? (item.key === "direct" ? "–" : `${formatNum(item.basisTotal)} ${BASIS_UNIT[item.key]}`)}
+              </td>
+              <td className="num">{item.basisUnit ? shareText(item, r, periodDays) : wegShare(item)?.share ?? shareText(item, r, periodDays)}</td>
               <td className="num">{formatEUR(item.amount)}</td>
             </tr>
           ))}

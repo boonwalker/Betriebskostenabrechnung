@@ -43,6 +43,10 @@ export default function StatementEditor({ data, update, statementId }: PageProps
   };
 
   const readiness = statementReadiness(statement, data);
+  // Mieter einer Wohnung mit Nutzerwechsel, deren Heizkosten aus der Heizkostenabrechnung kommen
+  const readingTenants = result.tenants
+    .filter((r) => statement.costs.some((c) => c.heatingParts && c.directUnitId === r.unit.id) && result.tenants.filter((x) => x.unit.id === r.unit.id).length > 1)
+    .map((r) => r.tenant);
   const released = statement.status === "released";
   const changed = changedSinceRelease(statement, data);
   const year = Number(statement.periodStart.slice(0, 4));
@@ -279,7 +283,43 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         <p className="muted small" style={{ marginTop: 12 }}>
           Vergleiche die Vorauszahlungen mit deinen Kontoauszügen. Weicht der gezahlte Betrag vom Mietvertrag ab (z. B. Rückstände), trage ihn ein und bestätige ihn erst dann.
         </p>
-        {(result.vacancies.length > 0 || result.co2.length > 0) && (
+        {readingTenants.length > 1 && (
+          <div style={{ marginTop: 16 }}>
+            <h3>Zwischenablesung beim Nutzerwechsel</h3>
+            <p className="hint">
+              Verbrauch je Mieter laut Ablesung des Messdienstes (Heizung und Warmwasser, z. B. kWh oder Einheiten). Ohne vollständige Werte teilt die App nach § 9b Abs. 2
+              HeizkostenV: Verbrauch Heizung nach Gradtagzahlen, Warmwasser und Grundkosten nach Zeit.
+            </p>
+            <table className="compact" style={{ maxWidth: 560 }}>
+              <thead>
+                <tr>
+                  <th>Mieter</th>
+                  <th className="num">Heizung</th>
+                  <th className="num">Warmwasser</th>
+                </tr>
+              </thead>
+              <tbody>
+                {readingTenants.map((t) => {
+                  const rd = statement.interimReadings?.[t.id] ?? { heating: null, water: null };
+                  const setReading = (patch: Partial<typeof rd>) =>
+                    set({ interimReadings: { ...statement.interimReadings, [t.id]: { ...rd, ...patch } } });
+                  return (
+                    <tr key={t.id}>
+                      <td>{t.name}</td>
+                      <td>
+                        <NumberInput value={rd.heating ?? undefined} onChange={(v) => setReading({ heating: Number.isFinite(v) ? v : null })} ariaLabel={`Ablesung Heizung ${t.name}`} />
+                      </td>
+                      <td>
+                        <NumberInput value={rd.water ?? undefined} onChange={(v) => setReading({ water: Number.isFinite(v) ? v : null })} ariaLabel={`Ablesung Warmwasser ${t.name}`} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {(result.vacancies.length > 0 || result.co2.length > 0 || result.landlordItems.length > 0) && (
           <>
             <h3 style={{ marginTop: 16 }}>Trägst du als Vermieter</h3>
             <table className="compact">
@@ -289,6 +329,13 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                     <td>Leerstand {v.unit.name}</td>
                     <td>{formatDate(v.start)} – {formatDate(v.end)} ({v.days} Tage)</td>
                     <td className="num">{formatEUR(v.amount)}</td>
+                  </tr>
+                ))}
+                {result.landlordItems.map((x, i) => (
+                  <tr key={x.costId + i}>
+                    <td>{x.label}</td>
+                    <td>{x.reason}</td>
+                    <td className="num">{formatEUR(x.amount)}</td>
                   </tr>
                 ))}
                 {result.co2.map((c) => (

@@ -1,8 +1,11 @@
 import { calculateStatement, type StatementResult } from "./calc";
 import { formatDate } from "./dates";
-import type { AppData, Statement, StatementRelease } from "./types";
+import type { AppData, Statement, StatementRelease, Tenant } from "./types";
 import { agreementFor } from "./lease";
 import { checkAnnual } from "./weg";
+
+/** Vermieter eines Mietverhältnisses: abweichend am Mieter hinterlegt oder aus den Einstellungen */
+export const landlordFor = (tenant: Tenant, data: AppData) => tenant.landlord ?? data.settings.landlord;
 
 const eur = (n: number) => new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n);
 
@@ -73,7 +76,7 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
     for (const c of statement.costs) {
       if (c.key === "direct" && c.directUnitId !== t.unit.id) continue;
       const m = agreementFor(c.label, c.category, lease);
-      if (m.status === "not_agreed") blockers.push(`„${c.label}“ darf ${t.tenant.name} nicht berechnet werden: ${m.text}.`);
+      if (m.status === "not_agreed") hints.push(`„${c.label}“ wird ${t.tenant.name} nicht berechnet (${m.text}); der Anteil bleibt beim Vermieter.`);
       else if (m.status === "partial") hints.push(`„${c.label}“: ${m.text}. Bitte anhand der Rechnung bestätigen.`);
     }
     if (property.type === "etw" && lease.propertyTaxIndividual && lease.agreedCategories.includes(1) && !statement.costs.some((c) => c.category === 1)) {
@@ -92,7 +95,20 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
   }
   if (result.tenants.length === 0) hints.push("Im Abrechnungszeitraum gab es keinen Mieter.");
 
-  if (!data.settings.landlord.name || !data.settings.landlord.address) blockers.push("Name und Anschrift des Vermieters fehlen (Einstellungen).");
+  for (const t of result.tenants) {
+    const landlord = landlordFor(t.tenant, data);
+    if (!landlord.name || !landlord.address) {
+      blockers.push(
+        t.tenant.landlord
+          ? `Name und Anschrift des Vermieters von ${t.tenant.name} fehlen (beim Mieter unter „Vermieter dieses Mietverhältnisses“).`
+          : "Name und Anschrift des Vermieters fehlen (Einstellungen).",
+      );
+    }
+    if (!t.prepayments && statement.prepaymentOverrides[t.tenant.id] === undefined) {
+      hints.push(`Für ${t.tenant.name} sind keine Vorauszahlungen hinterlegt. Stimmt das?`);
+    }
+  }
+  for (const x of result.landlordItems) hints.push(`„${x.label}“: ${x.amount.toFixed(2).replace(".", ",")} € trägt der Vermieter (${x.reason}).`);
   for (const w of result.warnings) hints.push(w);
 
   return { blockers: [...new Set(blockers)], hints: [...new Set(hints)], ready: blockers.length === 0 };

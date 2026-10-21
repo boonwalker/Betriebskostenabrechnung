@@ -262,6 +262,34 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
 
         <LeaseSection lease={t.lease ?? null} onChange={(lease) => setT({ ...t, lease })} />
 
+        <div className="card stack" style={{ marginBottom: 0 }}>
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={!!t.landlord}
+              onChange={(e) => setT({ ...t, landlord: e.target.checked ? { name: "", address: "", iban: "" } : null })}
+            />
+            <strong>Anderer Vermieter für dieses Mietverhältnis</strong>
+            <span className="small muted">(z. B. Voreigentümer oder Familienmitglied – erscheint als Absender und Bankverbindung im Anschreiben)</span>
+          </label>
+          {t.landlord && (
+            <div className="grid">
+              <label className="field">
+                Name
+                <input value={t.landlord.name} onChange={(e) => setT({ ...t, landlord: { ...t.landlord!, name: e.target.value } })} />
+              </label>
+              <label className="field">
+                IBAN
+                <input value={t.landlord.iban} onChange={(e) => setT({ ...t, landlord: { ...t.landlord!, iban: e.target.value } })} />
+              </label>
+              <label className="field" style={{ gridColumn: "1 / -1" }}>
+                Anschrift
+                <textarea rows={2} value={t.landlord.address} onChange={(e) => setT({ ...t, landlord: { ...t.landlord!, address: e.target.value } })} />
+              </label>
+            </div>
+          )}
+        </div>
+
         <label className="field">
           Anschrift für die Abrechnung (leer = Anschrift der Wohnung; nach Auszug die neue Anschrift)
           <textarea rows={2} value={t.mailingAddress} onChange={(e) => setT({ ...t, mailingAddress: e.target.value })} />

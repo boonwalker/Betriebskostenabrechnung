@@ -3,8 +3,8 @@ import { CLASSIFICATION_LABELS } from "./classify";
 import { fromCents, sumCents, toCents } from "./money";
 import { calcPrepayments } from "./calc";
 import { daysInclusive, intersect } from "./dates";
-import { agreementFor, amountByLease, leaseForUnit } from "./lease";
-import type { CostItem, EconomicPlan, HeatingBill, LedgerPosition, Property, Statement, Tenant, WegAnnualStatement } from "./types";
+import { agreementFor, amountByLease, tenantsInPeriod } from "./lease";
+import type { CostItem, EconomicPlan, HeatingBill, LeaseAgreement, LedgerPosition, Property, Statement, Tenant, WegAnnualStatement } from "./types";
 import { uid } from "./model";
 
 /*
@@ -382,6 +382,17 @@ export function forecastForTenant(plan: EconomicPlan, property: Property, tenant
 
 /* ---------- Übernahme in die Mieterabrechnung ---------- */
 
+/** Grund-/Verbrauchskosten Heizung und Warmwasser aus der Heizkostenabrechnung, falls eindeutig zuzuordnen */
+function heatingPartsOf(h: HeatingBill): Pick<CostItem, "heatingParts"> {
+  const find = (re: RegExp) => h.components.find((c) => re.test(c.label.toLowerCase()))?.amount;
+  const baseHeating = find(/grund.*heiz/);
+  const consumptionHeating = find(/verbrauch.*heiz/);
+  const baseWater = find(/grund.*warm/);
+  const consumptionWater = find(/verbrauch.*warm/);
+  if ([baseHeating, consumptionHeating, baseWater, consumptionWater].some((x) => x === undefined)) return {};
+  return { heatingParts: { baseHeating: baseHeating!, consumptionHeating: consumptionHeating!, baseWater: baseWater!, consumptionWater: consumptionWater! } };
+}
+
 export interface TransferResult {
   items: CostItem[];
   skipped: { position: LedgerPosition; reason: string }[];
@@ -407,9 +418,11 @@ export function transferToStatement(
   const hasHeatingTotal = annual.positions.some((p) => p.heating === "total") || annual.heating !== null;
   const items: CostItem[] = [];
   const skipped: TransferResult["skipped"] = [];
-  // Mietvertrag des Mieters dieser Wohnung: vereinbarte Kostenarten und Umlagemaßstab
+  // Mietverträge der Mieter dieser Wohnung im Zeitraum: vereinbarte Kostenarten und Umlagemaßstab
   const unit = context?.property.units.find((u) => u.id === annual.unitId);
-  const lease = context ? leaseForUnit(annual.unitId, statement, context.tenants)?.lease : undefined;
+  const periodTenants = context ? tenantsInPeriod(annual.unitId, statement, context.tenants) : [];
+  const leases = periodTenants.map((t) => t.lease).filter((l): l is LeaseAgreement => !!l);
+  const allHaveLease = periodTenants.length > 0 && leases.length === periodTenants.length;
   for (const p of annual.positions) {
     if (already.has(p.id)) skipped.push({ position: p, reason: "bereits übernommen" });
     else if (p.classification !== "allocable") skipped.push({ position: p, reason: CLASSIFICATION_LABELS[p.classification] });
@@ -430,35 +443,47 @@ export function transferToStatement(
     // Anteil 0 laut WEG (z. B. Einzelkosten einer anderen Wohnung) bleibt 0 – auch bei anderem Vertragsschlüssel
     else if (p.amount === 0) skipped.push({ position: p, reason: "Betrag 0" });
     else {
-      const agreement = lease ? agreementFor(p.label, p.category, lease) : null;
-      if (agreement?.status === "not_agreed") {
-        skipped.push({ position: p, reason: `laut Mietvertrag nicht umlegbar: ${agreement.text}` });
+      const agreements = leases.map((l) => agreementFor(p.label, p.category, l));
+      // Nur ausschließen, wenn die Kostenart mit keinem Mieter des Zeitraums vereinbart ist
+      if (allHaveLease && agreements.every((a) => a.status === "not_agreed")) {
+        skipped.push({ position: p, reason: `laut Mietvertrag nicht umlegbar: ${agreements[0].text}` });
         continue;
       }
-      if (agreement?.status === "partial" && p.origin !== "user") {
-        skipped.push({ position: p, reason: `Mietvertrag prüfen: ${agreement.text}` });
+      const partial = agreements.find((a) => a.status === "partial");
+      if (partial && p.origin !== "user") {
+        skipped.push({ position: p, reason: `Mietvertrag prüfen: ${partial.text}` });
         continue;
       }
-      const byLease = unit && context ? amountByLease(p, lease, unit, context.property) : { amount: p.amount };
-      if (byLease.amount === 0) {
-        skipped.push({ position: p, reason: "Betrag 0" });
-        continue;
+      // Anteil laut WEG; zusätzlich je abweichendem Vertragsmaßstab
+      const leaseAmounts: NonNullable<CostItem["leaseAmounts"]> = {};
+      const notes: string[] = [p.reason];
+      if (unit && context) {
+        leaseAmounts.weg = amountByLease(p, null, unit, context.property);
+        for (const rule of new Set(leases.map((l) => l.allocationRule))) {
+          if (rule === "weg") continue;
+          const r = amountByLease(p, { ...leases.find((l) => l.allocationRule === rule)! }, unit, context.property);
+          leaseAmounts[rule] = { amount: r.amount, basis: r.basis };
+          if (r.note) notes.push(`Mieter mit Vertragsmaßstab „Verbrauch/MEA“: ${r.note}.`);
+          if (r.problem) notes.push(r.problem);
+        }
       }
       const h = p.heating === "total" ? annual.heating : null;
       items.push({
         id: uid(),
         category: p.category ?? 17,
         label: p.label,
-        amount: byLease.amount,
+        amount: p.amount,
         key: "direct",
         directUnitId: annual.unitId,
-        note: [p.reason, byLease.note, "problem" in byLease ? byLease.problem : undefined].filter(Boolean).join(" "),
+        note: notes.join(" "),
         source: p.provenance?.document ?? `WEG-Jahresabrechnung ${annual.year}`,
         sourceAnnualId: annual.id,
         sourcePositionId: p.id,
         sourceAmount: p.amount,
-        ...("totalAmount" in byLease && byLease.totalAmount !== undefined ? { totalAmount: byLease.totalAmount } : {}),
-        ...("basis" in byLease && byLease.basis ? { basis: byLease.basis } : {}),
+        ...(p.totalAmount !== null && p.totalAmount !== undefined ? { totalAmount: p.totalAmount } : {}),
+        ...(leaseAmounts.weg?.basis ? { basis: leaseAmounts.weg.basis } : {}),
+        ...(Object.keys(leaseAmounts).length > 1 ? { leaseAmounts } : {}),
+        ...(h ? heatingPartsOf(h) : {}),
         ...(h && h.co2Applicable && h.co2Cost && h.co2Kg ? { co2Cost: h.co2Cost, co2Kg: h.co2Kg } : {}),
       });
     }

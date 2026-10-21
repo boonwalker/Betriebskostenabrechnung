@@ -96,9 +96,13 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
   const ownCostsYear = property.maintenanceAnnual + property.managementAnnual + property.otherCostsAnnual;
   const taxEstimate = estimatePropertyTax(property)?.tax ?? 0;
 
+  // Hausgeld laut Wirtschaftsplan des Jahres; ohne Plan gilt der letzte frühere Plan weiter (wie bei der WEG üblich)
+  const plansWithHausgeld = data.economicPlans.filter((p) => p.propertyId === property.id && p.monthlyHausgeld !== null);
   const hausgeldMonthly = (year: number) => {
-    const plans = data.economicPlans.filter((p) => p.propertyId === property.id && p.year === year && p.monthlyHausgeld !== null);
-    return plans.length ? plans.reduce((a, p) => a + (p.monthlyHausgeld ?? 0), 0) : property.hausgeldMonthly;
+    const known = plansWithHausgeld.filter((p) => p.year <= year);
+    if (!known.length) return property.hausgeldMonthly;
+    const latest = Math.max(...known.map((p) => p.year));
+    return known.filter((p) => p.year === latest).reduce((a, p) => a + (p.monthlyHausgeld ?? 0), 0);
   };
   const propertyTaxYear = (year: number) => {
     const st = data.statements.find((s) => s.propertyId === property.id && s.periodStart.startsWith(String(year)));

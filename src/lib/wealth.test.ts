@@ -114,5 +114,8 @@ describe("WE 09: Schenkung zum 01.08.2025", () => {
     // Schenkung: kein eigenes Geld eingesetzt außer Nebenkosten; Startwert = Grundsteuerwert
     expect(s.baseline).toBe(112200);
     expect(s.current.value).toBe(112200);
+    // 2026 ohne eigenen Plan: Hausgeld laut Plan 2025 läuft weiter
+    const s26 = wealthSeries(p, d, "2026-03-31")!;
+    expect(s26.points[s26.points.length - 1].cashflow).toBeCloseTo(630 - 160.31 - 194.42 / 12, 1);
   });
 });

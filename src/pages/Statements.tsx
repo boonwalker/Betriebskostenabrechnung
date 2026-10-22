@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Modal, type PageProps } from "../components/ui";
 import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
@@ -15,6 +15,24 @@ export default function Statements({ data, update }: PageProps) {
   };
 
   const sorted = [...data.statements].sort((a, b) => b.periodStart.localeCompare(a.periodStart));
+  // Eine Spalte je Abrechnung, die neueste vorn
+  const rows = sorted.flatMap((s) => {
+    const p = data.properties.find((x) => x.id === s.propertyId);
+    if (!p) return [];
+    const r = calculateStatement(s, p, data.tenants);
+    const due = r.tenants.filter((t) => t.balance > 0).reduce((a, t) => a + t.balance, 0);
+    const credit = r.tenants.filter((t) => t.balance < 0).reduce((a, t) => a - t.balance, 0);
+    return [{ s, p, r, due, credit, overdue: r.deadline < todayISO() }];
+  });
+  const multiProperty = new Set(rows.map((x) => x.p.id)).size > 1;
+  const row = (label: string, cell: (x: (typeof rows)[number]) => ReactNode) => (
+    <tr>
+      <th scope="row">{label}</th>
+      {rows.map((x) => (
+        <td key={x.s.id} className="num">{cell(x)}</td>
+      ))}
+    </tr>
+  );
 
   return (
     <>
@@ -39,49 +57,38 @@ export default function Statements({ data, update }: PageProps) {
         </div>
       ) : (
         <div className="card table-wrap">
-          <table>
+          <table className="transposed">
             <thead>
               <tr>
-                <th>Objekt</th>
-                <th>Zeitraum</th>
-                <th className="num">Gesamtkosten</th>
-                <th className="num">Nachzahlungen</th>
-                <th className="num">Guthaben</th>
-                <th>Status</th>
-                <th>Frist</th>
                 <th />
+                {rows.map(({ s, p }) => (
+                  <th key={s.id} scope="col" className="num">
+                    <a className="tenant-name" href={`#/abrechnungen/${s.id}`}>{s.periodStart.slice(0, 4)}</a>
+                    {multiProperty && <span className="muted small">{p.name}</span>}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {sorted.map((s) => {
-                const p = data.properties.find((x) => x.id === s.propertyId);
-                if (!p) return null;
-                const r = calculateStatement(s, p, data.tenants);
-                const due = r.tenants.filter((t) => t.balance > 0).reduce((a, t) => a + t.balance, 0);
-                const credit = r.tenants.filter((t) => t.balance < 0).reduce((a, t) => a - t.balance, 0);
-                const overdue = r.deadline < todayISO();
-                return (
-                  <tr key={s.id}>
-                    <td><a href={`#/abrechnungen/${s.id}`}>{p.name}</a></td>
-                    <td>{formatDate(s.periodStart)} – {formatDate(s.periodEnd)}</td>
-                    <td className="num">{formatEUR(r.totalCosts)}</td>
-                    <td className="num">{formatEUR(due)}</td>
-                    <td className="num">{formatEUR(credit)}</td>
-                    <td>
-                      <span className={`badge ${s.status === "draft" ? "status-draft" : "status-released"}`}>
-                        {s.status === "released" ? "freigegeben" : s.status === "partial" ? "teilweise freigegeben" : "Entwurf"}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${overdue ? "danger" : "neutral"}`}>{formatDate(r.deadline)}</span>
-                    </td>
-                    <td className="num">
-                      <a className="btn" href={`#/abrechnungen/${s.id}`}>Öffnen</a>{" "}
-                      <button className="ghost" onClick={() => remove(s)} aria-label="Löschen">✕</button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {row("Zeitraum", ({ s }) => <>{formatDate(s.periodStart)} –<br />{formatDate(s.periodEnd)}</>)}
+              {row("Gesamtkosten", ({ r }) => formatEUR(r.totalCosts))}
+              {row("Nachzahlungen", ({ due }) => formatEUR(due))}
+              {row("Guthaben", ({ credit }) => formatEUR(credit))}
+              {row("Status", ({ s }) => (
+                <span className={`badge ${s.status === "draft" ? "status-draft" : "status-released"}`}>
+                  {s.status === "released" ? "freigegeben" : s.status === "partial" ? "teilweise freigegeben" : "Entwurf"}
+                </span>
+              ))}
+              {row("Frist", ({ r, overdue }) => <span className={`badge ${overdue ? "danger" : "neutral"}`}>{formatDate(r.deadline)}</span>)}
+              <tr className="actions">
+                <th />
+                {rows.map(({ s }) => (
+                  <td key={s.id} className="num">
+                    <a className="btn small" href={`#/abrechnungen/${s.id}`}>Öffnen</a>{" "}
+                    <button className="ghost small" onClick={() => remove(s)} aria-label="Löschen">✕</button>
+                  </td>
+                ))}
+              </tr>
             </tbody>
           </table>
         </div>

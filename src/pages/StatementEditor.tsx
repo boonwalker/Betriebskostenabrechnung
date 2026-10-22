@@ -256,36 +256,45 @@ export default function StatementEditor({ data, update, statementId }: PageProps
           <p className="muted">Im Abrechnungszeitraum wohnten keine Mieter in diesem Objekt.</p>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="transposed">
               <thead>
                 <tr>
-                  <th>Mieter</th>
-                  <th>Zeitraum</th>
-                  <th className="num">Kostenanteil</th>
-                  <th className="num">Vorauszahlungen</th>
-                  <th>tatsächlich gezahlt?</th>
-                  <th className="num">Ergebnis</th>
+                  <th />
+                  {result.tenants.map((r) => (
+                    <th key={r.tenant.id + r.start} scope="col" className="num">
+                      <span className="tenant-name">{r.tenant.name}</span>
+                      <span className="muted small">{r.unit.name}</span>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {result.tenants.map((r) => {
-                  const overridden = statement.prepaymentOverrides[r.tenant.id] !== undefined;
-                  return (
-                    <tr key={r.tenant.id + r.start} id={`vz-${r.tenant.id}`}>
-                      <td>
-                        {r.tenant.name}
-                        <div className="muted small">{r.unit.name}</div>
-                      </td>
-                      <td>
-                        {formatDate(r.start)} – {formatDate(r.end)}
-                        <div className="muted small">{r.days} Tage</div>
-                      </td>
-                      <td className="num">{formatEUR(r.totalCosts)}</td>
-                      <td className="num" style={{ minWidth: 150 }}>
+                <tr>
+                  <th scope="row">Zeitraum</th>
+                  {result.tenants.map((r) => (
+                    <td key={r.tenant.id + r.start} className="num">
+                      {formatDate(r.start)} –<br />
+                      {formatDate(r.end)}
+                      <div className="muted small">{r.days} Tage</div>
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Kostenanteil</th>
+                  {result.tenants.map((r) => (
+                    <td key={r.tenant.id + r.start} className="num">{formatEUR(r.totalCosts)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Vorauszahlungen</th>
+                  {result.tenants.map((r) => {
+                    const overridden = statement.prepaymentOverrides[r.tenant.id] !== undefined;
+                    return (
+                      <td key={r.tenant.id + r.start} className="num wrap" id={`vz-${r.tenant.id}`}>
                         <NumberInput
                           value={r.prepayments}
                           onChange={(v) => setOverride(r.tenant.id, v)}
-                          style={{ width: 120 }}
+                          style={{ width: "100%", maxWidth: 140 }}
                           ariaLabel={`Vorauszahlungen ${r.tenant.name}`}
                         />
                         <div className="muted small">
@@ -294,29 +303,39 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                               Soll: {formatEUR(r.prepaymentsCalculated.total)} übernehmen
                             </button>
                           ) : (
-                            <>BK {formatEUR(r.prepaymentsCalculated.operating)} + HK {formatEUR(r.prepaymentsCalculated.heating)}</>
+                            <>BK {formatEUR(r.prepaymentsCalculated.operating)}<br />HK {formatEUR(r.prepaymentsCalculated.heating)}</>
                           )}
                         </div>
                       </td>
-                      <td>
-                        <label className="row small" style={{ flexWrap: "nowrap" }}>
-                          <input
-                            type="checkbox"
-                            checked={statement.prepaymentsConfirmed[r.tenant.id] === true}
-                            onChange={(e) => set({ prepaymentsConfirmed: { ...statement.prepaymentsConfirmed, [r.tenant.id]: e.target.checked } })}
-                          />
-                          bestätigt
-                        </label>
-                      </td>
-                      <td className="num">
-                        {!statement.releases[r.tenant.id] && !readiness.tenants.find((x) => x.tenantId === r.tenant.id)?.ready && (
-                          <div className="small muted">vorläufig</div>
-                        )}
-                        <Balance value={r.balance} />
-                      </td>
-                    </tr>
-                  );
-                })}
+                    );
+                  })}
+                </tr>
+                <tr>
+                  <th scope="row">tatsächlich gezahlt?</th>
+                  {result.tenants.map((r) => (
+                    <td key={r.tenant.id + r.start} className="num">
+                      <label className="row small" style={{ flexWrap: "nowrap", justifyContent: "flex-end" }}>
+                        <input
+                          type="checkbox"
+                          checked={statement.prepaymentsConfirmed[r.tenant.id] === true}
+                          onChange={(e) => set({ prepaymentsConfirmed: { ...statement.prepaymentsConfirmed, [r.tenant.id]: e.target.checked } })}
+                        />
+                        bestätigt
+                      </label>
+                    </td>
+                  ))}
+                </tr>
+                <tr className="actions">
+                  <th scope="row">Ergebnis</th>
+                  {result.tenants.map((r) => (
+                    <td key={r.tenant.id + r.start} className="num wrap">
+                      {!statement.releases[r.tenant.id] && !readiness.tenants.find((x) => x.tenantId === r.tenant.id)?.ready && (
+                        <div className="small muted">vorläufig</div>
+                      )}
+                      <Balance value={r.balance} />
+                    </td>
+                  ))}
+                </tr>
               </tbody>
             </table>
           </div>

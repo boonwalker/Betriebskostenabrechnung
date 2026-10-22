@@ -50,7 +50,8 @@ export default function Sparkline({ points, height = 48, label }: { points: Valu
           setHover(best);
         }}
       >
-        <path d={d} fill="none" stroke="var(--spark)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <path d={`${d} L${last[0].toFixed(1)},${height} L${coords[0][0].toFixed(1)},${height} Z`} fill="var(--accent)" fillOpacity={0.1} />
+        <path d={d} fill="none" stroke="var(--accent)" strokeOpacity={0.75} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         {hover !== null && <line x1={coords[hover][0]} x2={coords[hover][0]} y1={0} y2={height} stroke="var(--border)" strokeWidth={1} />}
         <circle cx={last[0]} cy={last[1]} r={4} fill="var(--accent)" stroke="var(--surface)" strokeWidth={2} />
         {hover !== null && hover !== coords.length - 1 && (

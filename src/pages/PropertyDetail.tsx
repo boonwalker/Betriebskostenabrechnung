@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { go, parseHash } from "../lib/nav";
-import Sparkline from "../components/Sparkline";
+import ValueChart from "../components/ValueChart";
 import { Balance, Delta, Kpi, NumberInput, type PageProps } from "../components/ui";
 import { calculateStatement } from "../lib/calc";
 import { addMonths, formatDate, todayISO } from "../lib/dates";
@@ -167,7 +167,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
             )}
             <Kpi label="Zuwachs" value={formatSignedEUR0(w.gain)} hint={w.baseline > 0 ? formatPct(w.gain / w.baseline) : undefined} />
           </div>
-          {w.points.length >= 2 && <Sparkline points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} height={110} label={`Vermögensentwicklung ${p.name}`} />}
+          {w.points.length >= 2 && <ValueChart points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />}
           <div className="table-wrap" style={{ marginTop: 12 }}>
             <table className="compact">
               <thead>
@@ -218,7 +218,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
       <div className="card" id="wertentwicklung">
         <h2>Wertentwicklung</h2>
         {m.history.length >= 2 ? (
-          <Sparkline points={m.history} height={110} label={`Wertverlauf ${p.name}`} />
+          <ValueChart points={m.history} height={200} label={`Wertverlauf ${p.name}`} />
         ) : (
           <p className="muted small">Erfasse den Kauf in den Objektdaten und mindestens eine Bewertung, um den Verlauf zu sehen.</p>
         )}

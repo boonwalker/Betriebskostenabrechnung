@@ -408,3 +408,14 @@ tfoot td { background: var(--tint); }
 
 .wizard-steps span.active { background: var(--accent); border-color: var(--accent); }
 .app-header-inner { padding-top: 6px; padding-bottom: 6px; }
+
+/* Wertverlauf im Koordinatensystem */
+/* contain: Die gemessene Breite darf nicht vom Diagramm selbst abhängen (sonst wächst es endlos) */
+.value-chart { position: relative; width: 100%; min-width: 0; contain: inline-size; overflow: hidden; user-select: none; -webkit-user-select: none; }
+.value-chart svg { display: block; cursor: crosshair; outline: none; }
+.value-chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.value-chart-axis { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.value-chart-readout { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.value-chart-readout strong { font-size: 1.35rem; color: var(--head); font-variant-numeric: tabular-nums; }
+.value-chart-readout span { color: var(--muted); font-size: 0.87rem; }
+.value-chart-hint { margin-top: 2px; }

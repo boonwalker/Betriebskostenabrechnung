@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { go, parseHash } from "../lib/nav";
 import ValueChart from "../components/ValueChart";
 import { Balance, Delta, Kpi, NumberInput, type PageProps } from "../components/ui";
@@ -285,45 +285,50 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
           </label>
           <button className="primary" onClick={() => setEditingTenant(newTenant(data, p.id))}>+ Mieter</button>
         </div>
-        <div className="table-wrap">
-          <table className="compact" style={{ marginBottom: 16 }}>
-            <thead>
-              <tr>
-                <th>Einheit</th>
-                <th className="num">Fläche</th>
-                <th>Aktueller Mieter</th>
-                <th className="num">Kaltmiete</th>
-                <th className="num">€/m²</th>
-                <th className="num">Warmmiete</th>
-              </tr>
-            </thead>
-            <tbody>
-              {p.units.map((u) => {
-                const t = tenants.find((x) => x.unitId === u.id && isCurrentTenant(x, today));
-                const r = t ? rentAt(t, today) : undefined;
-                return (
-                  <tr key={u.id}>
-                    <td>{u.name}</td>
-                    <td className="num">{formatNum(u.area)} m²</td>
-                    <td>
-                      {t ? (
-                        t.name
-                      ) : (
-                        <>
-                          <span className="badge neutral">frei</span>{" "}
-                          <button className="ghost small" onClick={() => setEditingTenant(newTenant(data, p.id, u.id))}>vermieten</button>
-                        </>
-                      )}
-                    </td>
-                    <td className="num">{r ? formatEUR(r.coldRent) : "–"}</td>
-                    <td className="num">{r && u.area ? formatEUR(r.coldRent / u.area) : "–"}</td>
-                    <td className="num">{r ? formatEUR(warmRent(r)) : "–"}</td>
+        {(() => {
+          const cols = p.units.map((u) => {
+            const t = tenants.find((x) => x.unitId === u.id && isCurrentTenant(x, today));
+            return { u, t, r: t ? rentAt(t, today) : undefined };
+          });
+          const row = (label: string, cell: (c: (typeof cols)[number]) => ReactNode) => (
+            <tr>
+              <th scope="row">{label}</th>
+              {cols.map((c) => (
+                <td key={c.u.id} className="num">{cell(c)}</td>
+              ))}
+            </tr>
+          );
+          return (
+            <div className="table-wrap" style={{ marginBottom: 16 }}>
+              <table className="transposed">
+                <thead>
+                  <tr>
+                    <th />
+                    {cols.map(({ u }) => (
+                      <th key={u.id} scope="col" className="num"><span className="tenant-name">{u.name}</span></th>
+                    ))}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {row("Fläche", ({ u }) => `${formatNum(u.area)} m²`)}
+                  {row("Aktueller Mieter", ({ u, t }) =>
+                    t ? (
+                      t.name
+                    ) : (
+                      <>
+                        <span className="badge neutral">frei</span>{" "}
+                        <button className="ghost small" onClick={() => setEditingTenant(newTenant(data, p.id, u.id))}>vermieten</button>
+                      </>
+                    ),
+                  )}
+                  {row("Kaltmiete", ({ r }) => (r ? formatEUR(r.coldRent) : "–"))}
+                  {row("je m²", ({ u, r }) => (r && u.area ? formatEUR(r.coldRent / u.area) : "–"))}
+                  {row("Warmmiete", ({ r }) => (r ? <strong>{formatEUR(warmRent(r))}</strong> : "–"))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
         {shownTenants.length > 0 && <TenantTable data={data} tenants={shownTenants} onEdit={(t) => setEditingTenant(structuredClone(t))} />}
       </div>
 

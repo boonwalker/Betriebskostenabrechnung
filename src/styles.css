@@ -486,3 +486,20 @@ tfoot td { background: var(--tint); }
   .valuation-note, .valuation-add { grid-column: 1 / -1; }
   .valuation-add { justify-content: center; }
 }
+
+/* Gedrehte Tabellen: eine Spalte je Mieter bzw. Einheit, Merkmale als Zeilen */
+table.transposed { width: auto; min-width: 100%; }
+table.transposed th[scope="row"] { background: none; text-transform: none; letter-spacing: 0; font-size: 0.85rem; font-weight: 500; color: var(--muted); white-space: nowrap; padding-left: 0; width: 1%; }
+table.transposed thead th { vertical-align: bottom; text-transform: none; letter-spacing: 0; font-size: 0.95rem; color: var(--head); }
+table.transposed thead th:first-child { background: var(--tint); }
+table.transposed .tenant-name { display: block; font-weight: 700; }
+table.transposed thead .badge { margin-top: 4px; font-size: 0.72rem; }
+table.transposed td { min-width: 120px; }
+table.transposed td.wrap { white-space: normal; }
+table.transposed tr.actions td, table.transposed tr.actions th { border-bottom: 0; padding-top: 8px; background: none; }
+table.transposed td.wrap .badge { white-space: normal; }
+@media (max-width: 560px) {
+  table.transposed td { min-width: 0; padding-left: 6px; padding-right: 0; }
+  table.transposed thead th { padding-left: 6px; padding-right: 0; font-size: 0.9rem; }
+  table.transposed th[scope="row"] { white-space: normal; font-size: 0.8rem; width: 34%; padding-right: 4px; }
+}

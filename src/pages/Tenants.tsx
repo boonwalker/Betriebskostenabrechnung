@@ -1,5 +1,5 @@
 import { focusElement } from "../lib/nav";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Modal, NumberInput, type PageProps } from "../components/ui";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR } from "../lib/format";
@@ -101,63 +101,79 @@ export default function Tenants({ data, update }: PageProps) {
 /** Aktuelle Mieter und solche, die in den letzten zwei Jahren ausgezogen sind (für sie steht oft noch eine Abrechnung an) */
 export const isRecent = (t: Tenant, today: string) => !t.moveOut || t.moveOut >= `${Number(today.slice(0, 4)) - 2}${today.slice(4)}`;
 
+/** Mieter als Spalten, Merkmale als Zeilen – bleibt auch auf dem Handy lesbar; der neueste Mieter steht vorn */
 export function TenantTable({ data, tenants, onEdit, onRemove }: { data: AppData; tenants: Tenant[]; onEdit: (t: Tenant) => void; onRemove?: (t: Tenant) => void }) {
   const today = todayISO();
+  const cols = [...tenants]
+    .sort((a, b) => b.moveIn.localeCompare(a.moveIn))
+    .map((t) => {
+      const property = data.properties.find((p) => p.id === t.propertyId);
+      return { t, r: rentAt(t, t.moveOut && t.moveOut < today ? t.moveOut : today), unit: property?.units.find((u) => u.id === t.unitId), former: !!t.moveOut && t.moveOut < today };
+    });
+  const multiUnit = new Set(cols.map((c) => c.unit?.id)).size > 1 || cols.some((c) => (data.properties.find((p) => p.id === c.t.propertyId)?.units.length ?? 0) > 1);
+  const anyFormer = cols.some((c) => c.former);
+  const row = (label: string, cell: (c: (typeof cols)[number]) => ReactNode, className = "num") => (
+    <tr>
+      <th scope="row">{label}</th>
+      {cols.map((c) => (
+        <td key={c.t.id} className={className}>{cell(c)}</td>
+      ))}
+    </tr>
+  );
   return (
     <div className="table-wrap">
-      <table>
+      <table className="transposed">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Einheit</th>
-            <th>Mietzeit</th>
-            <th className="num">Pers.</th>
-            <th className="num">Kaltmiete</th>
-            <th className="num">BK / HK-Vorausz.</th>
-            <th className="num">Warmmiete</th>
             <th />
+            {cols.map(({ t, former }) => (
+              <th key={t.id} scope="col" className="num">
+                <span className="tenant-name">{t.name}</span>
+                <span className={`badge ${former ? "neutral" : "ok"}`}>{former ? "ausgezogen" : "aktuell"}</span>
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {tenants.map((t) => {
-            const r = rentAt(t, t.moveOut && t.moveOut < today ? t.moveOut : today);
-            const unit = data.properties.find((p) => p.id === t.propertyId)?.units.find((u) => u.id === t.unitId);
-            return (
-              <tr key={t.id}>
-                <td>
-                  {t.name}
-                  {t.moveOut && t.moveOut < today && (
-                    <div className="small">
-                      {t.mailingAddress.trim() ? (
-                        <span className="muted">neue Anschrift: {t.mailingAddress.trim().replace(/\n/g, ", ")}</span>
-                      ) : (
-                        <button
-                          className="badge danger"
-                          style={{ border: 0, cursor: "pointer" }}
-                          onClick={() => {
-                            onEdit(t);
-                            focusElement("anschrift");
-                          }}
-                        >
-                          ⚠ neue Anschrift fehlt – eintragen
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </td>
-                <td>{unit?.name ?? "–"}</td>
-                <td>{formatDate(t.moveIn)} – {t.moveOut ? formatDate(t.moveOut) : "heute"}</td>
-                <td className="num">{t.persons}</td>
-                <td className="num">{formatEUR(r?.coldRent ?? 0)}</td>
-                <td className="num">{formatEUR(r?.prepaymentOperating ?? 0)} / {formatEUR(r?.prepaymentHeating ?? 0)}</td>
-                <td className="num"><strong>{formatEUR(warmRent(r))}</strong></td>
-                <td className="num">
-                  <button className="ghost" onClick={() => onEdit(t)}>Bearbeiten</button>
-                  {onRemove && <button className="ghost" onClick={() => onRemove(t)} aria-label="Löschen">✕</button>}
-                </td>
-              </tr>
-            );
-          })}
+          {multiUnit && row("Einheit", (c) => c.unit?.name ?? "–")}
+          {row("Einzug", (c) => formatDate(c.t.moveIn))}
+          {row("Auszug", (c) => (c.t.moveOut ? formatDate(c.t.moveOut) : "–"))}
+          {row("Personen", (c) => c.t.persons)}
+          {row("Kaltmiete", (c) => formatEUR(c.r?.coldRent ?? 0))}
+          {row("BK-Vorauszahlung", (c) => formatEUR(c.r?.prepaymentOperating ?? 0))}
+          {row("HK-Vorauszahlung", (c) => formatEUR(c.r?.prepaymentHeating ?? 0))}
+          {row("Warmmiete", (c) => <strong>{formatEUR(warmRent(c.r))}</strong>)}
+          {anyFormer &&
+            row(
+              "Neue Anschrift",
+              ({ t, former }) =>
+                !former ? (
+                  ""
+                ) : t.mailingAddress.trim() ? (
+                  <span className="small">{t.mailingAddress.trim().split("\n").map((l, i) => <div key={i}>{l}</div>)}</span>
+                ) : (
+                  <button
+                    className="badge danger"
+                    style={{ border: 0, cursor: "pointer" }}
+                    onClick={() => {
+                      onEdit(t);
+                      focusElement("anschrift");
+                    }}
+                  >
+                    ⚠ fehlt – eintragen
+                  </button>
+                ),
+              "num wrap",
+            )}
+          <tr className="actions">
+            <th />
+            {cols.map(({ t }) => (
+              <td key={t.id} className="num">
+                <button className="ghost small" onClick={() => onEdit(t)}>Bearbeiten</button>
+                {onRemove && <button className="ghost small" onClick={() => onRemove(t)} aria-label="Löschen">✕</button>}
+              </td>
+            ))}
+          </tr>
         </tbody>
       </table>
     </div>

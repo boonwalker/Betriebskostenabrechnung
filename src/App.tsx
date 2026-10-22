@@ -1,4 +1,5 @@
 import { focusElement, parseHash } from "./lib/nav";
+import { Logo } from "./components/Logo";
 import { useEffect, useState } from "react";
 import { useAppData } from "./lib/store";
 import Dashboard from "./pages/Dashboard";
@@ -58,7 +59,7 @@ export default function App() {
     <>
       <header className="app-header">
         <div className="app-header-inner">
-          <a className="brand" href="#/">Immobilien &amp; Betriebskosten</a>
+          <a className="brand" href="#/" aria-label="ImmoFriend – Startseite"><Logo /></a>
           <nav className="nav">
             {NAV.map(([path, label]) => (
               <a key={path} href={`#/${path}`} className={section === path || (path === "" && (section === "objekte" || section === "weg")) ? "active" : ""}>

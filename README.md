@@ -1,4 +1,4 @@
-# Betriebskostenabrechnung
+# ImmoFriend
 
 Web-App für private Vermieter: Mietobjekte wie ein Depot im Blick behalten, Mieter verwalten und die jährliche Betriebskostenabrechnung erstellen, inklusive Nachzahlung oder Guthaben je Mieter und druckfertigem Anschreiben.
 

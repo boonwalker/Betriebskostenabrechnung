@@ -69,7 +69,7 @@ export default function Tenants({ data, update }: PageProps) {
 
       {data.properties.map((p) => {
         const tenants = data.tenants
-          .filter((t) => t.propertyId === p.id && (showFormer || isRecent(t, today)))
+          .filter((t) => t.propertyId === p.id && (showFormer || notMovedOut(t, today)))
           .sort((a, b) => a.moveIn.localeCompare(b.moveIn));
         return (
           <div className="card" key={p.id}>
@@ -98,8 +98,8 @@ export default function Tenants({ data, update }: PageProps) {
   );
 }
 
-/** Aktuelle Mieter und solche, die in den letzten zwei Jahren ausgezogen sind (für sie steht oft noch eine Abrechnung an) */
-export const isRecent = (t: Tenant, today: string) => !t.moveOut || t.moveOut >= `${Number(today.slice(0, 4)) - 2}${today.slice(4)}`;
+/** Noch nicht ausgezogen (auch künftige Mieter); ehemalige erscheinen nur mit „ehemalige anzeigen“ */
+export const notMovedOut = (t: Tenant, today: string) => !t.moveOut || t.moveOut >= today;
 
 /** Mieter als Spalten, Merkmale als Zeilen – bleibt auch auf dem Handy lesbar; der neueste Mieter steht vorn */
 export function TenantTable({ data, tenants, onEdit, onRemove }: { data: AppData; tenants: Tenant[]; onEdit: (t: Tenant) => void; onRemove?: (t: Tenant) => void }) {

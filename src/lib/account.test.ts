@@ -26,6 +26,15 @@ describe("Mietkonto WE 09 (Soll-Kontostand)", () => {
     ]);
   });
 
+  it("Abgaben ab 01.08.2025: anteilige Erstattung an die Eltern zum Jahresende, ab 2026 Quartalsraten", () => {
+    const l = accountLedger({ ...p, propertyTaxFrom: "2025-08-01" }, data, "2026-03-01")!;
+    const refund = l.bookings.find((b) => b.label.startsWith("Erstattung"))!;
+    expect(refund.date).toBe("2025-12-31");
+    // 336,97 € × 153/365
+    expect(refund.amount).toBe(-141.25);
+    expect(l.bookings.filter((b) => b.label.includes("Rate")).map((b) => b.date)).toEqual(["2026-02-15"]);
+  });
+
   it("berücksichtigt einen Anfangsbestand", () => {
     const l = accountLedger({ ...p, accountOpeningBalance: 500 }, data, "2025-08-31")!;
     expect(l.balance).toBe(500 + 630 - 160.31);

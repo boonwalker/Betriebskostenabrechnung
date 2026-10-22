@@ -1,5 +1,5 @@
 import { sumRent } from "./calc";
-import { addMonths, fromDay, intersect, toDay } from "./dates";
+import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
 import { fromCents, toCents } from "./money";
 import { municipalCharges, propertyTaxStart } from "./propertyTax";
 import { releasedTenant } from "./release";
@@ -81,7 +81,15 @@ export function accountLedger(property: Property, data: AppData, until: ISODate)
     const label = charges.map((c) => c.label).join(" + ");
     const chargeStart = propertyTaxStart(property) ?? start;
     if (total > 0) {
-      for (let y = Number(chargeStart.slice(0, 4)); y <= Number(until.slice(0, 4)); y++) {
+      const firstYear = Number(chargeStart.slice(0, 4));
+      for (let y = firstYear; y <= Number(until.slice(0, 4)); y++) {
+        if (y === firstYear && chargeStart.slice(5) !== "01-01") {
+          // Im Übergangsjahr geht der Bescheid an den Voreigentümer: anteilige Erstattung (Annahme: zum Jahresende)
+          const yearDays = daysInclusive(`${y}-01-01`, `${y}-12-31`);
+          const share = (total * daysInclusive(chargeStart, `${y}-12-31`)) / yearDays;
+          add(`${y}-12-31`, `Erstattung ${label} an Voreigentümer (ab ${chargeStart.split("-").reverse().join(".")})`, -share);
+          continue;
+        }
         quarterRates(total).forEach((rate, i) => {
           const due = `${y}-${QUARTER_DUE[i]}`;
           if (due >= chargeStart) add(due, `${label} (${i + 1}. Rate)`, -rate);

@@ -447,3 +447,32 @@ tfoot td { background: var(--tint); }
 @media (max-width: 640px) {
   input, select, textarea { font-size: 16px; }
 }
+
+/* Mietkonto */
+.account-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.account-head h2 { margin: 0; }
+.account-panel { display: grid; grid-template-columns: 1.3fr 1fr; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+.account-balance { background: var(--head); color: #fff; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.account-balance strong { font-size: 1.7rem; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.account-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: inherit; opacity: 0.75; }
+.account-date {
+  align-self: flex-start; background: rgba(255, 255, 255, 0.12); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 99px; padding: 4px 12px; font-weight: 600; color-scheme: dark;
+}
+.account-date:focus { outline: 2px solid rgba(255, 255, 255, 0.5); border-color: transparent; }
+.account-flow { font-size: 0.82rem; opacity: 0.85; }
+.account-flow .in { color: #9fd8b4; }
+.account-flow .out { color: #ffb4a9; }
+.account-check { background: var(--tint); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; justify-content: center; min-width: 0; color: var(--head); }
+.account-check input { font-size: 1.1rem; font-weight: 600; padding: 8px 10px; background: var(--surface); }
+.account-diff { font-size: 0.85rem; font-weight: 600; }
+.account-diff.neutral { color: var(--muted); font-weight: 400; }
+.account-diff.ok { color: var(--ok); }
+.account-diff.warn { color: var(--warn); }
+.account-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.account-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.account-what, .account-amount { display: flex; flex-direction: column; min-width: 0; }
+.account-amount { align-items: flex-end; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.account-amount .in { color: var(--ok); font-weight: 600; }
+.account-amount .out { color: var(--text); font-weight: 600; }
+@media (max-width: 560px) { .account-panel { grid-template-columns: 1fr; } }

@@ -562,7 +562,7 @@ function CostOverview({ data, property }: { data: PageProps["data"]; property: P
   );
 }
 
-/** Soll-Kontostand des Mietkontos zu einem Stichtag, mit Kontoauszug und Abgleich */
+/** Soll-Kontostand des Mietkontos zu einem Stichtag, mit Abgleich und Kontoauszug */
 function AccountCard({ data, property }: { data: PageProps["data"]; property: Property }) {
   const [date, setDate] = useState(todayISO());
   const [actual, setActual] = useState<number>(NaN);
@@ -570,64 +570,82 @@ function AccountCard({ data, property }: { data: PageProps["data"]; property: Pr
   const ledger = accountLedger(property, data, date || todayISO());
   if (!ledger) return null;
   const diff = Number.isNaN(actual) ? null : Math.round((actual - ledger.balance) * 100) / 100;
-  const shown = showAll ? [...ledger.bookings].reverse() : [...ledger.bookings].reverse().slice(0, 8);
+  const shown = showAll ? [...ledger.bookings].reverse() : [...ledger.bookings].reverse().slice(0, 6);
   return (
-    <div className="card">
-      <h2>Mietkonto</h2>
-      <p className="hint">
-        So viel müsste auf dem Mietkonto liegen, wenn alle Zahlungen wie vereinbart geflossen sind: Miete und Hausgeld zum Monatsersten, Grundsteuer und Müll zu den
-        Quartalsterminen, Entnahmen am jeweiligen Tag. Gleiche ihn mit deinem echten Kontostand ab.
-      </p>
-      <div className="kpi-row" style={{ alignItems: "end" }}>
-        <label className="field">
-          Stichtag
-          <input id="account-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <Kpi label={`Soll-Kontostand am ${formatDate(date)}`} value={formatEUR(ledger.balance)} hint={`Anfangsbestand ${formatEUR(ledger.opening.amount)} am ${formatDate(ledger.opening.date)}`} />
-        <Kpi label="Eingänge / Ausgänge" value={`+${formatEUR0(ledger.incoming)} / ${formatEUR0(ledger.outgoing)}`} />
-        <label className="field">
-          tatsächlicher Kontostand (€)
-          <NumberInput allowEmpty value={actual} onChange={setActual} placeholder="zum Abgleich" />
-        </label>
+    <div className="card account-card">
+      <div className="account-head">
+        <h2>Mietkonto</h2>
+        <span className="small muted">Soll-Stand bei pünktlichen Zahlungen</span>
       </div>
-      {diff !== null && (
-        <div className={`alert ${Math.abs(diff) < 0.01 ? "info" : "warn"} small`} style={{ marginTop: 12 }}>
-          {Math.abs(diff) < 0.01
-            ? "✓ Der Kontostand stimmt mit dem Soll überein."
-            : `Differenz ${diff > 0 ? "+" : ""}${formatEUR(diff)}: ${
-                diff > 0
-                  ? "mehr auf dem Konto als erwartet – z. B. Anfangsbestand, Kaution auf dem Konto, Erstattung der WEG oder eine noch nicht abgebuchte Zahlung."
-                  : "weniger auf dem Konto als erwartet – z. B. ausstehende Miete, eine Sonderumlage, eine Rechnung oder eine zusätzliche Entnahme."
-              }`}
+
+      <div className="account-panel">
+        <div className="account-balance">
+          <span className="account-label">Soll-Kontostand am</span>
+          <input
+            id="account-date"
+            className="account-date"
+            type="date"
+            aria-label="Stichtag"
+            value={date}
+            max="2100-12-31"
+            onChange={(e) => setDate(e.target.value)}
+          />
+          <strong>{formatEUR(ledger.balance)}</strong>
+          <span className="account-flow">
+            <span className="in">+{formatEUR0(ledger.incoming)}</span> ein · <span className="out">{formatEUR0(ledger.outgoing)}</span> aus
+          </span>
         </div>
-      )}
-      <div className="table-wrap" style={{ marginTop: 12 }}>
-        <table className="compact">
-          <thead>
-            <tr>
-              <th>Datum</th>
-              <th>Buchung</th>
-              <th className="num">Betrag</th>
-              <th className="num">Kontostand</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((b, i) => (
-              <tr key={`${b.date}-${b.label}-${i}`}>
-                <td>{formatDate(b.date)}</td>
-                <td>{b.label}</td>
-                <td className="num">{b.amount > 0 ? "+" : ""}{formatEUR(b.amount)}</td>
-                <td className="num">{formatEUR(b.balance)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <label className="account-check">
+          <span className="account-label">Dein echter Kontostand</span>
+          <NumberInput allowEmpty value={actual} onChange={setActual} placeholder="0,00" ariaLabel="Tatsächlicher Kontostand" />
+          {diff === null ? (
+            <span className="account-diff neutral">zum Abgleich eintragen</span>
+          ) : Math.abs(diff) < 0.01 ? (
+            <span className="account-diff ok">✓ stimmt überein</span>
+          ) : (
+            <span className="account-diff warn">
+              {diff > 0 ? "+" : ""}
+              {formatEUR(diff)} {diff > 0 ? "mehr als erwartet" : "weniger als erwartet"}
+            </span>
+          )}
+        </label>
       </div>
-      {ledger.bookings.length > 8 && (
-        <button className="ghost" style={{ marginTop: 8 }} onClick={() => setShowAll((x) => !x)}>
-          {showAll ? "Nur die letzten Buchungen" : `Alle ${ledger.bookings.length} Buchungen anzeigen`}
-        </button>
+      {diff !== null && Math.abs(diff) >= 0.01 && (
+        <p className="small muted" style={{ margin: "8px 0 0" }}>
+          {diff > 0
+            ? "Mögliche Gründe: Anfangsbestand, Kaution auf dem Konto, Erstattung der WEG oder eine noch nicht abgebuchte Zahlung."
+            : "Mögliche Gründe: ausstehende Miete, Sonderumlage, eine Rechnung oder eine zusätzliche Entnahme."}
+        </p>
       )}
+
+      <ul className="account-list">
+        {shown.map((b, i) => (
+          <li key={`${b.date}-${b.label}-${i}`}>
+            <div className="account-what">
+              <span>{b.label}</span>
+              <span className="small muted">{formatDate(b.date)}</span>
+            </div>
+            <div className="account-amount">
+              <span className={b.amount > 0 ? "in" : "out"}>
+                {b.amount > 0 ? "+" : ""}
+                {formatEUR(b.amount)}
+              </span>
+              <span className="small muted">{formatEUR(b.balance)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="row" style={{ marginTop: 8 }}>
+        {ledger.bookings.length > 6 && (
+          <button className="ghost" onClick={() => setShowAll((x) => !x)}>
+            {showAll ? "Weniger anzeigen" : `Alle ${ledger.bookings.length} Buchungen`}
+          </button>
+        )}
+        <span className="spacer" />
+        <span className="small muted">
+          Start {formatEUR(ledger.opening.amount)} am {formatDate(ledger.opening.date)}
+        </span>
+      </div>
     </div>
   );
 }

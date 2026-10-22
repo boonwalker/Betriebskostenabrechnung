@@ -38,9 +38,11 @@ export function exportData(data: AppData): string {
 /** Ein Dokument mit dem gesamten Datenbestand (ohne API-Schlüssel); bleibt über neue Versionen der App erhalten */
 const REMOTE_DOC = "appdata/state";
 
+type RemoteSnapshot = { exists: boolean; data(): Record<string, unknown> | undefined; metadata?: { hasPendingWrites: boolean } };
 type RemoteDoc = {
-  get(): Promise<{ exists: boolean; data(): Record<string, unknown> | undefined }>;
+  get(): Promise<RemoteSnapshot>;
   set(data: Record<string, unknown>): Promise<void>;
+  onSnapshot(next: (snap: RemoteSnapshot) => void, error?: (e: unknown) => void): () => void;
 };
 
 export type SyncStatus = "local" | "loading" | "saved" | "saving" | "error";
@@ -77,6 +79,7 @@ export function useAppData() {
   // Beim Start: Stand aus der Datenbank laden; gibt es dort noch keinen, den lokalen Stand hochladen
   useEffect(() => {
     let cancelled = false;
+    let unsubscribe: (() => void) | null = null;
     (async () => {
       const doc = await remoteDoc();
       if (!doc || cancelled) return;
@@ -93,12 +96,25 @@ export function useAppData() {
         }
         remote.current = doc;
         setSync("saved");
+        // Änderungen von anderswo (anderes Gerät, Anpassung durch Claude) live übernehmen,
+        // damit diese Ansicht sie nicht mit einem älteren Stand überschreibt
+        unsubscribe = doc.onSnapshot(
+          (s) => {
+            const next = s.exists ? (s.data()?.json as string | undefined) : undefined;
+            if (!next || s.metadata?.hasPendingWrites || next === lastSaved.current) return;
+            lastSaved.current = next;
+            const stored = migrate(JSON.parse(next));
+            setData((local) => ({ ...stored, settings: { ...stored.settings, anthropicApiKey: local.settings.anthropicApiKey } }));
+          },
+          () => undefined,
+        );
       } catch {
         if (!cancelled) setSync("error");
       }
     })();
     return () => {
       cancelled = true;
+      unsubscribe?.();
     };
   }, []);
 

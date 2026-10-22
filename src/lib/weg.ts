@@ -552,7 +552,9 @@ export function forecastForTenant(plan: EconomicPlan, property: Property, tenant
     const agreement = tenant.lease ? agreementFor(p.label, p.category, tenant.lease) : null;
     if (agreement?.status === "not_agreed") continue;
     const cents = toCents(amountByLease(p, tenant.lease, unit, property).amount);
-    if (p.classification === "review" || agreement?.status === "partial") uncertain += cents;
+    // „Nur ähnlich vereinbart“ bleibt unsicher, außer du hast die Position selbst als umlagefähig bestätigt
+    const confirmed = p.classification === "allocable" && p.origin === "user";
+    if (p.classification === "review" || (agreement?.status === "partial" && !confirmed)) uncertain += cents;
     else expected += cents;
   }
   const days = daysInclusive(range.start, range.end);

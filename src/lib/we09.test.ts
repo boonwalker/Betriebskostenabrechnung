@@ -371,6 +371,17 @@ describe("Prognose 2025 für den Mieter WE 09", () => {
     expect(f.result).toBe(-154.27);
   });
 
+  it("Dachwartung vom Eigentümer bestätigt: zählt in der Prognose mit", () => {
+    const plan = we09Plan2025();
+    const confirmed = {
+      ...plan,
+      positions: plan.positions.map((p) => (p.label === "Wartung Dach" ? { ...p, classification: "allocable" as const, origin: "user" as const, reviewed: true } : p)),
+    };
+    const f = forecastForTenant(confirmed, we09Property(), we09Tenant())!;
+    expect(f.uncertainYear).toBe(0);
+    expect(f.expectedYear).toBe(1202.22);
+  });
+
   it("2026 (Plan 2025 fortgeschrieben): Grundsteuer 194,42 € und Müll 142,55 € kommen dazu", () => {
     const plan = { ...we09Plan2025(), year: 2026 };
     const f = forecastForTenant(plan, we09Property(), we09Tenant())!;

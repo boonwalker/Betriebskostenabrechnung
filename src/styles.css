@@ -588,9 +588,12 @@ table.transposed td.wrap .badge { white-space: normal; }
 /* Zählerstände: eine Spalte je Zähler */
 table.meters th[scope="row"] div { font-weight: 600; color: var(--text); }
 table.meters td input { width: 100%; min-width: 58px; max-width: 140px; }
-table.meters thead th { vertical-align: bottom; }
+table.meters thead th { vertical-align: bottom; white-space: nowrap; }
+table.meters .unit { font-weight: 400; color: var(--muted); }
 @media (max-width: 560px) {
-  table.meters thead th { font-size: 0.8rem; }
-  table.meters th[scope="row"] { width: 26%; }
+  table.meters thead th { font-size: 0.72rem; padding-left: 4px; }
+  table.meters th[scope="row"] { width: 1%; font-size: 0.75rem; }
+  table.meters td { padding-left: 4px; }
+  table.meters td input { padding-left: 6px; padding-right: 6px; }
 }
 table.meters tr.meter-sum.first th, table.meters tr.meter-sum.first td { border-top: 2px solid var(--border); }

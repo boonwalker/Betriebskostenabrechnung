@@ -347,12 +347,6 @@ export default function StatementEditor({ data, update, statementId }: PageProps
           return (
             <div key={unit.id} style={{ marginTop: 16 }}>
               <h3>Zählerstände beim Nutzerwechsel – {unit.name}</h3>
-              <p className="hint">
-                Stände zum Beginn, zu jedem Wechsel und zum Ende des Zeitraums – z. B. aus dem Übergabeprotokoll und der Heizkosten- bzw. Wasserabrechnung („Ablesewert
-                alt/neu“). Daraus ergibt sich der Verbrauch je Mieter. Ohne Stände gilt § 9b Abs. 2 HeizkostenV (Heizung nach Gradtagzahlen, sonst nach Zeit). Kennst
-                du nur den Verbrauch je Mieter (z. B. aus der Nutzerwechsel-Abrechnung des Messdienstes), trage Beginn 0, beim Wechsel den Verbrauch des ersten Mieters und am
-                Ende die Summe ein.
-              </p>
               <div className="table-wrap">
                 <table className="transposed meters">
                   <thead>
@@ -401,6 +395,12 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                   </tbody>
                 </table>
               </div>
+              <p className="hint" style={{ marginTop: 10 }}>
+                Stände zum Beginn, zu jedem Wechsel und zum Ende des Zeitraums – z. B. aus dem Übergabeprotokoll und der Heizkosten- bzw. Wasserabrechnung („Ablesewert
+                alt/neu“). Daraus ergibt sich der Verbrauch je Mieter. Ohne Stände gilt § 9b Abs. 2 HeizkostenV (Heizung nach Gradtagzahlen, sonst nach Zeit). Kennst
+                du nur den Verbrauch je Mieter (z. B. aus der Nutzerwechsel-Abrechnung des Messdienstes), trage Beginn 0, beim Wechsel den Verbrauch des ersten Mieters und am
+                Ende die Summe ein.
+              </p>
             </div>
           );
         })}
@@ -456,7 +456,11 @@ export default function StatementEditor({ data, update, statementId }: PageProps
 }
 
 /** Kurze Spaltenköpfe für die Zählertabelle */
-const METER_SHORT: Record<MeterKind, ReactNode> = { heating: "Heizung", water: "Warmwasser", coldWater: <>Kaltwasser<div className="muted small">m³</div></> };
+const METER_SHORT: Record<MeterKind, ReactNode> = {
+  heating: <>Heizung <em className="unit">kWh</em></>,
+  water: <>Warmwasser <em className="unit">kWh</em></>,
+  coldWater: <>Kaltwasser <em className="unit">m³</em></>,
+};
 
 function CostRow({ index, cost, property, onChange, onRemove }: { index: number; cost: CostItem; property: Property; onChange: (p: Partial<CostItem>) => void; onRemove: () => void }) {
   const heating = isHeatingCategory(cost.category);

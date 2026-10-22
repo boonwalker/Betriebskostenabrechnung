@@ -221,7 +221,15 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
       </div>
 
       <div className="card">
-        <h2>Entnahmen vom Mietkonto</h2>
+        <h2>Mietkonto und Entnahmen</h2>
+        <div className="grid" style={{ marginBottom: 12 }}>
+          <Field label="Anfangsbestand (€)" hint="Kontostand am Startdatum, z. B. 0 € bei neuem Konto">
+            <NumberInput value={p.accountOpeningBalance ?? 0} onChange={(v) => set({ accountOpeningBalance: v || null })} />
+          </Field>
+          <Field label="am" hint="leer: Erwerbsdatum">
+            <input type="date" value={p.accountOpeningDate ?? ""} onChange={(e) => set({ accountOpeningDate: e.target.value || null })} />
+          </Field>
+        </div>
         <p className="hint">
           Regelmäßige Überweisungen vom Mietkonto auf dein privates Konto. Sie mindern den Vermögenswert des Objekts (das Geld liegt danach privat) und haben steuerlich keine
           Bedeutung.

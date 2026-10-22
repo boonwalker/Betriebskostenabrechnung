@@ -103,6 +103,9 @@ export interface Property {
   wasteFeeAnnual?: number | null;
   /** ab wann du die Abgaben der Gemeinde trägst; leer: 1. Januar nach dem Erwerb (§ 9 GrStG) */
   propertyTaxFrom?: ISODate | null;
+  /** Kontostand des Mietkontos zu Beginn (Standard: 0 € zum Erwerb) */
+  accountOpeningBalance?: number | null;
+  accountOpeningDate?: ISODate | null;
   /** regelmäßige Entnahmen vom Mietkonto (Privatentnahmen) */
   withdrawals?: Withdrawal[];
 }

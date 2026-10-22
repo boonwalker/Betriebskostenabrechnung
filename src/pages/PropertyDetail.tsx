@@ -8,6 +8,7 @@ import { formatEUR, formatEUR0, formatNum, formatPct, formatSignedEUR0 } from ".
 import { missingInfo, PROPERTY_TYPE_LABELS, rentAt, uid, warmRent } from "../lib/model";
 import type { EconomicPlan, Property, Tenant, WegAnnualStatement } from "../lib/types";
 import { wealthSeries, type WealthSeries } from "../lib/wealth";
+import { accountLedger } from "../lib/account";
 import { planCheckpoints, planSplit, summarizeAnnual, summarizePlan } from "../lib/weg";
 import { Checkpoints } from "../components/Charts";
 import WegImport from "../components/WegImport";
@@ -127,7 +128,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
               <Kpi
                 label="Entnommen seit Erwerb"
                 value={formatEUR0(w.current.withdrawn)}
-                hint={`Mietkonto ${formatSignedEUR0(w.current.cumulative - w.current.withdrawn)}`}
+                hint={`Überschuss nach Entnahmen ${formatSignedEUR0(w.current.cumulative - w.current.withdrawn)}`}
               />
             )}
             <Kpi label="Zuwachs" value={formatSignedEUR0(w.gain)} hint={w.baseline > 0 ? formatPct(w.gain / w.baseline) : undefined} />
@@ -177,6 +178,8 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
           Für die Vermögensentwicklung fehlen Erwerbsdatum und Kaufpreis bzw. Wert bei Schenkung. <a href={`#/objekte/${p.id}/bearbeiten`}>Erwerb erfassen</a>
         </div>
       )}
+
+      <AccountCard data={data} property={p} />
 
       <div className="card">
         <h2>Wertentwicklung</h2>
@@ -517,6 +520,76 @@ function CostOverview({ data, property }: { data: PageProps["data"]; property: P
             <a href={`#/weg/wirtschaftsplan/${plan.id}`}>Wirtschaftsplan {plan.year} mit Jahresvergleich und Kostentreibern öffnen →</a>
           </p>
         </>
+      )}
+    </div>
+  );
+}
+
+/** Soll-Kontostand des Mietkontos zu einem Stichtag, mit Kontoauszug und Abgleich */
+function AccountCard({ data, property }: { data: PageProps["data"]; property: Property }) {
+  const [date, setDate] = useState(todayISO());
+  const [actual, setActual] = useState<number>(NaN);
+  const [showAll, setShowAll] = useState(false);
+  const ledger = accountLedger(property, data, date || todayISO());
+  if (!ledger) return null;
+  const diff = Number.isNaN(actual) ? null : Math.round((actual - ledger.balance) * 100) / 100;
+  const shown = showAll ? [...ledger.bookings].reverse() : [...ledger.bookings].reverse().slice(0, 8);
+  return (
+    <div className="card">
+      <h2>Mietkonto</h2>
+      <p className="hint">
+        So viel müsste auf dem Mietkonto liegen, wenn alle Zahlungen wie vereinbart geflossen sind: Miete und Hausgeld zum Monatsersten, Grundsteuer und Müll zu den
+        Quartalsterminen, Entnahmen am jeweiligen Tag. Gleiche ihn mit deinem echten Kontostand ab.
+      </p>
+      <div className="kpi-row" style={{ alignItems: "end" }}>
+        <label className="field">
+          Stichtag
+          <input id="account-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </label>
+        <Kpi label={`Soll-Kontostand am ${formatDate(date)}`} value={formatEUR(ledger.balance)} hint={`Anfangsbestand ${formatEUR(ledger.opening.amount)} am ${formatDate(ledger.opening.date)}`} />
+        <Kpi label="Eingänge / Ausgänge" value={`+${formatEUR0(ledger.incoming)} / ${formatEUR0(ledger.outgoing)}`} />
+        <label className="field">
+          tatsächlicher Kontostand (€)
+          <NumberInput allowEmpty value={actual} onChange={setActual} placeholder="zum Abgleich" />
+        </label>
+      </div>
+      {diff !== null && (
+        <div className={`alert ${Math.abs(diff) < 0.01 ? "info" : "warn"} small`} style={{ marginTop: 12 }}>
+          {Math.abs(diff) < 0.01
+            ? "✓ Der Kontostand stimmt mit dem Soll überein."
+            : `Differenz ${diff > 0 ? "+" : ""}${formatEUR(diff)}: ${
+                diff > 0
+                  ? "mehr auf dem Konto als erwartet – z. B. Anfangsbestand, Kaution auf dem Konto, Erstattung der WEG oder eine noch nicht abgebuchte Zahlung."
+                  : "weniger auf dem Konto als erwartet – z. B. ausstehende Miete, eine Sonderumlage, eine Rechnung oder eine zusätzliche Entnahme."
+              }`}
+        </div>
+      )}
+      <div className="table-wrap" style={{ marginTop: 12 }}>
+        <table className="compact">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Buchung</th>
+              <th className="num">Betrag</th>
+              <th className="num">Kontostand</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((b, i) => (
+              <tr key={`${b.date}-${b.label}-${i}`}>
+                <td>{formatDate(b.date)}</td>
+                <td>{b.label}</td>
+                <td className="num">{b.amount > 0 ? "+" : ""}{formatEUR(b.amount)}</td>
+                <td className="num">{formatEUR(b.balance)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {ledger.bookings.length > 8 && (
+        <button className="ghost" style={{ marginTop: 8 }} onClick={() => setShowAll((x) => !x)}>
+          {showAll ? "Nur die letzten Buchungen" : `Alle ${ledger.bookings.length} Buchungen anzeigen`}
+        </button>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import { IssueList } from "../components/IssueList";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Balance, NumberInput, type PageProps } from "../components/ui";
 import ReceiptImport from "../components/ReceiptImport";
 import { COST_CATEGORIES, isHeatingCategory, KEY_LABELS } from "../lib/betrkv";
@@ -222,31 +222,17 @@ export default function StatementEditor({ data, update, statementId }: PageProps
             <p>Noch keine Kosten erfasst. Lade deine Rechnungen und Bescheide hoch oder trage die Beträge selbst ein.</p>
           </div>
         ) : (
-          <div className="table-wrap">
-            <table className="compact">
-              <thead>
-                <tr>
-                  <th style={{ minWidth: 190 }}>Kostenart (§ 2 BetrKV)</th>
-                  <th style={{ minWidth: 170 }}>Bezeichnung</th>
-                  <th style={{ minWidth: 120 }} className="num">Betrag (€)</th>
-                  <th style={{ minWidth: 150 }}>Umlageschlüssel</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {statement.costs.map((c) => (
-                  <CostRow key={c.id} cost={c} property={property} onChange={(patch) => setCost(c.id, patch)} onRemove={() => set({ costs: statement.costs.filter((x) => x.id !== c.id) })} />
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={2}>Summe</td>
-                  <td className="num">{formatEUR(result.totalCosts)}</td>
-                  <td colSpan={2} />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          <>
+            <div className="cost-cards">
+              {statement.costs.map((c, i) => (
+                <CostRow key={c.id} index={i + 1} cost={c} property={property} onChange={(patch) => setCost(c.id, patch)} onRemove={() => set({ costs: statement.costs.filter((x) => x.id !== c.id) })} />
+              ))}
+            </div>
+            <div className="cost-sum">
+              <span>Summe</span>
+              <strong>{formatEUR(result.totalCosts)}</strong>
+            </div>
+          </>
         )}
       </div>
 
@@ -353,6 +339,11 @@ export default function StatementEditor({ data, update, statementId }: PageProps
             set({ meterReadings: { ...statement.meterReadings, [unit.id]: { ...values, [meter]: row } } });
           };
           const who = (sg: (typeof segs)[number]) => (sg.tenantId ? data.tenants.find((t) => t.id === sg.tenantId)?.name : "Leerstand");
+          const meters = (Object.keys(METER_LABELS) as MeterKind[]).map((meter) => {
+            const consumption = segmentConsumption(statement, unit.id, segs, meter);
+            const raw = values[meter];
+            return { meter, raw, consumption, invalid: !!raw && raw.every((v) => v !== null && v !== undefined) && !consumption };
+          });
           return (
             <div key={unit.id} style={{ marginTop: 16 }}>
               <h3>Zählerstände beim Nutzerwechsel – {unit.name}</h3>
@@ -363,49 +354,50 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                 Ende die Summe ein.
               </p>
               <div className="table-wrap">
-                <table className="compact">
+                <table className="transposed meters">
                   <thead>
                     <tr>
-                      <th>Zähler</th>
-                      {dates.map((d, i) => (
-                        <th key={d + i} className="num">
-                          {i === 0 ? "Beginn " : i === dates.length - 1 ? "Ende " : "Wechsel "}
-                          {formatDate(d)}
-                        </th>
+                      <th />
+                      {meters.map(({ meter }) => (
+                        <th key={meter} scope="col" className="num">{METER_SHORT[meter]}</th>
                       ))}
-                      <th>Verbrauch je Abschnitt</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(Object.keys(METER_LABELS) as MeterKind[]).map((meter) => {
-                      const consumption = segmentConsumption(statement, unit.id, segs, meter);
-                      const raw = values[meter];
-                      const invalid = raw && raw.every((v) => v !== null && v !== undefined) && !consumption;
-                      return (
-                        <tr key={meter}>
-                          <td>{METER_LABELS[meter]}</td>
-                          {dates.map((d, i) => (
-                            <td key={d + i} style={{ minWidth: 110 }}>
-                              <NumberInput
-                                value={raw?.[i] ?? undefined}
-                                allowEmpty
-                                onChange={(v) => setValue(meter, i, Number.isFinite(v) ? v : null)}
-                                ariaLabel={`${METER_LABELS[meter]} ${formatDate(d)}`}
-                              />
-                            </td>
-                          ))}
-                          <td className="small">
+                    {dates.map((d, i) => (
+                      <tr key={d + i}>
+                        <th scope="row">
+                          {i === 0 ? "Beginn" : i === dates.length - 1 ? "Ende" : "Wechsel"}
+                          <div>{formatDate(d)}</div>
+                        </th>
+                        {meters.map(({ meter, raw }) => (
+                          <td key={meter} className="num">
+                            <NumberInput
+                              value={raw?.[i] ?? undefined}
+                              allowEmpty
+                              onChange={(v) => setValue(meter, i, Number.isFinite(v) ? v : null)}
+                              ariaLabel={`${METER_LABELS[meter]} ${formatDate(d)}`}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    {segs.map((sg, si) => (
+                      <tr key={si} className={si === 0 ? "meter-sum first" : "meter-sum"}>
+                        <th scope="row">Verbrauch {who(sg)}</th>
+                        {meters.map(({ meter, consumption, invalid }) => (
+                          <td key={meter} className="num wrap">
                             {invalid ? (
-                              <span className="badge danger">Zählerstände fallen – Tippfehler oder Zählertausch?</span>
+                              si === 0 && <span className="badge danger">Stände fallen – Tippfehler oder Zählertausch?</span>
                             ) : consumption ? (
-                              segs.map((sg, i) => `${who(sg)}: ${formatNum(consumption[i])}`).join(" · ")
+                              <strong>{formatNum(consumption[si])}</strong>
                             ) : (
                               <span className="muted">–</span>
                             )}
                           </td>
-                        </tr>
-                      );
-                    })}
+                        ))}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -463,7 +455,10 @@ export default function StatementEditor({ data, update, statementId }: PageProps
   );
 }
 
-function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; property: Property; onChange: (p: Partial<CostItem>) => void; onRemove: () => void }) {
+/** Kurze Spaltenköpfe für die Zählertabelle */
+const METER_SHORT: Record<MeterKind, ReactNode> = { heating: "Heizung", water: "Warmwasser", coldWater: <>Kaltwasser<div className="muted small">m³</div></> };
+
+function CostRow({ index, cost, property, onChange, onRemove }: { index: number; cost: CostItem; property: Property; onChange: (p: Partial<CostItem>) => void; onRemove: () => void }) {
   const heating = isHeatingCategory(cost.category);
   const [open, setOpen] = useState(!!(cost.laborCost || cost.co2Cost));
   const totalArea = property.units.reduce((a, u) => a + u.area, 0);
@@ -471,9 +466,17 @@ function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; prope
   const needsConsumption = cost.key === "consumption" || cost.key === "heating";
 
   return (
-    <>
-      <tr>
-        <td>
+    <div className="cost-card">
+      <div className="cost-card-head">
+        <span className="cost-card-no">{index}</span>
+        <strong>{cost.label || "Neue Position"}</strong>
+        <span className="spacer" />
+        <span className="cost-card-amount">{formatEUR(cost.amount || 0)}</span>
+        <button className="ghost small" onClick={onRemove} aria-label="Position entfernen">✕</button>
+      </div>
+      <div className="cost-fields">
+        <span className="cost-field-label">Kostenart</span>
+        <div>
           <select
             value={cost.category}
             onChange={(e) => {
@@ -494,8 +497,9 @@ function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; prope
               <option key={c.no} value={c.no}>{c.no}. {c.label}</option>
             ))}
           </select>
-        </td>
-        <td>
+        </div>
+        <span className="cost-field-label">Bezeichnung</span>
+        <div>
           <input value={cost.label} onChange={(e) => onChange({ label: e.target.value })} aria-label="Bezeichnung" />
           {cost.sourceAnnualId ? (
             <div className="muted small" title={cost.note}>
@@ -504,44 +508,35 @@ function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; prope
           ) : (
             cost.source && <div className="muted small" title={cost.note}>aus Beleg: {cost.source}</div>
           )}
-        </td>
-        <td>
+        </div>
+        <span className="cost-field-label">Betrag (€)</span>
+        <div>
           <NumberInput value={cost.amount} onChange={(amount) => onChange({ amount })} ariaLabel="Betrag" />
-        </td>
-        <td>
+        </div>
+        <span className="cost-field-label">Umlageschlüssel</span>
+        <div>
           <select value={cost.key} onChange={(e) => onChange({ key: e.target.value as AllocationKey })} aria-label="Umlageschlüssel">
             {Object.entries(KEY_LABELS).map(([k, l]) => (
               <option key={k} value={k}>{l}</option>
             ))}
           </select>
-        </td>
-        <td className="num" style={{ whiteSpace: "nowrap" }}>
-          <button className="ghost" onClick={() => setOpen(!open)} aria-expanded={open} title="§ 35a, CO2, Notiz">
-            {open ? "▾" : "▸"} Details
-          </button>
-          <button className="ghost" onClick={onRemove} aria-label="Position entfernen">✕</button>
-        </td>
-      </tr>
-      {cost.key === "direct" && (
-        <tr>
-          <td />
-          <td colSpan={4}>
-            <label className="row small muted">
-              Betrifft Einheit:
+        </div>
+        {cost.key === "direct" && (
+          <>
+            <span className="cost-field-label">Betrifft Einheit</span>
+            <div>
               <select value={cost.directUnitId ?? ""} onChange={(e) => onChange({ directUnitId: e.target.value })}>
                 <option value="">– bitte wählen –</option>
                 {property.units.map((u) => (
                   <option key={u.id} value={u.id}>{u.name}</option>
                 ))}
               </select>
-            </label>
-          </td>
-        </tr>
-      )}
+            </div>
+          </>
+        )}
+      </div>
       {needsConsumption && (
-        <tr>
-          <td />
-          <td colSpan={4}>
+        <div className="cost-extra">
             {cost.key === "heating" && (
               <label className="row small muted" style={{ marginBottom: 6 }}>
                 Verbrauchsanteil (HeizkostenV 50–70 %):
@@ -564,13 +559,13 @@ function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; prope
               ))}
               <span className="small muted">Summe: {formatNum(property.units.reduce((a, u) => a + (cost.consumption?.[u.id] ?? 0), 0))}</span>
             </div>
-          </td>
-        </tr>
+        </div>
       )}
+      <button className="ghost small cost-details-toggle" onClick={() => setOpen(!open)} aria-expanded={open} title="§ 35a, CO2, Notiz">
+        {open ? "▾" : "▸"} Details (§ 35a, CO2, Notiz)
+      </button>
       {open && (
-        <tr>
-          <td />
-          <td colSpan={4}>
+        <div className="cost-extra">
             <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
               <label className="field">
                 Arbeitskosten § 35a EStG (€)
@@ -605,9 +600,8 @@ function CostRow({ cost, property, onChange, onRemove }: { cost: CostItem; prope
               Notiz
               <input value={cost.note ?? ""} onChange={(e) => onChange({ note: e.target.value })} />
             </label>
-          </td>
-        </tr>
+        </div>
       )}
-    </>
+    </div>
   );
 }

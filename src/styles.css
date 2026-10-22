@@ -564,3 +564,33 @@ table.transposed td.wrap .badge { white-space: normal; }
   .house-name { max-width: 70%; }
   .profile-rent { grid-template-columns: 1fr; }
 }
+
+/* Abrechnung: jede Kostenposition als Karte, Felder untereinander */
+.cost-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.cost-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--surface); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cost-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cost-card-head strong { color: var(--head); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cost-card-no { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--tint); color: var(--accent); font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.cost-card-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cost-fields { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px 10px; align-items: center; }
+.cost-fields input, .cost-fields select { width: 100%; min-width: 0; }
+.cost-field-label { font-size: 0.82rem; color: var(--muted); }
+.cost-extra { background: var(--tint); border-radius: 8px; padding: 10px 12px; }
+.cost-extra .row { flex-wrap: wrap; }
+.cost-details-toggle { align-self: flex-start; padding-left: 0; }
+.cost-sum { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; padding: 12px 14px; background: var(--head); color: #fff; border-radius: var(--radius); }
+.cost-sum strong { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  .cost-cards { grid-template-columns: 1fr; }
+  .cost-fields { grid-template-columns: 92px minmax(0, 1fr); }
+}
+
+/* Zählerstände: eine Spalte je Zähler */
+table.meters th[scope="row"] div { font-weight: 600; color: var(--text); }
+table.meters td input { width: 100%; min-width: 58px; max-width: 140px; }
+table.meters thead th { vertical-align: bottom; }
+@media (max-width: 560px) {
+  table.meters thead th { font-size: 0.8rem; }
+  table.meters th[scope="row"] { width: 26%; }
+}
+table.meters tr.meter-sum.first th, table.meters tr.meter-sum.first td { border-top: 2px solid var(--border); }

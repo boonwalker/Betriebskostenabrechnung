@@ -75,26 +75,25 @@ export function accountLedger(property: Property, data: AppData, until: ISODate)
       add(`${m}-01`, "Hausgeld WEG", -monthly);
     }
 
-    // Grundsteuer und Müll laut Bescheid als gemeinsame Quartalsrate, ab dem Jahr, ab dem du sie trägst
-    const charges = municipalCharges(property);
-    const total = fromCents(charges.reduce((a, c) => a + toCents(c.amount), 0));
-    const label = charges.map((c) => c.label).join(" + ");
+    // Grundsteuer und Müll laut Bescheid des jeweiligen Jahres als gemeinsame Quartalsrate, ab dem Jahr, ab dem du sie trägst
     const chargeStart = propertyTaxStart(property) ?? start;
-    if (total > 0) {
-      const firstYear = Number(chargeStart.slice(0, 4));
-      for (let y = firstYear; y <= Number(until.slice(0, 4)); y++) {
-        if (y === firstYear && chargeStart.slice(5) !== "01-01") {
-          // Im Übergangsjahr geht der Bescheid an den Voreigentümer: anteilige Erstattung (Annahme: zum Jahresende)
-          const yearDays = daysInclusive(`${y}-01-01`, `${y}-12-31`);
-          const share = (total * daysInclusive(chargeStart, `${y}-12-31`)) / yearDays;
-          add(`${y}-12-31`, `Erstattung ${label} an Voreigentümer (ab ${chargeStart.split("-").reverse().join(".")})`, -share);
-          continue;
-        }
-        quarterRates(total).forEach((rate, i) => {
-          const due = `${y}-${QUARTER_DUE[i]}`;
-          if (due >= chargeStart) add(due, `${label} (${i + 1}. Rate)`, -rate);
-        });
+    const firstYear = Number(chargeStart.slice(0, 4));
+    for (let y = firstYear; y <= Number(until.slice(0, 4)); y++) {
+      const charges = municipalCharges(property, y);
+      const total = fromCents(charges.reduce((a, c) => a + toCents(c.amount), 0));
+      if (total <= 0) continue;
+      const label = charges.map((c) => c.label).join(" + ");
+      if (y === firstYear && chargeStart.slice(5) !== "01-01") {
+        // Im Übergangsjahr geht der Bescheid an den Voreigentümer: anteilige Erstattung (Annahme: zum Jahresende)
+        const yearDays = daysInclusive(`${y}-01-01`, `${y}-12-31`);
+        const share = (total * daysInclusive(chargeStart, `${y}-12-31`)) / yearDays;
+        add(`${y}-12-31`, `Erstattung ${label} ${y} an Voreigentümer (ab ${chargeStart.split("-").reverse().join(".")})`, -share);
+        continue;
       }
+      quarterRates(total).forEach((rate, i) => {
+        const due = `${y}-${QUARTER_DUE[i]}`;
+        if (due >= chargeStart) add(due, `${label} (${i + 1}. Rate)`, -rate);
+      });
     }
   }
 

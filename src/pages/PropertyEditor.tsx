@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { NumberInput, type PageProps } from "../components/ui";
 import { currentPlan, depreciationRate } from "../lib/finance";
-import { estimatePropertyTax, impliedRate, propertyTaxStart } from "../lib/propertyTax";
+import { estimatePropertyTax, impliedRate, municipalCharges, propertyTaxStart } from "../lib/propertyTax";
 import { formatEUR, formatNum, formatPct } from "../lib/format";
 import { newProperty, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
-import type { AcquisitionType, Loan, Property, PropertyType, Unit, Withdrawal } from "../lib/types";
+import type { AcquisitionType, Loan, MunicipalBill, Property, PropertyType, Unit, Withdrawal } from "../lib/types";
 import { formatDate, todayISO } from "../lib/dates";
 
 export function Field({ label, hint, children, wide }: { label: string; hint?: string; children: ReactNode; wide?: boolean }) {
@@ -195,19 +195,94 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
           </div>
         </div>
         <h3 style={{ marginTop: 16 }}>Bescheid der Gemeinde (Grundbesitzabgaben)</h3>
+        <p className="hint">
+          Trage jeden Bescheid mit seinem Jahr ein – Grundsteuer und Müllgebühr ändern sich von Jahr zu Jahr. Für Jahre ohne eigenen Bescheid gilt der letzte frühere.
+        </p>
+        <div className="table-wrap">
+          <table className="compact">
+            <thead>
+              <tr>
+                <th>Jahr</th>
+                <th className="num">Grundsteuer B (€)</th>
+                <th className="num">Müllgebühr (€)</th>
+                <th className="num">zusammen</th>
+                <th>Notiz</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {[...(p.municipalBills ?? [])]
+                .sort((a, b) => a.year - b.year)
+                .map((b) => {
+                  const setB = (patch: Partial<MunicipalBill>) =>
+                    set({ municipalBills: (p.municipalBills ?? []).map((x) => (x.id === b.id ? { ...x, ...patch } : x)) });
+                  return (
+                    <tr key={b.id}>
+                      <td>
+                        <input
+                          type="number"
+                          aria-label="Jahr"
+                          style={{ width: 90 }}
+                          value={b.year}
+                          onChange={(e) => setB({ year: Math.round(Number(e.target.value)) || b.year })}
+                        />
+                      </td>
+                      <td className="num">
+                        <NumberInput ariaLabel="Grundsteuer" value={b.propertyTax ?? undefined} onChange={(v) => setB({ propertyTax: v || null })} />
+                      </td>
+                      <td className="num">
+                        <NumberInput ariaLabel="Müllgebühr" value={b.wasteFee ?? undefined} onChange={(v) => setB({ wasteFee: v || null })} />
+                      </td>
+                      <td className="num">{formatEUR((b.propertyTax ?? 0) + (b.wasteFee ?? 0))}</td>
+                      <td>
+                        <input aria-label="Notiz" value={b.note} onChange={(e) => setB({ note: e.target.value })} />
+                      </td>
+                      <td>
+                        <button className="ghost" onClick={() => set({ municipalBills: (p.municipalBills ?? []).filter((x) => x.id !== b.id) })}>
+                          Entfernen
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+        <button
+          style={{ margin: "8px 0 12px" }}
+          onClick={() => {
+            const last = [...(p.municipalBills ?? [])].sort((a, b) => b.year - a.year)[0];
+            set({
+              municipalBills: [
+                ...(p.municipalBills ?? []),
+                { id: uid(), year: last ? last.year + 1 : new Date().getFullYear(), propertyTax: null, wasteFee: null, note: "" },
+              ],
+            });
+          }}
+        >
+          + Bescheid
+        </button>
         <div className="grid">
-          <Field label="Grundsteuer B laut Bescheid (€ pro Jahr)" hint="gilt vor der Schätzung – für Vermögensentwicklung, Prognose und Kontrolle der Abrechnung">
-            <NumberInput value={p.propertyTaxAnnual ?? undefined} onChange={(v) => set({ propertyTaxAnnual: v || null })} />
-          </Field>
-          <Field label="Müllgebühr laut Bescheid (€ pro Jahr)" hint="falls die Stadt sie dir berechnet; umlegbar als Müllbeseitigung (Nr. 8)">
-            <NumberInput value={p.wasteFeeAnnual ?? undefined} onChange={(v) => set({ wasteFeeAnnual: v || null })} />
-          </Field>
+          {!(p.municipalBills ?? []).length && (
+            <>
+              <Field label="Grundsteuer B laut Bescheid (€ pro Jahr)" hint="gilt vor der Schätzung – besser oben je Jahr erfassen">
+                <NumberInput value={p.propertyTaxAnnual ?? undefined} onChange={(v) => set({ propertyTaxAnnual: v || null })} />
+              </Field>
+              <Field label="Müllgebühr laut Bescheid (€ pro Jahr)" hint="falls die Stadt sie dir berechnet; umlegbar als Müllbeseitigung (Nr. 8)">
+                <NumberInput value={p.wasteFeeAnnual ?? undefined} onChange={(v) => set({ wasteFeeAnnual: v || null })} />
+              </Field>
+            </>
+          )}
           <Field label="trägst du ab" hint="leer: 1. Januar nach dem Erwerb – Schuldner ist, wer am 1. Januar Eigentümer ist (§ 9 GrStG)">
             <input type="date" value={p.propertyTaxFrom ?? ""} onChange={(e) => set({ propertyTaxFrom: e.target.value || null })} />
           </Field>
           <div>
-            <div className="muted small">zusammen pro Monat</div>
-            <div className="kpi-value">{p.propertyTaxAnnual || p.wasteFeeAnnual ? formatEUR(((p.propertyTaxAnnual ?? 0) + (p.wasteFeeAnnual ?? 0)) / 12) : "–"}</div>
+            <div className="muted small">zusammen pro Monat (aktuell)</div>
+            <div className="kpi-value">
+              {municipalCharges(p, new Date().getFullYear()).length
+                ? formatEUR(municipalCharges(p, new Date().getFullYear()).reduce((a, c) => a + c.amount, 0) / 12)
+                : "–"}
+            </div>
             {!p.propertyTaxFrom && propertyTaxStart(p) && <div className="small muted">ab {formatDate(propertyTaxStart(p)!)}</div>}
           </div>
         </div>

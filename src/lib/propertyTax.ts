@@ -1,4 +1,4 @@
-import type { ISODate, Property } from "./types";
+import type { ISODate, MunicipalBill, Property } from "./types";
 
 /** Steuermesszahl für Wohngrundstücke nach § 15 Abs. 1 Nr. 2 Buchst. a GrStG (Bundesmodell): 0,31 ‰ */
 export const RESIDENTIAL_TAX_BASE_RATE = 0.00031;
@@ -18,9 +18,18 @@ export function propertyTaxStart(p: Pick<Property, "propertyTaxFrom" | "purchase
   return p.purchaseDate.slice(5) === "01-01" ? p.purchaseDate : `${Number(p.purchaseDate.slice(0, 4)) + 1}-01-01`;
 }
 
-/** Grundsteuer pro Jahr: Betrag laut Bescheid, sonst die Schätzung */
-export function propertyTaxPerYear(p: Pick<Property, "propertyTaxValue" | "propertyTaxRate" | "propertyTaxAnnual">): number | null {
-  return p.propertyTaxAnnual || estimatePropertyTax(p)?.tax || null;
+type ChargeSource = Pick<Property, "propertyTaxValue" | "propertyTaxRate" | "propertyTaxAnnual" | "wasteFeeAnnual" | "municipalBills">;
+
+/** Bescheid für ein Jahr: der des Jahres, sonst der letzte frühere (ohne Jahr: der neueste) */
+export function billFor(p: Pick<Property, "municipalBills">, year?: number): MunicipalBill | null {
+  const bills = [...(p.municipalBills ?? [])].sort((a, b) => b.year - a.year);
+  if (year === undefined) return bills[0] ?? null;
+  return bills.find((b) => b.year === year) ?? bills.find((b) => b.year < year) ?? null;
+}
+
+/** Grundsteuer pro Jahr: Bescheid des Jahres, sonst hinterlegter Betrag, sonst die Schätzung */
+export function propertyTaxPerYear(p: Omit<ChargeSource, "wasteFeeAnnual"> & Partial<Pick<Property, "wasteFeeAnnual">>, year?: number): number | null {
+  return billFor(p, year)?.propertyTax || p.propertyTaxAnnual || estimatePropertyTax(p)?.tax || null;
 }
 
 export interface MunicipalCharge {
@@ -31,12 +40,13 @@ export interface MunicipalCharge {
   amount: number;
 }
 
-/** Jährliche Abgaben laut Grundbesitzabgabenbescheid, die du als Eigentümer trägst */
-export function municipalCharges(p: Pick<Property, "propertyTaxValue" | "propertyTaxRate" | "propertyTaxAnnual" | "wasteFeeAnnual">): MunicipalCharge[] {
+/** Jährliche Abgaben laut Grundbesitzabgabenbescheid (für ein bestimmtes Jahr), die du als Eigentümer trägst */
+export function municipalCharges(p: ChargeSource, year?: number): MunicipalCharge[] {
   const out: MunicipalCharge[] = [];
-  const tax = propertyTaxPerYear(p);
+  const tax = propertyTaxPerYear(p, year);
   if (tax) out.push({ key: "tax", label: "Grundsteuer", category: 1, amount: tax });
-  if (p.wasteFeeAnnual) out.push({ key: "waste", label: "Müllgebühr", category: 8, amount: p.wasteFeeAnnual });
+  const waste = billFor(p, year)?.wasteFee ?? p.wasteFeeAnnual;
+  if (waste) out.push({ key: "waste", label: "Müllgebühr", category: 8, amount: waste });
   return out;
 }
 

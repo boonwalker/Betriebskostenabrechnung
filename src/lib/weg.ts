@@ -566,7 +566,7 @@ export function forecastForTenant(plan: EconomicPlan, property: Property, tenant
   const lease = tenant.lease;
   const charges =
     property.units.length === 1 && chargeRange
-      ? municipalCharges(property)
+      ? municipalCharges(property, plan.year)
           .filter((c) => !lease || (lease.agreedCategories.includes(c.category) && (c.key !== "tax" || lease.propertyTaxIndividual)))
           .map((c) => ({
             label: c.label,

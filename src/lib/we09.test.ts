@@ -382,6 +382,22 @@ describe("Prognose 2025 für den Mieter WE 09", () => {
     expect(f.expectedYear).toBe(1202.22);
   });
 
+  it("Abgaben ab 01.08.2025 nach dem Bescheid 2025: Grundsteuer 71,44 € und Müll 44,78 € anteilig", () => {
+    const p = {
+      ...we09Property(),
+      propertyTaxFrom: "2025-08-01",
+      municipalBills: [
+        { id: "b25", year: 2025, propertyTax: 170.42, wasteFee: 106.84, note: "" },
+        { id: "b26", year: 2026, propertyTax: 194.42, wasteFee: 142.55, note: "" },
+      ],
+    };
+    const f = forecastForTenant(we09Plan2025(), p, we09Tenant())!;
+    expect(f.charges.map((c) => [c.label, c.year, c.share])).toEqual([
+      ["Grundsteuer", 170.42, 71.44],
+      ["Müllgebühr", 106.84, 44.78],
+    ]);
+  });
+
   it("2026 (Plan 2025 fortgeschrieben): Grundsteuer 194,42 € und Müll 142,55 € kommen dazu", () => {
     const plan = { ...we09Plan2025(), year: 2026 };
     const f = forecastForTenant(plan, we09Property(), we09Tenant())!;

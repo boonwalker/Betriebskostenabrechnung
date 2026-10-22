@@ -99,9 +99,7 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
   const loans = property.loans.map((l) => schedule(l, months));
   const ownCostsYear = property.maintenanceAnnual + property.managementAnnual + property.otherCostsAnnual;
   // Grundsteuer und Müllgebühr laut Bescheid der Gemeinde, ab dem Tag, ab dem du sie trägst
-  const chargesBill = municipalCharges(property);
-  const taxEstimate = chargesBill.find((c) => c.key === "tax")?.amount ?? 0;
-  const wasteYear = chargesBill.find((c) => c.key === "waste")?.amount ?? 0;
+  const chargeOf = (year: number, key: "tax" | "waste") => municipalCharges(property, year).find((c) => c.key === key)?.amount ?? 0;
   const taxStart = propertyTaxStart(property) ?? acq;
   const withdrawals = property.withdrawals ?? [];
 
@@ -116,7 +114,7 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
   const propertyTaxYear = (year: number) => {
     const st = data.statements.find((s) => s.propertyId === property.id && s.periodStart.startsWith(String(year)));
     const fromStatement = st?.costs.filter((c) => c.category === 1).reduce((a, c) => a + c.amount, 0);
-    return fromStatement || taxEstimate;
+    return fromStatement || chargeOf(year, "tax");
   };
   // Ergebnisse freigegebener Mieterabrechnungen: Nachzahlung fließt zu, Guthaben ab (im Monat der Freigabe)
   const settlements = new Map<string, number>();
@@ -149,7 +147,7 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
     const taxRange = intersect(range.start, range.end, taxStart, "9999-12-31");
     const taxShare = taxRange ? daysInclusive(taxRange.start, taxRange.end) / daysInclusive(monthStart, monthEnd) : 0;
     const costs =
-      (isEtw ? hausgeldMonthly(year) * share + ((propertyTaxYear(year) + wasteYear) / 12) * taxShare : 0) +
+      (isEtw ? hausgeldMonthly(year) * share + ((propertyTaxYear(year) + chargeOf(year, "waste")) / 12) * taxShare : 0) +
       (ownCostsYear / 12) * share +
       loans.reduce((a, l) => a + l.payment[i], 0);
     const cashflow = round2(income - costs + (settlements.get(m) ?? 0));

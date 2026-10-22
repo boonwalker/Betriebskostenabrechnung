@@ -35,6 +35,16 @@ describe("Mietkonto WE 09 (Soll-Kontostand)", () => {
     expect(l.bookings.filter((b) => b.label.includes("Rate")).map((b) => b.date)).toEqual(["2026-02-15"]);
   });
 
+  it("Bescheide je Jahr: Erstattung 2025 nach dem Bescheid 2025 (277,26 € × 153/365), 2026 nach dem Bescheid 2026", () => {
+    const bills = [
+      { id: "b25", year: 2025, propertyTax: 170.42, wasteFee: 106.84, note: "" },
+      { id: "b26", year: 2026, propertyTax: 194.42, wasteFee: 142.55, note: "" },
+    ];
+    const l = accountLedger({ ...p, propertyTaxFrom: "2025-08-01", municipalBills: bills }, data, "2026-03-01")!;
+    expect(l.bookings.find((b) => b.label.startsWith("Erstattung"))!.amount).toBe(-116.22);
+    expect(l.bookings.find((b) => b.label.includes("1. Rate"))!.amount).toBe(-84.24);
+  });
+
   it("berücksichtigt einen Anfangsbestand", () => {
     const l = accountLedger({ ...p, accountOpeningBalance: 500 }, data, "2025-08-31")!;
     expect(l.balance).toBe(500 + 630 - 160.31);

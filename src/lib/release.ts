@@ -2,7 +2,7 @@ import { calculateStatement, type Co2Result, type TenantResult } from "./calc";
 import { formatDate } from "./dates";
 import type { AppData, Statement, Tenant } from "./types";
 import { agreementFor } from "./lease";
-import { estimatePropertyTax, propertyTaxStart } from "./propertyTax";
+import { billFor, estimatePropertyTax, propertyTaxStart } from "./propertyTax";
 import { checkAnnual } from "./weg";
 import { link, type Target } from "./nav";
 
@@ -121,8 +121,11 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
 
   // Grundsteuer gegen Schätzung aus Grundsteuerwert und Hebesatz prüfen
   const estimate = estimatePropertyTax(property);
-  const reference = property.propertyTaxAnnual
-    ? { tax: property.propertyTaxAnnual, source: "dem hinterlegten Bescheid" }
+  const bill = billFor(property, year);
+  const billTax = bill?.propertyTax ?? property.propertyTaxAnnual;
+  const wasteFee = (bill?.wasteFee ?? property.wasteFeeAnnual) || null;
+  const reference = billTax
+    ? { tax: billTax, source: bill ? `dem Bescheid ${bill.year}` : "dem hinterlegten Bescheid" }
     : estimate
       ? { tax: estimate.tax, source: "der Schätzung (Grundsteuerwert × 0,31 ‰ × Hebesatz)" }
       : null;
@@ -177,11 +180,11 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
           hints.push(to(`„${c.label}“ wird ${t.tenant.name} nicht berechnet (${m.text}); der Anteil bleibt beim Vermieter.`, objectPage({ t: t.tenant.id, f: "vertrag" }, "Mietvertrag ansehen")));
         else if (m.status === "partial") hints.push(to(`„${c.label}“: ${m.text}. Bitte anhand der Rechnung bestätigen.`, here("kosten", "Zur Position")));
       }
-      if (property.type === "etw" && !beforeStart && property.wasteFeeAnnual && lease.agreedCategories.includes(8) && !wasteItems.length) {
+      if (property.type === "etw" && !beforeStart && wasteFee && lease.agreedCategories.includes(8) && !wasteItems.length) {
         hints.push(
           to(
-            `Die Müllgebühr laut Bescheid der Gemeinde (${eur(property.wasteFeeAnnual)} pro Jahr) ist vereinbar, aber nicht erfasst. Trage sie als „Müllbeseitigung“ (Nr. 8) direkt für die Wohnung ein.`,
-            { ...here("kosten", `Jetzt eintragen (${eur(property.wasteFeeAnnual)})`), fix: { kind: "waste", amount: property.wasteFeeAnnual } },
+            `Die Müllgebühr laut Bescheid der Gemeinde (${eur(wasteFee)} pro Jahr) ist vereinbar, aber nicht erfasst. Trage sie als „Müllbeseitigung“ (Nr. 8) direkt für die Wohnung ein.`,
+            { ...here("kosten", `Jetzt eintragen (${eur(wasteFee)})`), fix: { kind: "waste", amount: wasteFee } },
           ),
         );
       }

@@ -32,6 +32,15 @@ export interface Loan {
 /** Art des Erwerbs: bestimmt Einstand, eingesetztes Eigenkapital und Abschreibung */
 export type AcquisitionType = "purchase" | "gift" | "inheritance";
 
+/** Bescheid der Gemeinde über Grundsteuer und Müllgebühr für ein Jahr */
+export interface MunicipalBill {
+  id: string;
+  year: number;
+  propertyTax: number | null;
+  wasteFee: number | null;
+  note: string;
+}
+
 /** Regelmäßige Entnahme vom Mietkonto auf ein privates Konto – steuerlich ohne Bedeutung */
 export interface Withdrawal {
   id: string;
@@ -101,6 +110,8 @@ export interface Property {
   propertyTaxAnnual?: number | null;
   /** Müllgebühr pro Jahr laut Grundbesitzabgabenbescheid, falls die Gemeinde sie dem Eigentümer berechnet */
   wasteFeeAnnual?: number | null;
+  /** Grundbesitzabgabenbescheide je Jahr – haben Vorrang vor den beiden Feldern oben */
+  municipalBills?: MunicipalBill[];
   /** ab wann du die Abgaben der Gemeinde trägst; leer: 1. Januar nach dem Erwerb (§ 9 GrStG) */
   propertyTaxFrom?: ISODate | null;
   /** Kontostand des Mietkontos zu Beginn (Standard: 0 € zum Erwerb) */

@@ -220,47 +220,60 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         {m.history.length >= 2 ? (
           <ValueChart points={m.history} height={200} label={`Wertverlauf ${p.name}`} />
         ) : (
-          <p className="muted small">Erfasse den Kauf in den Objektdaten und mindestens eine Bewertung, um den Verlauf zu sehen.</p>
+          <p className="muted small">Trage unten eine aktuelle Schätzung ein, dann erscheint hier der Verlauf.</p>
         )}
-        <div className="table-wrap" style={{ marginTop: 12 }}>
-          <table className="compact">
-            <thead>
-              <tr>
-                <th>Datum</th>
-                <th className="num">Wert</th>
-                <th>Notiz</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {p.purchaseDate && p.purchasePrice > 0 && (
-                <tr>
-                  <td>{formatDate(p.purchaseDate)}</td>
-                  <td className="num">{formatEUR0(p.purchasePrice)}</td>
-                  <td className="muted">Kaufpreis</td>
-                  <td />
-                </tr>
-              )}
-              {[...p.valuations]
-                .sort((a, b) => a.date.localeCompare(b.date))
-                .map((v) => (
-                  <tr key={v.id}>
-                    <td>{formatDate(v.date)}</td>
-                    <td className="num">{formatEUR0(v.value)}</td>
-                    <td>{v.note}</td>
-                    <td><button className="ghost" onClick={() => setValuations(p.valuations.filter((x) => x.id !== v.id))} aria-label="Bewertung löschen">✕</button></td>
-                  </tr>
-                ))}
-              <tr>
-                <td><input type="date" value={valDate} onChange={(e) => setValDate(e.target.value)} aria-label="Datum der Bewertung" /></td>
-                <td style={{ width: 150 }}><NumberInput value={valValue || undefined} onChange={setValValue} placeholder="Marktwert €" ariaLabel="Marktwert" /></td>
-                <td><input value={valNote} onChange={(e) => setValNote(e.target.value)} placeholder="z. B. Bodenrichtwert, Gutachten, Portal" aria-label="Notiz" /></td>
-                <td><button className="primary" disabled={!valValue} onClick={addValuation}>Erfassen</button></td>
-              </tr>
-            </tbody>
-          </table>
+        <ul className="account-list">
+          {p.purchaseDate && p.purchasePrice > 0 && (
+            <li>
+              <div className="account-what">
+                <span>{p.acquisitionType && p.acquisitionType !== "purchase" ? "Wert beim Erwerb" : "Kaufpreis"}</span>
+                <span className="small muted">{formatDate(p.purchaseDate)}</span>
+              </div>
+              <div className="account-amount">
+                <span className="out">{formatEUR0(p.purchasePrice)}</span>
+              </div>
+            </li>
+          )}
+          {[...p.valuations]
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map((v) => (
+              <li key={v.id}>
+                <div className="account-what">
+                  <span>{v.note || "Bewertung"}</span>
+                  <span className="small muted">{formatDate(v.date)}</span>
+                </div>
+                <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
+                  <div className="account-amount">
+                    <span className="out">{formatEUR0(v.value)}</span>
+                  </div>
+                  <button className="ghost" onClick={() => setValuations(p.valuations.filter((x) => x.id !== v.id))} aria-label="Bewertung löschen">
+                    ✕
+                  </button>
+                </div>
+              </li>
+            ))}
+        </ul>
+        <div className="valuation-form">
+          <div className="account-label">Neue Bewertung</div>
+          <div className="valuation-fields">
+            <label className="field">
+              Datum
+              <input type="date" value={valDate} onChange={(e) => setValDate(e.target.value)} />
+            </label>
+            <label className="field">
+              Marktwert (€)
+              <NumberInput value={valValue || undefined} onChange={setValValue} placeholder="135.000" />
+            </label>
+            <label className="field valuation-note">
+              Quelle / Notiz
+              <input value={valNote} onChange={(e) => setValNote(e.target.value)} placeholder="z. B. BORIS.NRW, Gutachten, Vergleichsangebote" />
+            </label>
+            <button className="primary valuation-add" disabled={!valValue} onClick={addValuation}>
+              Erfassen
+            </button>
+          </div>
+          <p className="small muted" style={{ margin: "8px 0 0" }}>Aktualisiere den Marktwert etwa einmal im Jahr – wie den Kurs einer Aktie im Depot.</p>
         </div>
-        <p className="hint" style={{ marginTop: 8 }}>Aktualisiere den Marktwert z. B. einmal im Jahr – wie den Kurs einer Aktie im Depot.</p>
       </div>
 
       <div className="card" id="mieter">

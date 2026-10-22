@@ -601,3 +601,9 @@ table.meters tr.meter-sum.first th, table.meters tr.meter-sum.first td { border-
 .meter-mode { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: var(--tint); color: var(--head); font-size: 0.92rem; }
 .meter-mode.change { background: var(--warn-soft); }
 table.meters input.carried { font-style: italic; color: var(--muted); }
+
+/* Abrechnungen als Kacheln */
+.statement-tile { cursor: pointer; }
+.statement-tile-tenants { list-style: none; margin: 14px 0 12px; padding: 10px 12px; background: var(--tint); border-radius: 8px; }
+.statement-tile-tenants li { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 0.92rem; }
+.statement-tile-tenants li > span:last-child { white-space: nowrap; font-weight: 600; }

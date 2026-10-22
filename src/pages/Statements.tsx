@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, type PageProps } from "../components/ui";
+import { Balance, Modal, type PageProps } from "../components/ui";
 import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR } from "../lib/format";
@@ -38,52 +38,88 @@ export default function Statements({ data, update }: PageProps) {
           )}
         </div>
       ) : (
-        <div className="card table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Objekt</th>
-                <th>Zeitraum</th>
-                <th className="num">Gesamtkosten</th>
-                <th className="num">Nachzahlungen</th>
-                <th className="num">Guthaben</th>
-                <th>Status</th>
-                <th>Frist</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((s) => {
-                const p = data.properties.find((x) => x.id === s.propertyId);
-                if (!p) return null;
-                const r = calculateStatement(s, p, data.tenants);
-                const due = r.tenants.filter((t) => t.balance > 0).reduce((a, t) => a + t.balance, 0);
-                const credit = r.tenants.filter((t) => t.balance < 0).reduce((a, t) => a - t.balance, 0);
-                const overdue = r.deadline < todayISO();
-                return (
-                  <tr key={s.id}>
-                    <td><a href={`#/abrechnungen/${s.id}`}>{p.name}</a></td>
-                    <td>{formatDate(s.periodStart)} – {formatDate(s.periodEnd)}</td>
-                    <td className="num">{formatEUR(r.totalCosts)}</td>
-                    <td className="num">{formatEUR(due)}</td>
-                    <td className="num">{formatEUR(credit)}</td>
-                    <td>
-                      <span className={`badge ${s.status === "draft" ? "status-draft" : "status-released"}`}>
-                        {s.status === "released" ? "freigegeben" : s.status === "partial" ? "teilweise freigegeben" : "Entwurf"}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${overdue ? "danger" : "neutral"}`}>{formatDate(r.deadline)}</span>
-                    </td>
-                    <td className="num">
-                      <a className="btn" href={`#/abrechnungen/${s.id}`}>Öffnen</a>{" "}
-                      <button className="ghost" onClick={() => remove(s)} aria-label="Löschen">✕</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="tiles">
+          {sorted.map((s) => {
+            const p = data.properties.find((x) => x.id === s.propertyId);
+            if (!p) return null;
+            const r = calculateStatement(s, p, data.tenants);
+            const due = r.tenants.filter((t) => t.balance > 0).reduce((a, t) => a + t.balance, 0);
+            const credit = r.tenants.filter((t) => t.balance < 0).reduce((a, t) => a - t.balance, 0);
+            const today = todayISO();
+            const overdue = r.deadline < today;
+            const daysLeft = Math.round((Date.parse(r.deadline) - Date.parse(today)) / 86400000);
+            const open = () => (window.location.hash = `#/abrechnungen/${s.id}`);
+            return (
+              <div
+                key={s.id}
+                className="tile statement-tile"
+                role="link"
+                tabIndex={0}
+                onClick={open}
+                onKeyDown={(e) => e.key === "Enter" && open()}
+              >
+                <div className="row" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="tile-title">Abrechnung {s.periodStart.slice(0, 4)}</div>
+                    <div className="muted small ellipsis">{p.name}</div>
+                  </div>
+                  <span className="spacer" />
+                  <span className={`badge ${s.status === "draft" ? "status-draft" : "status-released"}`}>
+                    {s.status === "released" ? "freigegeben" : s.status === "partial" ? "teilweise freigegeben" : "Entwurf"}
+                  </span>
+                </div>
+
+                <div className="muted small" style={{ marginTop: 12 }}>Umlagefähige Kosten</div>
+                <div className="tile-value" style={{ marginTop: 0 }}>{formatEUR(r.totalCosts)}</div>
+                <div className="muted small">{formatDate(s.periodStart)} – {formatDate(s.periodEnd)}</div>
+
+                {r.tenants.length > 0 && (
+                  <ul className="statement-tile-tenants">
+                    {r.tenants.map((t) => (
+                      <li key={t.tenant.id + t.start}>
+                        <span className="ellipsis">{t.tenant.name}</span>
+                        <Balance value={t.balance} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="tile-stats">
+                  <div>
+                    <span className="muted small">Nachzahlungen</span>
+                    <strong>{formatEUR(due)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted small">Guthaben</span>
+                    <strong>{formatEUR(credit)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted small">Frist</span>
+                    <strong className={overdue && s.status !== "released" ? "danger-text" : undefined}>{formatDate(r.deadline)}</strong>
+                  </div>
+                </div>
+
+                <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
+                  {s.status !== "released" && (
+                    <span className={`badge ${overdue ? "danger" : daysLeft <= 60 ? "warn" : "neutral"}`}>
+                      {overdue ? "Frist abgelaufen" : `noch ${daysLeft} Tage bis zur Frist`}
+                    </span>
+                  )}
+                  <span className="spacer" />
+                  <button
+                    className="ghost small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      remove(s);
+                    }}
+                    aria-label="Abrechnung löschen"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

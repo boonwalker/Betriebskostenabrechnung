@@ -28,9 +28,16 @@ export function parseBackup(json: string): AppData {
   }
 }
 
-/** Sicherung ohne API-Schlüssel */
+/** Zugangsdaten zur Belegerkennung bleiben auf dem Gerät: nicht in Sicherungen und nicht in der Datenbank */
+const stripSecrets = (d: AppData): AppData => ({ ...d, settings: { ...d.settings, anthropicApiKey: "", inviteCode: undefined } });
+const keepSecrets = (stored: AppData, local: AppData): AppData => ({
+  ...stored,
+  settings: { ...stored.settings, anthropicApiKey: local.settings.anthropicApiKey, inviteCode: local.settings.inviteCode },
+});
+
+/** Sicherung ohne API-Schlüssel und Einladungscode */
 export function exportData(data: AppData): string {
-  return JSON.stringify({ ...data, settings: { ...data.settings, anthropicApiKey: "" } }, null, 2);
+  return JSON.stringify(stripSecrets(data), null, 2);
 }
 
 /* ---------- Dauerhafte Speicherung in der Datenbank des veröffentlichten Artifacts ---------- */
@@ -59,7 +66,7 @@ async function remoteDoc(): Promise<RemoteDoc | null> {
   }
 }
 
-const withoutKey = (d: AppData) => JSON.stringify({ ...d, settings: { ...d.settings, anthropicApiKey: "" } });
+const withoutKey = (d: AppData) => JSON.stringify(stripSecrets(d));
 
 export function useAppData() {
   const [data, setData] = useState<AppData>(loadData);
@@ -90,9 +97,9 @@ export function useAppData() {
         if (cancelled) return;
         if (json) {
           lastSaved.current = json;
-          // API-Schlüssel bleibt nur im Browser
+          // Zugangsdaten bleiben nur im Browser
           const stored = migrate(JSON.parse(json));
-          setData((local) => ({ ...stored, settings: { ...stored.settings, anthropicApiKey: local.settings.anthropicApiKey } }));
+          setData((local) => keepSecrets(stored, local));
         }
         remote.current = doc;
         setSync("saved");
@@ -104,7 +111,7 @@ export function useAppData() {
             if (!next || s.metadata?.hasPendingWrites || next === lastSaved.current) return;
             lastSaved.current = next;
             const stored = migrate(JSON.parse(next));
-            setData((local) => ({ ...stored, settings: { ...stored.settings, anthropicApiKey: local.settings.anthropicApiKey } }));
+            setData((local) => keepSecrets(stored, local));
           },
           () => undefined,
         );

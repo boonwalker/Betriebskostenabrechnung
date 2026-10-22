@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { aiAccess, PROXY_URL } from "../lib/aiAccess";
 import { uid } from "../lib/model";
 import type { AppData, EconomicPlan, Property, WegAnnualStatement } from "../lib/types";
 import { annualFromExtraction, planFromExtraction } from "../lib/wegImport";
@@ -24,7 +25,7 @@ export default function WegImport({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<string | null>(null);
-  const apiKey = data.settings.anthropicApiKey;
+  const access = aiAccess(data.settings);
   const unitName = property.units.find((u) => u.id === unitId)?.name ?? "";
   const exists = (kind === "annual" ? data.wegAnnuals : data.economicPlans).some((d) => d.unitId === unitId && d.year === year);
 
@@ -42,7 +43,7 @@ export default function WegImport({
     setError(null);
     try {
       const { extractWegDocument } = await import("../lib/extract");
-      const x = await extractWegDocument(files, apiKey, unitName, kind);
+      const x = await extractWegDocument(files, access!, unitName, kind);
       if (x.documentKind !== "other" && x.documentKind !== kind) {
         setError(
           `Das Dokument sieht aus wie ${x.documentKind === "annual" ? "eine Jahresabrechnung" : "ein Wirtschaftsplan"}. Bitte den Dokumenttyp prüfen – Plan- und Ist-Werte werden getrennt gespeichert.`,
@@ -89,7 +90,7 @@ export default function WegImport({
             ? "Lade die Einzelabrechnung der Wohnung hoch, am besten zusammen mit der Heiz- und Warmwasserkostenabrechnung. Mehrere Dateien oder Fotos von Seiten sind möglich."
             : "Lade den Wirtschaftsplan mit den Beträgen je Wohnung hoch. Er dient nur der Prognose und dem Plan-Ist-Vergleich."}
         </p>
-        {apiKey ? (
+        {access ? (
           <>
             <input type="file" multiple accept="application/pdf,image/*" onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
             <p className="small muted">
@@ -98,7 +99,7 @@ export default function WegImport({
           </>
         ) : (
           <div className="alert info small">
-            Zum automatischen Auslesen brauchst du einen API-Schlüssel (<a href="#/einstellungen">Einstellungen</a>). Du kannst die Positionen auch von Hand erfassen.
+            Zum automatischen Auslesen brauchst du {PROXY_URL ? "einen Einladungscode oder " : ""}einen API-Schlüssel (<a href="#/einstellungen?f=belegerkennung">Einstellungen</a>). Du kannst die Positionen auch von Hand erfassen.
           </div>
         )}
         {error && <div className="alert danger">{error}</div>}
@@ -107,7 +108,7 @@ export default function WegImport({
           <button onClick={createEmpty} disabled={busy}>Von Hand erfassen</button>
           <span className="spacer" />
           <button onClick={onClose}>Abbrechen</button>
-          {apiKey && (
+          {access && (
             <button className="primary" disabled={busy || files.length === 0} onClick={extract}>
               {busy ? "Wird ausgelesen …" : "Auslesen"}
             </button>

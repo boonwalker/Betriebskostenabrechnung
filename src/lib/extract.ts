@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { z } from "zod";
+import type { AiAccess } from "./aiAccess";
 import { COST_CATEGORIES } from "./betrkv";
 import { isSupportedFile, type ImageType } from "./files";
 import type { AllocationKey } from "./types";
@@ -122,7 +123,7 @@ function toBlock(file: File, data: string): BetaContentBlockParam {
 }
 
 /** Sendet Dokumente mit strukturierter Ausgabe an Claude und gibt das JSON zurück */
-async function askClaude(files: File[], apiKey: string, system: string, schema: Record<string, unknown>, instruction: string): Promise<unknown> {
+async function askClaude(files: File[], access: AiAccess, system: string, schema: Record<string, unknown>, instruction: string): Promise<unknown> {
   for (const f of files) if (!isSupportedFile(f)) throw new Error(`„${f.name}“: Bitte PDF-Dateien oder Bilder (JPG, PNG, WebP, GIF) hochladen.`);
   const blocks: BetaContentBlockParam[] = [];
   for (const [i, f] of files.entries()) {
@@ -130,8 +131,15 @@ async function askClaude(files: File[], apiKey: string, system: string, schema: 
     blocks.push(toBlock(f, await toBase64(f)));
   }
 
-  // Der Schlüssel liegt nur im Browser des Nutzers und geht direkt an die Anthropic-API.
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  // Eigener Schlüssel: liegt nur im Browser und geht direkt an die Anthropic-API.
+  // Einladungscode: Anfrage geht an den ImmoFriend-Proxy, der den Schlüssel des Betreibers einsetzt.
+  const client =
+    access.kind === "key"
+      ? new Anthropic({ apiKey: access.apiKey, dangerouslyAllowBrowser: true })
+      : new Anthropic({ apiKey: "proxy", baseURL: access.proxyUrl, defaultHeaders: { "x-immofriend-code": access.code }, dangerouslyAllowBrowser: true });
+  // Meldungen des Proxys (Code ungültig, Tageslimit …) sind schon für Nutzer formuliert
+  const proxyMessage = (err: InstanceType<typeof Anthropic.APIError>) =>
+    access.kind === "invite" ? (err.error as { error?: { message?: string } } | undefined)?.error?.message : undefined;
 
   let response;
   try {
@@ -148,8 +156,10 @@ async function askClaude(files: File[], apiKey: string, system: string, schema: 
       })
       .finalMessage();
   } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) throw new Error("Der API-Schlüssel ist ungültig. Bitte in den Einstellungen prüfen.");
-    if (err instanceof Anthropic.RateLimitError) throw new Error("Zu viele Anfragen – bitte kurz warten und erneut versuchen.");
+    if (err instanceof Anthropic.AuthenticationError)
+      throw new Error(proxyMessage(err) ?? "Der API-Schlüssel ist ungültig. Bitte in den Einstellungen prüfen.");
+    if (err instanceof Anthropic.RateLimitError) throw new Error(proxyMessage(err) ?? "Zu viele Anfragen – bitte kurz warten und erneut versuchen.");
+    if (err instanceof Anthropic.APIError && proxyMessage(err)) throw new Error(proxyMessage(err));
     if (err instanceof Anthropic.APIConnectionError) throw new Error("Keine Verbindung zur Anthropic-API.");
     if (err instanceof Anthropic.APIError) throw new Error(`Fehler der Anthropic-API (${err.status}): ${err.message}`);
     throw err;
@@ -161,8 +171,8 @@ async function askClaude(files: File[], apiKey: string, system: string, schema: 
   return JSON.parse(text);
 }
 
-export async function extractInvoice(file: File, apiKey: string, billingPeriod: string): Promise<Extraction> {
-  const json = await askClaude([file], apiKey, SYSTEM, JSON_SCHEMA, `Abrechnungszeitraum: ${billingPeriod}. Bitte erfasse diesen Beleg.`);
+export async function extractInvoice(file: File, access: AiAccess, billingPeriod: string): Promise<Extraction> {
+  const json = await askClaude([file], access, SYSTEM, JSON_SCHEMA, `Abrechnungszeitraum: ${billingPeriod}. Bitte erfasse diesen Beleg.`);
   return ExtractionSchema.parse(json);
 }
 
@@ -361,10 +371,10 @@ Regeln:
 - confidence < 0.8, wenn ein Wert schwer lesbar oder die Zuordnung zur Wohnung unsicher ist.
 - Erfinde keine Werte. Fehlende Werte als null, Unklarheiten in notes.`;
 
-export async function extractWegDocument(files: File[], apiKey: string, unitName: string, expectedKind: "annual" | "plan"): Promise<WegExtraction> {
+export async function extractWegDocument(files: File[], access: AiAccess, unitName: string, expectedKind: "annual" | "plan"): Promise<WegExtraction> {
   const json = await askClaude(
     files,
-    apiKey,
+    access,
     WEG_SYSTEM,
     WEG_JSON_SCHEMA,
     `Wohnung: ${unitName}. Erwarteter Dokumenttyp: ${expectedKind === "annual" ? "Jahresabrechnung (Ist)" : "Wirtschaftsplan"}. Bitte erfasse die Daten.`,

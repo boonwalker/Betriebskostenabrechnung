@@ -6,6 +6,7 @@ import { isSupportedFile } from "../lib/files";
 import { formatEUR } from "../lib/format";
 import { uid } from "../lib/store";
 import type { AllocationKey, CostItem, Property, Statement } from "../lib/types";
+import { PROXY_URL, type AiAccess } from "../lib/aiAccess";
 import { Modal, NumberInput } from "./ui";
 
 interface Job {
@@ -18,13 +19,13 @@ interface Job {
 }
 
 export default function ReceiptImport({
-  apiKey,
+  access,
   statement,
   property,
   onClose,
   onAdd,
 }: {
-  apiKey: string;
+  access: AiAccess | null;
   statement: Statement;
   property: Property;
   onClose: () => void;
@@ -48,7 +49,7 @@ export default function ReceiptImport({
       }
       setJobs((js) => [...js, job]);
       import("../lib/extract")
-        .then(({ extractInvoice }) => extractInvoice(file, apiKey, period))
+        .then(({ extractInvoice }) => extractInvoice(file, access!, period))
         .then((extraction) =>
           patchJob(job.id, {
             status: "done",
@@ -88,14 +89,16 @@ export default function ReceiptImport({
     onClose();
   };
 
-  if (!apiKey) {
+  if (!access) {
     return (
       <Modal title="Belege hochladen" onClose={onClose}>
         <p>
-          Zum automatischen Auslesen von Rechnungen und Bescheiden nutzt die App die KI Claude von Anthropic. Dafür brauchst du einen eigenen API-Schlüssel
-          (erhältlich unter <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">console.anthropic.com</a>).
+          Zum automatischen Auslesen von Rechnungen und Bescheiden nutzt die App die KI Claude von Anthropic.{" "}
+          {PROXY_URL
+            ? "Dafür brauchst du einen Einladungscode oder einen eigenen API-Schlüssel."
+            : <>Dafür brauchst du einen eigenen API-Schlüssel (erhältlich unter <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">console.anthropic.com</a>).</>}
         </p>
-        <a className="btn primary" href="#/einstellungen">API-Schlüssel in den Einstellungen hinterlegen</a>
+        <a className="btn primary" href="#/einstellungen?f=belegerkennung">{PROXY_URL ? "Einladungscode eintragen" : "API-Schlüssel in den Einstellungen hinterlegen"}</a>
       </Modal>
     );
   }

@@ -52,6 +52,7 @@ Die öffentliche Version liegt auf GitHub Pages: **https://boonwalker.github.io/
 - Manifest, Icons und Service Worker (`public/`) machen sie installierbar und offline startfähig.
 - Bei jedem Push auf `claude/betriebskosten-app` baut `.github/workflows/pages.yml` die App neu und veröffentlicht sie. Einmalig nötig: unter *Settings → Pages* als Quelle „GitHub Actions“ wählen.
 - Die Vorführdaten (Testfall WE 09) sind nur im Vorführ-Build enthalten, nicht in der öffentlichen Version.
+- Belegerkennung für Freunde: per Einladungscode über einen Cloudflare Worker, der den API-Schlüssel des Betreibers verwahrt (`worker/`, Anleitung in `worker/README.md`). Die App enthält nie einen Schlüssel; wer einen eigenen hat, kann ihn weiter direkt eintragen.
 
 ## Hinweis
 

@@ -390,6 +390,8 @@ export interface Landlord {
 export interface Settings {
   landlord: Landlord;
   anthropicApiKey: string;
+  /** Einladungscode für die Belegerkennung über den ImmoFriend-Proxy (statt eigenem Schlüssel) */
+  inviteCode?: string;
   /** persönlicher Grenzsteuersatz in % (inkl. Soli/KiSt) für die Renditeberechnung nach Steuern */
   marginalTaxRate: number;
 }

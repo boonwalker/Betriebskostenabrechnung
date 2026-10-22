@@ -55,7 +55,7 @@ export default function Dashboard({ data, replace }: { data: AppData; replace: (
           </p>
           <div className="welcome-actions">
             <a className="btn primary" href="#/objekte/neu">Erstes Objekt anlegen</a>
-            <button onClick={() => replace(demoData())}>Mit Beispieldaten ausprobieren</button>
+            <button onClick={() => replace({ ...demoData(), settings: { ...demoData().settings, inviteCode: data.settings.inviteCode } })}>Mit Beispieldaten ausprobieren</button>
           </div>
         </div>
         <div className="welcome-points">
@@ -69,7 +69,7 @@ export default function Dashboard({ data, replace }: { data: AppData; replace: (
           </div>
           <div>
             <strong>🧾 Belege per Foto</strong>
-            <span>Optional liest eine KI Rechnungen und Bescheide aus – dafür brauchst du einen eigenen API-Schlüssel (Einstellungen).</span>
+            <span>Optional liest eine KI Rechnungen und Bescheide aus – mit einem Einladungscode oder eigenem API-Schlüssel (Einstellungen).</span>
           </div>
         </div>
       </div>

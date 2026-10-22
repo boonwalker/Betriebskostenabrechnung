@@ -27,6 +27,9 @@ jobs:
       - run: npm test
       # Normale Version: startet leer, speichert nur im Browser – ohne Vorführdaten
       - run: npm run build -- --base=./
+        env:
+          # Adresse des ImmoFriend-Proxys für die Belegerkennung per Einladungscode (siehe worker/README.md)
+          VITE_PROXY_URL: ""
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

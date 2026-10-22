@@ -1,0 +1,14 @@
+name = "immofriend-proxy"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://boonwalker.github.io"
+DAILY_LIMIT = "30"
+
+# Optional: Tageslimit je Einladungscode. Einmal anlegen mit
+#   npx wrangler kv namespace create USAGE
+# und die ausgegebene id hier eintragen, dann die Zeichen # entfernen.
+# [[kv_namespaces]]
+# binding = "USAGE"
+# id = "<id>"

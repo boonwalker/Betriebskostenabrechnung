@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { NumberInput, type PageProps } from "../components/ui";
+import { PROXY_URL } from "../lib/aiAccess";
 import { markBackup } from "../lib/backup";
 import { demoData } from "../lib/demo";
 import { we09Annual2024, we09Plan2025, we09PreviousTenant, we09Property, we09Tenant } from "../lib/fixtures/we09";
@@ -28,7 +29,7 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
     try {
       const restored = parseBackup(await file.text());
       if (!confirm("Alle aktuellen Daten durch die Sicherung ersetzen?")) return;
-      replace({ ...restored, settings: { ...restored.settings, anthropicApiKey: data.settings.anthropicApiKey } });
+      replace({ ...restored, settings: { ...restored.settings, anthropicApiKey: data.settings.anthropicApiKey, inviteCode: data.settings.inviteCode } });
       setMessage("Sicherung wiederhergestellt.");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Die Datei konnte nicht gelesen werden.");
@@ -76,14 +77,28 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
         </p>
       </div>
 
-      <div className="card stack">
+      <div className="card stack" id="belegerkennung">
         <h2>Belege automatisch auslesen</h2>
         <p className="small">
-          Hochgeladene Rechnungen und Bescheide werden mit der KI Claude von Anthropic ausgelesen. Dafür brauchst du einen API-Schlüssel von{" "}
-          <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">console.anthropic.com</a>. Die Kosten liegen typischerweise bei wenigen Cent pro Beleg.
+          Hochgeladene Rechnungen, Bescheide und WEG-Abrechnungen werden mit der KI Claude von Anthropic ausgelesen – du prüfst danach jede Position.
+          {PROXY_URL
+            ? " Mit einem Einladungscode läuft das über den Zugang der Person, die dir ImmoFriend empfohlen hat. Alternativ kannst du einen eigenen API-Schlüssel eintragen."
+            : " Dafür brauchst du einen API-Schlüssel von console.anthropic.com."}
         </p>
+        {PROXY_URL && (
+          <label className="field">
+            Einladungscode
+            <input
+              value={data.settings.inviteCode ?? ""}
+              onChange={(e) => update((d) => ({ ...d, settings: { ...d.settings, inviteCode: e.target.value.trim() || undefined } }))}
+              placeholder="z. B. anna-4711"
+              autoComplete="off"
+              autoCapitalize="off"
+            />
+          </label>
+        )}
         <label className="field">
-          Anthropic API-Schlüssel
+          {PROXY_URL ? "Eigener API-Schlüssel (optional)" : "Anthropic API-Schlüssel"}
           <div className="row">
             <input
               type={showKey ? "text" : "password"}
@@ -97,8 +112,9 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
           </div>
         </label>
         <p className="muted small">
-          Der Schlüssel wird nur in diesem Browser gespeichert und direkt an die Anthropic-API gesendet. Nutze die App nur auf deinem eigenen Gerät und
-          lege in der Anthropic-Konsole am besten ein Ausgabenlimit fest.
+          Code und Schlüssel werden nur in diesem Browser gespeichert und nicht in Sicherungen übernommen. Ein eigener Schlüssel geht direkt an die Anthropic-API
+          (<a href="https://console.anthropic.com" target="_blank" rel="noreferrer">console.anthropic.com</a>) und hat Vorrang vor dem Einladungscode – setze dort am
+          besten ein Ausgabenlimit. Richtwert: etwa 5–15 Cent pro Beleg, bis rund 50 Cent für eine mehrseitige WEG-Abrechnung.
         </p>
       </div>
 
@@ -126,7 +142,7 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
           <button
             onClick={() => {
               if (hasData && !confirm("Aktuelle Daten durch Beispieldaten ersetzen?")) return;
-              replace({ ...demoData(), settings: { ...demoData().settings, anthropicApiKey: data.settings.anthropicApiKey } });
+              replace({ ...demoData(), settings: { ...demoData().settings, anthropicApiKey: data.settings.anthropicApiKey, inviteCode: data.settings.inviteCode } });
               setMessage("Beispieldaten geladen – schau dir die Abrechnung unter „Abrechnungen“ an.");
             }}
           >

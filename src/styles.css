@@ -442,3 +442,8 @@ tfoot td { background: var(--tint); }
   .app-header-inner { padding-left: 10px; padding-right: 10px; }
   .nav a { padding: 6px 6px; font-size: 0.82rem; }
 }
+
+/* iOS zoomt beim Antippen eines Eingabefelds automatisch heran, wenn dessen Schrift kleiner als 16 px ist */
+@media (max-width: 640px) {
+  input, select, textarea { font-size: 16px; }
+}

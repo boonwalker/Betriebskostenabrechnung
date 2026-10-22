@@ -31,8 +31,20 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
   const letters = live.tenants.map((r) => {
     const frozen = releasedTenant(statement, r.tenant.id);
     return frozen
-      ? { r: frozen.result, periodDays: frozen.periodDays, co2: frozen.co2, draft: false, releasedAt: statement.releases[r.tenant.id].releasedAt }
-      : { r, periodDays: live.periodDays, co2: live.co2, draft: true, releasedAt: null as string | null };
+      ? {
+          r: frozen.result,
+          periodDays: frozen.periodDays,
+          co2: frozen.co2,
+          draft: false,
+          releasedAt: statement.releases[r.tenant.id].releasedAt,
+        }
+      : {
+          r,
+          periodDays: live.periodDays,
+          co2: live.co2,
+          draft: true,
+          releasedAt: null as string | null,
+        };
   });
   const anyDraft = letters.some((l) => l.draft && (!selected || selected.has(l.r.tenant.id)));
   const isSelected = (r: TenantResult) => !selected || selected.has(r.tenant.id);
@@ -42,14 +54,18 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
     <>
       <div className="print-toolbar card">
         <div className="row">
-          <a href={`#/abrechnungen/${statement.id}`} className="small">← zurück zur Abrechnung</a>
+          <a href={`#/abrechnungen/${statement.id}`} className="small">
+            ← zurück zur Abrechnung
+          </a>
           <span className="spacer" />
-          <button className="primary" onClick={() => window.print()}>Drucken / als PDF speichern</button>
+          <button className="primary" onClick={() => window.print()}>
+            Drucken / als PDF speichern
+          </button>
         </div>
         {anyDraft && (
           <div className="alert danger" style={{ marginTop: 12 }}>
-            <strong>Entwurf – nicht versenden.</strong> Mindestens ein ausgewähltes Anschreiben ist noch nicht freigegeben; sein Ergebnis ist vorläufig. Offene Punkte findest du in der{" "}
-            <a href={`#/abrechnungen/${statement.id}`}>Abrechnung</a>.
+            <strong>Entwurf – nicht versenden.</strong> Mindestens ein ausgewähltes Anschreiben ist noch nicht freigegeben; sein Ergebnis ist vorläufig. Offene Punkte
+            findest du in der <a href={`#/abrechnungen/${statement.id}`}>Abrechnung</a>.
           </div>
         )}
         {landlordMissing && (
@@ -102,7 +118,11 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
 
 const formatBasis = (n: number) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(n);
 
-const RAW_KEY_LABELS: Partial<Record<DistributionKey, string>> = { time: "Zeit", degreedays: "Gradtagzahlen", reading: "Zwischenablesung" };
+const RAW_KEY_LABELS: Partial<Record<DistributionKey, string>> = {
+  time: "Zeit",
+  degreedays: "Gradtagzahlen",
+  reading: "Zwischenablesung",
+};
 
 function shareText(item: ItemShare, r: TenantResult, periodDays: number): string {
   if (item.basisUnit) return `${formatBasis(item.basisShare)} ${item.basisUnit}`;
@@ -138,7 +158,7 @@ function Letter({
   const address = r.tenant.mailingAddress.trim() || `${r.unit.name}\n${property.address.replace(/,\s*/g, "\n")}`;
   const stillLiving = !r.tenant.moveOut || r.tenant.moveOut > statement.periodEnd;
   // Hochrechnung auf 12 Monate, aufgerundet auf volle Euro
-  const newMonthly = Math.ceil((r.totalCosts / r.days) * periodDays / 12);
+  const newMonthly = Math.ceil(((r.totalCosts / r.days) * periodDays) / 12);
   const current = rentAt(r.tenant, statement.periodEnd);
   const currentMonthly = (current?.prepaymentOperating ?? 0) + (current?.prepaymentHeating ?? 0);
   const overridden = statement.prepaymentOverrides[r.tenant.id] !== undefined;
@@ -148,14 +168,18 @@ function Letter({
   const sourceOf = (costId: string) => {
     const cost = statement.costs.find((c) => c.id === costId);
     const annual = cost?.sourceAnnualId ? data.wegAnnuals.find((a) => a.id === cost.sourceAnnualId) : undefined;
-    return { cost, annual, position: annual?.positions.find((p) => p.id === cost?.sourcePositionId) };
+    return {
+      cost,
+      annual,
+      position: annual?.positions.find((p) => p.id === cost?.sourcePositionId),
+    };
   };
   const keyText = (item: ItemShare) => {
     const { annual, position } = sourceOf(item.costId);
     const { cost } = sourceOf(item.costId);
     const ruleBasis = cost?.leaseAmounts?.[rule]?.basis ?? cost?.basis;
     if (item.key === "direct" && ruleBasis) return ruleBasis.label;
-    if (item.key === "direct" && annual) return position?.wegBasis?.unit === "cbm" ? "Verbrauch" : position?.wegKey ?? "WEG-Schlüssel";
+    if (item.key === "direct" && annual) return position?.wegBasis?.unit === "cbm" ? "Verbrauch" : (position?.wegKey ?? "WEG-Schlüssel");
     return KEY_LABELS[item.key as keyof typeof KEY_LABELS];
   };
   // Bei Wohnungseigentum: Gesamtkosten der WEG und Anteil nach WEG-Schlüssel ausweisen, soweit bekannt
@@ -171,11 +195,18 @@ function Letter({
     if (position?.heating === "total") return { total: "–", share: `lt. Heizkosten\u00ADabrechnung${time}` };
     const cost = sourceOf(item.costId).cost;
     const own = cost?.leaseAmounts?.[rule]?.basis ?? cost?.basis;
-    if (own) return { total: `${formatBasis(own.total)} ${own.unit}`, share: `${formatBasis(own.share)} ${own.unit}${time}` };
+    if (own)
+      return {
+        total: `${formatBasis(own.total)} ${own.unit}`,
+        share: `${formatBasis(own.share)} ${own.unit}${time}`,
+      };
     // Nur die im Dokument ausgewiesene Schlüsselbasis zeigen – nichts aus dem Namen des Schlüssels ableiten
     if (position?.wegBasis) {
       const b = position.wegBasis;
-      return { total: `${formatBasis(b.total)} ${b.unit}`, share: `${formatBasis(b.share)} ${b.unit}${time}` };
+      return {
+        total: `${formatBasis(b.total)} ${b.unit}`,
+        share: `${formatBasis(b.share)} ${b.unit}${time}`,
+      };
     }
     return { total: "–", share: `lt. Einzel\u00ADabrechnung${time}` };
   };
@@ -185,172 +216,262 @@ function Letter({
     return annual?.heating && position?.heating === "total" ? [{ costId: item.costId, amount: item.amount, heating: annual.heating }] : [];
   });
 
-  return (
-    <div className="letter">
-      {draft && <div className="watermark">ENTWURF</div>}
-      <div className="sender">{[landlord.name, landlord.address.replace(/\n/g, ", ")].filter(Boolean).join(" · ")}</div>
-      <div className="address-block">{`${r.tenant.name}\n${address}`}</div>
-      <div className="meta">{formatDate(releasedAt?.slice(0, 10) ?? todayISO())}</div>
+  const result =
+    r.balance > 0 ? { kind: "due", label: "Ihre Nachzahlung", amount: r.balance } : r.balance < 0 ? { kind: "credit", label: "Ihr Guthaben", amount: -r.balance } : null;
+  const year = statement.periodStart.slice(0, 4);
+  const prepaymentRows =
+    overridden || !r.prepaymentsCalculated.heating
+      ? [
+          {
+            label: "abzüglich Ihrer geleisteten Vorauszahlungen",
+            amount: r.prepayments,
+          },
+        ]
+      : [
+          {
+            label: "abzüglich Ihrer Vorauszahlungen auf die Betriebskosten",
+            amount: r.prepaymentsCalculated.operating,
+          },
+          {
+            label: "abzüglich Ihrer Vorauszahlungen auf die Heizkosten",
+            amount: r.prepaymentsCalculated.heating,
+          },
+        ];
+  // Verteilung als zweite Zeile unter der Kostenart: Schlüssel · Gesamt · Ihr Anteil
+  const distribution = (item: ItemShare) => {
+    const key = item.basisUnit ? (RAW_KEY_LABELS[item.key] ?? KEY_LABELS[item.key as keyof typeof KEY_LABELS]) : keyText(item);
+    const total = item.basisUnit
+      ? `${formatBasis(item.basisTotal)} ${item.basisUnit}`
+      : (wegShare(item)?.total ?? (item.key === "direct" ? null : `${formatNum(item.basisTotal)} ${BASIS_UNIT[item.key]}`));
+    const share = item.basisUnit ? shareText(item, r, periodDays) : (wegShare(item)?.share ?? shareText(item, r, periodDays));
+    const cost = sourceOf(item.costId).cost;
+    const own = cost?.leaseAmounts?.[rule]?.basis ?? cost?.basis;
+    if (item.key === "direct" && !item.basisUnit && own) {
+      const time = r.days < periodDays ? ` × ${r.days}/${periodDays} Tage` : "";
+      return `nach ${own.label} · gesamt ${formatBasis(own.total)} ${own.unit} · Ihr Anteil ${formatBasis(own.share)} ${own.unit}${time}`;
+    }
+    if (item.key === "direct" && !item.basisUnit && !wegShare(item)) {
+      return r.days < periodDays ? `direkt Ihrer Wohnung zugeordnet · Ihr Anteil ${share}` : "direkt Ihrer Wohnung zugeordnet";
+    }
+    return [`nach ${key}`, total && total !== "–" ? `gesamt ${total}` : null, `Ihr Anteil ${share}`].filter(Boolean).join(" · ");
+  };
+  const houseTotal = (item: ItemShare) => (item.basisUnit ? formatEUR(item.total) : (wegTotal(item) ?? formatEUR(item.total)));
+  const paymentText =
+    r.tenant.lease?.paymentTerm === "endOfNextMonth"
+      ? "bis zum Ende des auf den Zugang dieser Abrechnung folgenden Kalendermonats"
+      : "innerhalb von 30 Tagen nach Erhalt dieser Abrechnung";
 
-      <h2>Betriebskostenabrechnung für den Zeitraum {formatDate(statement.periodStart)} bis {formatDate(statement.periodEnd)}</h2>
+  return (
+    <div className={`letter ${draft ? "is-draft" : ""}`}>
+      {draft && <div className="watermark">ENTWURF</div>}
+      <div className="letter-band" />
+      <div className="letter-head">
+        <div className="letter-window">
+          <div className="sender">{[landlord.name, landlord.address.replace(/\n/g, ", ")].filter(Boolean).join(" · ")}</div>
+          <div className="address-block">{`${r.tenant.name}\n${address}`}</div>
+        </div>
+        <div className="letter-from">
+          <strong>{landlord.name}</strong>
+          <div>{landlord.address}</div>
+          {landlord.iban && <div className="letter-muted">IBAN {landlord.iban}</div>}
+          <div className="letter-date">{formatDate(releasedAt?.slice(0, 10) ?? todayISO())}</div>
+        </div>
+      </div>
+
+      <div className="letter-title">
+        <h1>Betriebskostenabrechnung {year}</h1>
+        <div className="letter-sub">{draft ? "Entwurf · vorläufig · nicht versenden" : `Wohnung ${r.unit.name} · ${property.address || property.name}`}</div>
+      </div>
+
       <p>Guten Tag {r.tenant.name},</p>
       <p>
-        hiermit erhalten Sie die Abrechnung der Betriebskosten für die von Ihnen gemietete Wohnung <strong>{r.unit.name}</strong> im Objekt {property.address || property.name}.
+        hiermit erhalten Sie die Abrechnung der Betriebskosten für die von Ihnen gemietete Wohnung <strong>{r.unit.name}</strong> im Objekt{" "}
+        {property.address || property.name} für den Zeitraum {formatDate(r.start)} bis {formatDate(r.end)}.
       </p>
-      <table style={{ marginBottom: "4mm" }}>
-        <tbody>
-          <tr><td>Ihr Abrechnungszeitraum</td><td>{formatDate(r.start)} – {formatDate(r.end)} ({r.days} von {periodDays} Tagen)</td></tr>
-          <tr>
-            <td>Wohnfläche Ihrer Wohnung</td>
-            <td>
-              {formatNum(r.unit.area)} m² von{" "}
-              {formatNum(property.type === "etw" && property.wegAreaTotal ? property.wegAreaTotal : property.units.reduce((a, u) => a + u.area, 0))} m² gesamt
-            </td>
-          </tr>
-          {property.type === "etw" && r.unit.mea && property.wegMeaTotal && (
-            <tr>
-              <td>Miteigentumsanteil</td>
-              <td>{formatNum(r.unit.mea)} / {formatNum(property.wegMeaTotal)}</td>
-            </tr>
-          )}
-          <tr><td>Personen in Ihrem Haushalt</td><td>{r.tenant.persons}</td></tr>
-        </tbody>
-      </table>
 
-      <table>
+      <div className="letter-summary">
+        <table className="letter-facts">
+          <tbody>
+            <tr>
+              <th>Ihr Abrechnungszeitraum</th>
+              <td>
+                {formatDate(r.start)} – {formatDate(r.end)} ({r.days} von {periodDays} Tagen)
+              </td>
+            </tr>
+            <tr>
+              <th>Wohnfläche</th>
+              <td>
+                {formatNum(r.unit.area)} m² von{" "}
+                {formatNum(property.type === "etw" && property.wegAreaTotal ? property.wegAreaTotal : property.units.reduce((a, u) => a + u.area, 0))} m²
+              </td>
+            </tr>
+            {property.type === "etw" && r.unit.mea && property.wegMeaTotal && (
+              <tr>
+                <th>Miteigentumsanteil</th>
+                <td>
+                  {formatNum(r.unit.mea)} / {formatNum(property.wegMeaTotal)}
+                </td>
+              </tr>
+            )}
+            <tr>
+              <th>Personen im Haushalt</th>
+              <td>{r.tenant.persons}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div className={`letter-result ${result?.kind ?? "even"}`}>
+          <div className="letter-result-label">{draft ? "Vorläufiges Ergebnis" : "Ergebnis"}</div>
+          <div className="letter-result-value">{result ? `${result.label}: ${formatEUR(result.amount)}` : "ausgeglichen"}</div>
+          <div className="letter-result-calc">
+            Kosten {formatEUR(r.totalCosts)} − Vorauszahlungen {formatEUR(r.prepayments)}
+          </div>
+        </div>
+      </div>
+
+      <h2>
+        <span className="letter-num">1</span> Ihre Kosten im Einzelnen
+      </h2>
+      <table className="letter-costs">
         <thead>
           <tr>
-            <th>Kostenart</th>
-            <th className="num">Gesamtkosten</th>
-            <th>Verteilung nach</th>
-            <th className="num">Gesamt</th>
+            <th>Kostenart und Verteilung</th>
+            <th className="num">Kosten gesamt</th>
             <th className="num">Ihr Anteil</th>
-            <th className="num">Ihre Kosten</th>
           </tr>
         </thead>
         <tbody>
           {r.items.map((item) => (
             <tr key={item.costId + item.label}>
-              <td>{item.label}</td>
-              <td className="num">{item.basisUnit ? formatEUR(item.total) : wegTotal(item) ?? formatEUR(item.total)}</td>
-              <td>{item.basisUnit ? RAW_KEY_LABELS[item.key] ?? KEY_LABELS[item.key as keyof typeof KEY_LABELS] : keyText(item)}</td>
-              <td className="num">
-                {item.basisUnit
-                  ? `${formatBasis(item.basisTotal)} ${item.basisUnit}`
-                  : wegShare(item)?.total ?? (item.key === "direct" ? "–" : `${formatNum(item.basisTotal)} ${BASIS_UNIT[item.key]}`)}
+              <td>
+                {item.label}
+                <div className="letter-key">{distribution(item)}</div>
               </td>
-              <td className="num">{item.basisUnit ? shareText(item, r, periodDays) : wegShare(item)?.share ?? shareText(item, r, periodDays)}</td>
+              <td className="num">{houseTotal(item)}</td>
               <td className="num">{formatEUR(item.amount)}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr>
-            <td colSpan={5}>Summe Ihrer Betriebskosten</td>
+          <tr className="letter-subtotal">
+            <td colSpan={2}>Summe Ihrer Betriebskosten</td>
             <td className="num">{formatEUR(r.totalCosts)}</td>
           </tr>
-          {overridden || !r.prepaymentsCalculated.heating ? (
-            <tr>
-              <td colSpan={5} style={{ fontWeight: 400 }}>abzüglich Ihrer geleisteten Vorauszahlungen</td>
-              <td className="num" style={{ fontWeight: 400 }}>− {formatEUR(r.prepayments)}</td>
+          {prepaymentRows.map((p) => (
+            <tr key={p.label} className="letter-plain">
+              <td colSpan={2}>{p.label}</td>
+              <td className="num">− {formatEUR(p.amount)}</td>
             </tr>
-          ) : (
-            <>
-              <tr>
-                <td colSpan={5} style={{ fontWeight: 400 }}>abzüglich Ihrer Vorauszahlungen auf die Betriebskosten</td>
-                <td className="num" style={{ fontWeight: 400 }}>− {formatEUR(r.prepaymentsCalculated.operating)}</td>
-              </tr>
-              <tr>
-                <td colSpan={5} style={{ fontWeight: 400 }}>abzüglich Ihrer Vorauszahlungen auf die Heizkosten</td>
-                <td className="num" style={{ fontWeight: 400 }}>− {formatEUR(r.prepaymentsCalculated.heating)}</td>
-              </tr>
-            </>
-          )}
+          ))}
+          <tr className="letter-total">
+            <td colSpan={2}>{result ? result.label : "Ergebnis"}</td>
+            <td className="num">{formatEUR(result?.amount ?? 0)}</td>
+          </tr>
         </tfoot>
       </table>
-      {r.items.some((i) => i.key === "persons") && (
-        <p className="small" style={{ marginTop: "2mm" }}>
-          Bei der Verteilung nach Personen ist „Gesamt“ die zeitanteilige Personenzahl im Abrechnungszeitraum (Personentage ÷ {periodDays}).
-        </p>
-      )}
 
-      {fromWeg && r.tenant.lease?.allocationRule === "consumption_mea" ? (
-        <p className="small">
-          Die Kosten sind gemäß Mietvertrag{r.tenant.lease.reference ? ` (${r.tenant.lease.reference})` : ""} nach dem erfassten Verbrauch, im Übrigen nach dem
-          Verhältnis der Miteigentumsanteile verteilt; die Heizkosten nach der Heizkostenverordnung. Grundlage ist die Jahresabrechnung der Hausverwaltung. Nicht
-          umlagefähige Kosten wie Verwaltung, Instandhaltung und die Erhaltungsrücklage sind nicht enthalten.
-        </p>
-      ) : fromWeg && (
-        <p className="small">
-          Die Kosten sind nach den in der Wohnungseigentümergemeinschaft geltenden Verteilungsschlüsseln auf Ihre Wohnung verteilt (§ 556a Abs. 3 BGB);
-          Grundlage ist die Jahresabrechnung der Hausverwaltung{property.wegManager ? ` (${property.wegManager})` : ""}. Nicht umlagefähige Kosten wie Verwaltung,
-          Instandhaltung und die Erhaltungsrücklage sind nicht enthalten.
-        </p>
-      )}
-      {heatingNotes.map((n) => (
-        <p className="small" key={n.costId}>
-          <strong>Heiz- und Warmwasserkosten:</strong> Die Kosten von {formatEUR(n.amount)} stammen aus der Heizkostenabrechnung
-          {n.heating.heatSource ? ` (${n.heating.heatSource})` : ""}
-          {n.heating.buildingTotal ? `; Gesamtkosten der Liegenschaft ${formatEUR(n.heating.buildingTotal)}` : ""}
-          {n.heating.baseSharePct !== null ? `; Verteilung ${n.heating.baseSharePct} % nach Fläche, ${100 - n.heating.baseSharePct} % nach Verbrauch (HeizkostenV)` : ""}.{" "}
-          {n.heating.components.map((c) => `${c.label} ${formatEUR(c.amount)}`).join(", ")}
-          {n.heating.consumptionHeatingKwh !== null ? `. Ihr Verbrauch: Heizung ${formatNum(n.heating.consumptionHeatingKwh)} kWh` : ""}
-          {n.heating.consumptionWaterKwh !== null ? `, Warmwasser ${formatNum(n.heating.consumptionWaterKwh)} kWh` : ""}.
-          {r.days < periodDays && " Für Ihren Nutzungszeitraum ist zeitanteilig abgerechnet."}
-        </p>
-      ))}
-      {co2.map((c) => {
-        const tenantCo2 = r.items.filter((i) => i.costId === c.costId).reduce((a, i) => a + i.co2Amount, 0);
-        return (
-          <p className="small" key={c.costId}>
-            <strong>CO2-Kosten ({c.label}):</strong> Im Abrechnungszeitraum sind CO2-Kosten von {formatEUR(c.co2Cost)} bei einem Ausstoß von{" "}
-            {formatNum(c.co2Kg)} kg CO2 angefallen ({formatNum(c.kgPerM2Year)} kg je m² Wohnfläche und Jahr). Nach dem Stufenmodell des CO2KostAufG
-            (Stufe {c.stage}) trägt der Vermieter {c.landlordPct} % ({formatEUR(c.landlordAmount)}); dieser Anteil ist oben bereits abgezogen. Ihr Anteil an
-            den CO2-Kosten beträgt {formatEUR(tenantCo2)}.
+      <h2>
+        <span className="letter-num">2</span> Erläuterungen
+      </h2>
+      <div className="letter-notes">
+        {fromWeg && r.tenant.lease?.allocationRule === "consumption_mea" ? (
+          <p>
+            Die Kosten sind gemäß Mietvertrag
+            {r.tenant.lease.reference ? ` (${r.tenant.lease.reference})` : ""} nach dem erfassten Verbrauch, im Übrigen nach dem Verhältnis der Miteigentumsanteile
+            verteilt; die Heizkosten nach der Heizkostenverordnung. Grundlage ist die Jahresabrechnung der Hausverwaltung. Nicht umlagefähige Kosten wie Verwaltung,
+            Instandhaltung und die Erhaltungsrücklage sind nicht enthalten.
           </p>
-        );
-      })}
-      {labor > 0 && (
-        <p className="small">
-          <strong>Steuerermäßigung nach § 35a EStG:</strong> In Ihren Kosten sind Arbeitskosten enthalten für haushaltsnahe Dienstleistungen (Abs. 2){" "}
-          {formatEUR(r.labor35a.service)} und für Handwerkerleistungen (Abs. 3) {formatEUR(r.labor35a.craftsman)}. Sie können 20 % davon in Ihrer
-          Einkommensteuererklärung geltend machen.
-        </p>
-      )}
-
-      <div className="result">
-        {draft && "Vorläufig (Entwurf) – "}
-        {r.balance > 0 ? `Nachzahlung: ${formatEUR(r.balance)}` : r.balance < 0 ? `Guthaben: ${formatEUR(-r.balance)}` : "Die Abrechnung ist ausgeglichen."}
+        ) : fromWeg ? (
+          <p>
+            Die Kosten sind nach den in der Wohnungseigentümergemeinschaft geltenden Verteilungsschlüsseln auf Ihre Wohnung verteilt (§ 556a Abs. 3 BGB); Grundlage ist
+            die Jahresabrechnung der Hausverwaltung
+            {property.wegManager ? ` (${property.wegManager})` : ""}. Nicht umlagefähige Kosten wie Verwaltung, Instandhaltung und die Erhaltungsrücklage sind nicht
+            enthalten.
+          </p>
+        ) : (
+          <p>Abgerechnet sind die im Mietvertrag vereinbarten Betriebskosten nach § 2 BetrKV. Direkt zugeordnete Kosten betreffen allein Ihre Wohnung.</p>
+        )}
+        {r.days < periodDays && (
+          <p>
+            Sie haben die Wohnung nur einen Teil des Jahres gemietet; die Kosten sind deshalb zeitanteilig ({r.days} von {periodDays} Tagen) berechnet.
+          </p>
+        )}
+        {r.items.some((i) => i.key === "persons") && (
+          <p>Bei der Verteilung nach Personen ist „gesamt“ die zeitanteilige Personenzahl im Abrechnungszeitraum (Personentage ÷ {periodDays}).</p>
+        )}
+        {heatingNotes.map((n) => (
+          <p key={n.costId}>
+            <strong>Heiz- und Warmwasserkosten:</strong> Die Kosten von {formatEUR(n.amount)} stammen aus der Heizkostenabrechnung
+            {n.heating.heatSource ? ` (${n.heating.heatSource})` : ""}
+            {n.heating.buildingTotal ? `; Gesamtkosten der Liegenschaft ${formatEUR(n.heating.buildingTotal)}` : ""}
+            {n.heating.baseSharePct !== null
+              ? `; Verteilung ${n.heating.baseSharePct} % nach Fläche, ${100 - n.heating.baseSharePct} % nach Verbrauch (HeizkostenV)`
+              : ""}
+            . {n.heating.components.map((c) => `${c.label} ${formatEUR(c.amount)}`).join(", ")}
+            {n.heating.consumptionHeatingKwh !== null ? `. Ihr Verbrauch: Heizung ${formatNum(n.heating.consumptionHeatingKwh)} kWh` : ""}
+            {n.heating.consumptionWaterKwh !== null ? `, Warmwasser ${formatNum(n.heating.consumptionWaterKwh)} kWh` : ""}.
+          </p>
+        ))}
+        {co2.map((c) => {
+          const tenantCo2 = r.items.filter((i) => i.costId === c.costId).reduce((a, i) => a + i.co2Amount, 0);
+          return (
+            <p key={c.costId}>
+              <strong>CO2-Kosten ({c.label}):</strong> Im Abrechnungszeitraum sind CO2-Kosten von {formatEUR(c.co2Cost)} bei einem Ausstoß von {formatNum(c.co2Kg)} kg CO2
+              angefallen ({formatNum(c.kgPerM2Year)} kg je m² Wohnfläche und Jahr). Nach dem Stufenmodell des CO2KostAufG (Stufe {c.stage}) trägt der Vermieter{" "}
+              {c.landlordPct} % ({formatEUR(c.landlordAmount)}); dieser Anteil ist oben bereits abgezogen. Ihr Anteil an den CO2-Kosten beträgt {formatEUR(tenantCo2)}.
+            </p>
+          );
+        })}
+        {labor > 0 && (
+          <p>
+            <strong>Steuerermäßigung nach § 35a EStG:</strong> In Ihren Kosten sind Arbeitskosten enthalten für haushaltsnahe Dienstleistungen (Abs. 2){" "}
+            {formatEUR(r.labor35a.service)} und für Handwerkerleistungen (Abs. 3) {formatEUR(r.labor35a.craftsman)}. Sie können 20 % davon in Ihrer
+            Einkommensteuererklärung geltend machen.
+          </p>
+        )}
       </div>
-      {r.balance > 0 && (
+
+      <h2>
+        <span className="letter-num">3</span> {result?.kind === "due" ? "Zahlung" : result?.kind === "credit" ? "Auszahlung" : "Ergebnis"}
+      </h2>
+      {result?.kind === "due" && (
         <p>
-          Bitte überweisen Sie den Nachzahlungsbetrag {r.tenant.lease?.paymentTerm === "endOfNextMonth" ? "bis zum Ende des auf den Zugang dieser Abrechnung folgenden Kalendermonats" : "innerhalb von 30 Tagen nach Erhalt dieser Abrechnung"}
-          {landlord.iban ? <> auf das Konto IBAN {landlord.iban}</> : null} unter Angabe des Verwendungszwecks „Betriebskosten {statement.periodStart.slice(0, 4)}, {r.unit.name}“.
+          Bitte überweisen Sie den Nachzahlungsbetrag von <strong>{formatEUR(result.amount)}</strong> {paymentText}
+          {landlord.iban ? <> auf das Konto IBAN {landlord.iban}</> : null} unter Angabe des Verwendungszwecks „Betriebskosten {year}, {r.unit.name}“.
         </p>
       )}
-      {r.balance < 0 && (
+      {result?.kind === "credit" && (
         <p>
-          Das Guthaben überweisen wir Ihnen{" "}
-          {r.tenant.lease?.paymentTerm === "endOfNextMonth" ? "bis zum Ende des auf den Zugang dieser Abrechnung folgenden Kalendermonats" : "in den nächsten Tagen"} auf Ihr
-          bekanntes Konto.
+          Das Guthaben von <strong>{formatEUR(result.amount)}</strong> überweisen wir Ihnen{" "}
+          {r.tenant.lease?.paymentTerm === "endOfNextMonth" ? "bis zum Ende des auf den Zugang dieser Abrechnung folgenden Kalendermonats" : "in den nächsten Tagen"} auf
+          Ihr bekanntes Konto.
         </p>
       )}
+      {!result && <p>Ihre Vorauszahlungen decken die Kosten genau; es ist nichts zu zahlen.</p>}
       {suggestAdjustment && stillLiving && newMonthly !== currentMonthly && (
         <p>
-          Auf Grundlage dieser Abrechnung werden Ihre monatlichen Vorauszahlungen auf die Betriebs- und Heizkosten gemäß § 560 Abs. 4 BGB ab dem
-          übernächsten Monat nach Zugang dieses Schreibens von insgesamt {formatEUR(currentMonthly)} auf {formatEUR(newMonthly)} angepasst.
+          Auf Grundlage dieser Abrechnung werden Ihre monatlichen Vorauszahlungen auf die Betriebs- und Heizkosten gemäß § 560 Abs. 4 BGB ab dem übernächsten Monat nach
+          Zugang dieses Schreibens von insgesamt {formatEUR(currentMonthly)} auf {formatEUR(newMonthly)} angepasst.
         </p>
       )}
-      <p className="small">
-        Die Rechnungen und Belege zu dieser Abrechnung können Sie nach vorheriger Terminabsprache gerne einsehen. Einwendungen gegen die Abrechnung
-        können Sie bis zum Ablauf des zwölften Monats nach Zugang dieser Abrechnung mitteilen (§ 556 Abs. 3 BGB).
-      </p>
-      <p style={{ marginTop: "8mm" }}>
-        Mit freundlichen Grüßen
-        <br />
-        <br />
-        {landlord.name}
-      </p>
+      <div className="letter-closing">
+        <p className="letter-small">
+          Die Rechnungen und Belege zu dieser Abrechnung können Sie nach vorheriger Terminabsprache gerne einsehen. Einwendungen gegen die Abrechnung können Sie bis zum
+          Ablauf des zwölften Monats nach Zugang dieser Abrechnung mitteilen (§ 556 Abs. 3 BGB).
+        </p>
+        <p className="letter-sign">
+          Mit freundlichen Grüßen
+          <br />
+          <br />
+          {landlord.name}
+        </p>
+      </div>
+      <div className="letter-foot">
+        <span>
+          Betriebskostenabrechnung {year} · {r.unit.name}
+          {draft ? " · Entwurf" : ""}
+        </span>
+        <span>{property.address || property.name}</span>
+      </div>
     </div>
   );
 }

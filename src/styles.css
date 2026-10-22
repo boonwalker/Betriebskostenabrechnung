@@ -159,31 +159,86 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 }
 .steps li.done::before { content: "✓"; background: var(--ok-soft); color: var(--ok); }
 
-/* Druckansicht */
+/* Druckansicht: Anschreiben an den Mieter (Papierfarben bewusst fest) */
 .letter {
-  background: #fff; color: #000; max-width: 210mm; margin: 0 auto 24px; padding: 20mm 18mm;
-  border: 1px solid var(--border); font-size: 10.5pt; line-height: 1.45;
+  --l-ink: #1d2a36; --l-muted: #5b6b78; --l-line: #d9e1e5; --l-accent: #2f6b73; --l-head: #1f3347; --l-tint: #eef4f5;
+  position: relative; background: #fff; color: var(--l-ink); max-width: 210mm; margin: 0 auto 24px; padding: 0 18mm 14mm;
+  border: 1px solid var(--border); font-size: 10.5pt; line-height: 1.45; overflow: hidden;
 }
-.letter h2 { font-size: 13pt; margin-top: 8mm; }
-.letter table th, .letter table td { padding: 4px 6px; border-bottom: 1px solid #ccc; font-size: 9.5pt; }
-.letter table th { color: #000; text-transform: none; letter-spacing: 0; }
-.letter .sender { font-size: 8pt; text-decoration: underline; margin-bottom: 2mm; }
-.letter .address-block { min-height: 35mm; white-space: pre-line; }
-.letter .meta { text-align: right; }
-.letter .result { font-size: 12pt; font-weight: 700; margin: 6mm 0 3mm; }
+.letter-band { height: 7mm; background: var(--l-accent); margin: 0 -18mm 10mm; }
+.letter-head { display: grid; grid-template-columns: 1fr auto; gap: 8mm; align-items: start; }
+.letter .sender { font-size: 7.5pt; color: var(--l-muted); border-bottom: 1px solid var(--l-line); padding-bottom: 1mm; margin-bottom: 3mm; }
+.letter .address-block { min-height: 30mm; white-space: pre-line; }
+.letter-from { text-align: right; font-size: 9pt; white-space: pre-line; color: var(--l-ink); }
+.letter-muted { color: var(--l-muted); }
+.letter-date { margin-top: 4mm; }
+.letter-title { margin: 6mm 0 5mm; }
+.letter-title h1 { font-size: 18pt; margin: 0; color: var(--l-head); letter-spacing: -0.01em; }
+.letter-sub { font-size: 8.5pt; color: var(--l-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 1mm; }
+.letter.is-draft .letter-sub { color: #b3261e; }
+.letter p { margin: 0 0 3mm; }
+.letter h2 { font-size: 12pt; color: var(--l-head); margin: 7mm 0 3mm; display: flex; align-items: center; gap: 2.5mm; }
+.letter-num {
+  display: inline-flex; align-items: center; justify-content: center; width: 6mm; height: 6mm; border-radius: 50%;
+  background: var(--l-accent); color: #fff; font-size: 9pt; font-weight: 700; flex: none;
+}
+.letter table { width: 100%; border-collapse: collapse; }
+.letter table th, .letter table td { text-transform: none; letter-spacing: 0; font-size: 9.5pt; padding: 2mm 2.5mm; vertical-align: top; }
+.letter .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.letter-summary { display: grid; grid-template-columns: 1.4fr 1fr; gap: 5mm; margin: 4mm 0 2mm; align-items: stretch; }
+.letter-facts { border: 1px solid var(--l-line); }
+.letter-facts th { background: var(--l-tint); color: var(--l-ink); font-weight: 600; text-align: left; width: 45%; border-bottom: 1px solid var(--l-line); }
+.letter-facts td { border-bottom: 1px solid var(--l-line); }
+.letter-result { border-radius: 2mm; padding: 4mm; display: flex; flex-direction: column; justify-content: center; gap: 1mm; border: 1px solid var(--l-line); }
+.letter-result.credit { background: #e8f3ec; border-color: #b9d9c4; }
+.letter-result.due { background: #fdf1e7; border-color: #f0cfb2; }
+.letter-result-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--l-muted); }
+.letter-result-value { font-size: 14pt; font-weight: 700; color: var(--l-head); }
+.letter-result-calc { font-size: 8.5pt; color: var(--l-muted); }
+.letter-costs thead th { background: var(--l-head); color: #fff; font-weight: 600; text-align: left; }
+.letter-costs thead th.num { text-align: right; }
+.letter-costs tbody td { border-bottom: 1px solid var(--l-line); }
+.letter-costs tbody tr:nth-child(even) td { background: #f7fafb; }
+.letter-key { font-size: 8pt; color: var(--l-muted); margin-top: 0.5mm; }
+.letter-subtotal td { background: var(--l-tint); font-weight: 700; border-top: 1.5px solid var(--l-accent); }
+.letter-plain td { color: var(--l-ink); }
+.letter-total td { font-weight: 700; font-size: 11pt; border-top: 1.5px solid var(--l-head); border-bottom: 1.5px solid var(--l-head); }
+.letter-notes p { font-size: 9pt; color: var(--l-ink); }
+.letter-small { font-size: 8.5pt; color: var(--l-muted); }
+.letter-sign { margin-top: 8mm !important; }
+.letter-foot { display: flex; justify-content: space-between; gap: 4mm; border-top: 1px solid var(--l-line); margin-top: 10mm; padding-top: 2mm; font-size: 7.5pt; color: var(--l-muted); }
 .print-toolbar { margin-bottom: 16px; }
+@media (max-width: 640px) {
+  .letter { padding: 0 5mm 8mm; font-size: 10pt; }
+  .letter-band { margin: 0 -5mm 6mm; }
+  .letter-head, .letter-summary { grid-template-columns: 1fr; }
+  .letter-from { text-align: left; }
+  .letter table th, .letter table td { padding: 1.5mm; }
+}
 
 @media print {
   body, :root { background: #fff; }
   .app-header, .no-print, .print-toolbar { display: none !important; }
   main { padding: 0; max-width: none; }
-  .letter { border: none; margin: 0; padding: 0; max-width: none; page-break-after: always; font-size: 10pt; line-height: 1.38; }
-  .letter .address-block { min-height: 30mm; }
-  .letter h2 { margin-top: 4mm; }
-  .letter p { margin-bottom: 2.5mm; }
-  .letter table th, .letter table td { padding: 2.5px 5px; font-size: 9pt; }
+  .letter { border: none; margin: 0; padding: 0; max-width: none; page-break-after: always; font-size: 10pt; line-height: 1.38; overflow: visible; }
+  .letter-band { margin: 0 0 5mm; height: 5mm; }
+  .letter .address-block { min-height: 24mm; }
+  .letter-title { margin: 3mm 0 3mm; }
+  .letter-title h1 { font-size: 16pt; }
+  .letter p { margin-bottom: 2mm; }
+  .letter h2 { margin: 4.5mm 0 2mm; font-size: 11pt; }
+  .letter-summary { margin: 2mm 0 1mm; }
+  .letter table th, .letter table td { padding: 1.4mm 2mm; font-size: 9pt; }
+  .letter-notes p { font-size: 8.5pt; }
+  .letter-sign { margin-top: 5mm !important; }
+  /* Fußzeile nur am Bildschirm – im Druck stünde sie sonst allein auf einer Folgeseite */
+  .letter-foot { display: none; }
+  .letter h2 { break-after: avoid; }
+  .letter-closing { break-inside: avoid; }
+  .letter * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .letter-costs tr { break-inside: avoid; }
   .letter:last-child { page-break-after: auto; }
-  @page { size: A4; margin: 15mm 18mm 12mm; }
+  @page { size: A4; margin: 10mm 16mm 10mm; }
 }
 
 @media (max-width: 640px) {
@@ -247,7 +302,6 @@ tr.row-flag td { background: var(--warn-soft); }
   position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg);
   font-size: 64pt; font-weight: 800; color: rgba(201, 55, 44, 0.12); pointer-events: none; white-space: nowrap;
 }
-.letter { position: relative; }
 .plain-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .tenant-release { border-top: 1px solid var(--border); padding: 10px 0 4px; }
 

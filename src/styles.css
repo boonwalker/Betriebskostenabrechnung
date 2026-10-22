@@ -480,7 +480,13 @@ tfoot td { background: var(--tint); }
 /* Neue Bewertung */
 .valuation-form { margin-top: 12px; background: var(--tint); border-radius: var(--radius); padding: 14px 16px; color: var(--head); }
 .valuation-fields { display: grid; grid-template-columns: 170px 170px 1fr auto; gap: 10px; align-items: end; margin-top: 6px; }
-.valuation-fields input { width: 100%; height: 42px; box-sizing: border-box; background: var(--surface); }
+.valuation-fields > * { min-width: 0; }
+.valuation-fields input { width: 100%; min-width: 0; height: 42px; box-sizing: border-box; background: var(--surface); }
+/* iOS-Safari gibt Datumsfeldern eine eigene Mindestbreite und Höhe, die das Raster sprengen */
+@supports (-webkit-touch-callout: none) {
+  input[type="date"] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; display: block; text-align: left; }
+  input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+}
 @media (max-width: 720px) {
   .valuation-fields { grid-template-columns: 1fr 1fr; }
   .valuation-note, .valuation-add { grid-column: 1 / -1; }

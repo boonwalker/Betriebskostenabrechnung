@@ -57,7 +57,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         </div>
       </div>
 
-      <div className="card">
+      <div id="allgemein" className="card">
         <h2>Allgemein</h2>
         <div className="grid">
           <Field label="Bezeichnung">
@@ -90,7 +90,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
       </div>
 
       {p.type === "etw" && (
-        <div className="card">
+        <div id="weg" className="card">
           <h2>Wohnungseigentümergemeinschaft</h2>
           <p className="hint">Steht in der Teilungserklärung und auf jeder Jahresabrechnung. Ohne abweichende Vereinbarung im Mietvertrag gilt für die Umlage der Schlüssel der WEG (§ 556a Abs. 3 BGB).</p>
           <div className="grid">
@@ -110,7 +110,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         </div>
       )}
 
-      <div className="card">
+      <div id="wohnungen" className="card">
         <h2>Wohneinheiten</h2>
         <p className="hint">Die Wohnfläche ist der Regel-Umlageschlüssel (§ 556a BGB). Lege auch selbst genutzte Wohnungen an, damit ihr Kostenanteil bei dir bleibt.</p>
         <div className="table-wrap">
@@ -159,7 +159,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         <button onClick={() => set({ units: [...p.units, { id: uid(), name: `Wohnung ${p.units.length + 1}`, area: 0 }] })}>+ Einheit</button>
       </div>
 
-      <div className="card">
+      <div id="erwerb" className="card">
         <h2>Erwerb</h2>
         <p className="hint">Grundlage für Vermögensentwicklung, Rendite und Abschreibung.</p>
         <AcquisitionFields p={p} set={set} />
@@ -175,7 +175,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         )}
       </div>
 
-      <div className="card">
+      <div id="grundsteuer" className="card">
         <h2>Grundsteuer</h2>
         <p className="hint">
           Der Grundsteuerwert steht im Feststellungsbescheid des Finanzamts, der Hebesatz in der Satzung bzw. im Grundsteuerbescheid der Gemeinde. Daraus schätzt die App die
@@ -225,7 +225,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         })()}
       </div>
 
-      <div className="card">
+      <div id="mietkonto" className="card">
         <h2>Mietkonto und Entnahmen</h2>
         <div className="grid" style={{ marginBottom: 12 }}>
           <Field label="Anfangsbestand (€)" hint="Kontostand am Startdatum, z. B. 0 € bei neuem Konto">
@@ -288,7 +288,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         </button>
       </div>
 
-      <div className="card">
+      <div id="finanzierung" className="card">
         <h2>Finanzierung</h2>
         <p className="hint">Restschuld und Rate stehen im letzten Kontoauszug des Darlehens. Die Zinsen sind Werbungskosten, die Tilgung nicht.</p>
         {p.loans.length > 0 && (
@@ -332,7 +332,7 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         </button>
       </div>
 
-      <div className="card">
+      <div id="laufende-kosten" className="card">
         <h2>Laufende Kosten, die du selbst trägst</h2>
         <p className="hint">Diese Kosten sind nicht auf die Mieter umlegbar und mindern deine Rendite. Umlagefähige Betriebskosten erfasst du in der jährlichen Abrechnung.</p>
         <div className="grid">

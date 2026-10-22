@@ -1,3 +1,4 @@
+import { focusElement, parseHash } from "./lib/nav";
 import { useEffect, useState } from "react";
 import { useAppData } from "./lib/store";
 import Dashboard from "./pages/Dashboard";
@@ -12,13 +13,16 @@ import PrintView from "./pages/PrintView";
 import SettingsPage from "./pages/Settings";
 
 function useHashRoute() {
-  const read = () => window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
-  const [route, setRoute] = useState(read);
+  const [route, setRoute] = useState(() => parseHash());
   useEffect(() => {
     const onChange = () => {
-      setRoute(read());
-      window.scrollTo(0, 0);
+      const next = parseHash();
+      setRoute(next);
+      // mit Sprungziel (?f=…) dorthin scrollen, sonst an den Seitenanfang
+      if (next.params.f) focusElement(next.params.f);
+      else window.scrollTo(0, 0);
     };
+    if (parseHash().params.f) focusElement(parseHash().params.f);
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
@@ -34,7 +38,8 @@ const NAV = [
 
 export default function App() {
   const [data, update, replace, sync] = useAppData();
-  const [section = "", id, sub] = useHashRoute();
+  const { parts } = useHashRoute();
+  const [section = "", id, sub] = parts;
 
   let page;
   if (section === "objekte" && id === "neu") page = <PropertyWizard key="neu" data={data} update={update} />;

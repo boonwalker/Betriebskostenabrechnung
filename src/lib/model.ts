@@ -111,30 +111,41 @@ export const PROPERTY_TYPE_LABELS: Record<Property["type"], string> = {
   etw: "Eigentumswohnung",
 };
 
-/** Angaben, die für Abrechnung und Rendite noch fehlen */
-export function missingInfo(p: Property, tenants: Tenant[], plans: EconomicPlan[] = []): string[] {
-  const out: string[] = [];
+export interface MissingItem {
+  text: string;
+  /** Stelle, an der die Angabe zu pflegen ist */
+  href: string;
+}
+
+/** Angaben, die für Abrechnung und Rendite noch fehlen – jeweils mit Sprungziel */
+export function missingInfo(p: Property, tenants: Tenant[], plans: EconomicPlan[] = []): MissingItem[] {
+  const out: MissingItem[] = [];
+  const edit = (f: string) => `#/objekte/${p.id}/bearbeiten?f=${f}`;
+  const detail = (q: string) => `#/objekte/${p.id}?${q}`;
   const free = (p.acquisitionType ?? "purchase") !== "purchase";
-  if (!p.purchasePrice) out.push(free ? "Verkehrswert bei Schenkung bzw. Erbschaft (für die Vermögensentwicklung)" : "Kaufpreis (für Rendite und Abschreibung)");
-  if (!p.purchaseDate) out.push("Erwerbsdatum (für die Vermögensentwicklung)");
-  if (free && !p.predecessorCost) out.push("Anschaffungskosten des Rechtsvorgängers (für die fortgeführte Abschreibung)");
-  if (p.loans.some((l) => !l.startDate)) out.push("Auszahlungsdatum der Darlehen (für den Tilgungsverlauf)");
-  if (!p.yearBuilt) out.push("Baujahr (bestimmt den Abschreibungssatz)");
+  if (!p.purchasePrice)
+    out.push({ text: free ? "Verkehrswert bei Schenkung bzw. Erbschaft (für die Vermögensentwicklung)" : "Kaufpreis (für Rendite und Abschreibung)", href: edit("erwerb") });
+  if (!p.purchaseDate) out.push({ text: "Erwerbsdatum (für die Vermögensentwicklung)", href: edit("erwerb") });
+  if (free && !p.predecessorCost) out.push({ text: "Anschaffungskosten des Rechtsvorgängers (für die fortgeführte Abschreibung)", href: edit("erwerb") });
+  if (p.loans.some((l) => !l.startDate)) out.push({ text: "Auszahlungsdatum der Darlehen (für den Tilgungsverlauf)", href: edit("finanzierung") });
+  if (!p.yearBuilt) out.push({ text: "Baujahr (bestimmt den Abschreibungssatz)", href: edit("allgemein") });
   if (p.valuations.length === 0)
-    out.push(
-      free && p.purchasePrice > 0 && p.purchasePrice === p.propertyTaxValue
-        ? "Aktueller Marktwert (bisher nur Grundsteuerwert als Untergrenze)"
-        : "Aktueller Marktwert (Schätzung)",
-    );
-  if (p.units.some((u) => !u.area)) out.push("Wohnfläche aller Einheiten (Umlageschlüssel)");
+    out.push({
+      text:
+        free && p.purchasePrice > 0 && p.purchasePrice === p.propertyTaxValue
+          ? "Aktueller Marktwert (bisher nur Grundsteuerwert als Untergrenze)"
+          : "Aktueller Marktwert (Schätzung)",
+      href: detail("f=wertentwicklung"),
+    });
+  if (p.units.some((u) => !u.area)) out.push({ text: "Wohnfläche aller Einheiten (Umlageschlüssel)", href: edit("wohnungen") });
   // Hausgeld kommt aus dem erfassten Wirtschaftsplan; die Handangabe ist nur der Ersatz ohne Plan
   const hasPlan = plans.some((x) => x.propertyId === p.id && x.monthlyHausgeld !== null);
-  if (p.type === "etw" && !p.hausgeldMonthly && !hasPlan) out.push("Hausgeld: Wirtschaftsplan der WEG erfassen");
+  if (p.type === "etw" && !p.hausgeldMonthly && !hasPlan) out.push({ text: "Hausgeld: Wirtschaftsplan der WEG erfassen", href: detail("f=weg-unterlagen") });
   const today = new Date().toISOString().slice(0, 10);
   for (const t of tenants.filter((t) => t.propertyId === p.id && (!t.moveOut || t.moveOut >= today))) {
     const r = rentAt(t, today);
-    if (!r?.coldRent) out.push(`Kaltmiete von ${t.name}`);
-    if (!r?.prepaymentOperating && !r?.prepaymentHeating) out.push(`Vorauszahlungen von ${t.name}`);
+    if (!r?.coldRent) out.push({ text: `Kaltmiete von ${t.name}`, href: detail(`t=${t.id}&f=miete`) });
+    if (!r?.prepaymentOperating && !r?.prepaymentHeating) out.push({ text: `Vorauszahlungen von ${t.name}`, href: detail(`t=${t.id}&f=miete`) });
   }
   return out;
 }

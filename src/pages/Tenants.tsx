@@ -204,7 +204,7 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
           </label>
         </div>
 
-        <div>
+        <div id="miete">
           <h3 style={{ marginBottom: 2 }}>Miete und Vorauszahlungen</h3>
           <p className="hint">
             Laut Mietvertrag. Lege bei jeder Mieterhöhung oder Anpassung der Vorauszahlungen (§ 560 BGB) eine neue Zeile ab dem Stichtag an – so werden die
@@ -260,9 +260,11 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
           </p>
         </div>
 
-        <LeaseSection lease={t.lease ?? null} onChange={(lease) => setT({ ...t, lease })} />
+        <div id="vertrag">
+          <LeaseSection lease={t.lease ?? null} onChange={(lease) => setT({ ...t, lease })} />
+        </div>
 
-        <div className="card stack" style={{ marginBottom: 0 }}>
+        <div id="vermieter" className="card stack" style={{ marginBottom: 0 }}>
           <label className="row">
             <input
               type="checkbox"

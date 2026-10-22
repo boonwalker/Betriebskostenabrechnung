@@ -1,3 +1,4 @@
+import { focusElement } from "../lib/nav";
 import PositionsTable, { newPosition } from "../components/PositionsTable";
 import { Kpi, NumberInput, type PageProps } from "../components/ui";
 import { applyRules } from "../lib/classify";
@@ -129,7 +130,7 @@ export default function WegEditor({ data, update, kind, id }: PageProps & { kind
 
       {doc.kind === "annual" ? <AnnualSummaryCard data={data} update={update} annual={doc} /> : <PlanSummaryCard data={data} plan={doc} />}
 
-      <div className="card">
+      <div className="card" id="positionen">
         <div className="row" style={{ marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>Positionen</h2>
           <span className="spacer" />
@@ -226,9 +227,10 @@ function AnnualSummaryCard({ data, update, annual }: { data: AppData; update: Pa
       {findings.length > 0 && (
         <ul className="findings">
           {findings.map((f, i) => (
-            <li key={i} className={f.level}>
+            <li key={i} className={`${f.level} ${f.positionId ? "clickable" : ""}`} onClick={f.positionId ? () => focusElement(`pos-${f.positionId}`) : undefined}>
               {f.level === "error" ? "✗ " : f.level === "warning" ? "⚠ " : "ⓘ "}
               {f.text}
+              {f.positionId && <span className="fix"> Zur Position →</span>}
             </li>
           ))}
         </ul>
@@ -310,9 +312,10 @@ function PlanSummaryCard({ data, plan }: { data: AppData; plan: EconomicPlan }) 
         {findings.length > 0 && (
           <ul className="findings">
             {findings.map((f, i) => (
-              <li key={i} className={f.level}>
+              <li key={i} className={`${f.level} ${f.positionId ? "clickable" : ""}`} onClick={f.positionId ? () => focusElement(`pos-${f.positionId}`) : undefined}>
                 {f.level === "error" ? "✗ " : f.level === "warning" ? "⚠ " : "ⓘ "}
                 {f.text}
+                {f.positionId && <span className="fix"> Zur Position →</span>}
               </li>
             ))}
           </ul>

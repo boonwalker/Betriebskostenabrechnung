@@ -1,3 +1,4 @@
+import { IssueList } from "../components/IssueList";
 import { useMemo, useState } from "react";
 import { Balance, NumberInput, type PageProps } from "../components/ui";
 import ReceiptImport from "../components/ReceiptImport";
@@ -41,6 +42,24 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         property.type === "etw"
           ? { id: uid(), category: 1, label: "Grundsteuer", amount: 0, key: "direct", directUnitId: property.units[0]?.id }
           : { id: uid(), category: 1, label: "Grundsteuer", amount: 0, key: "area" },
+      ],
+    });
+  // Fehlende Abgaben der Gemeinde mit einem Klick als Position anlegen (Jahresbetrag laut Bescheid, direkt der Wohnung)
+  const applyFix = (fix: { kind: "tax" | "waste"; amount: number }) =>
+    set({
+      costs: [
+        ...statement.costs,
+        fix.kind === "tax"
+          ? { id: uid(), category: 1, label: "Grundsteuer", amount: fix.amount, key: "direct", directUnitId: property.units[0]?.id, source: "Bescheid der Gemeinde" }
+          : {
+              id: uid(),
+              category: 8,
+              label: "Müllbeseitigung (Bescheid der Gemeinde)",
+              amount: fix.amount,
+              key: "direct",
+              directUnitId: property.units[0]?.id,
+              source: "Bescheid der Gemeinde",
+            },
       ],
     });
   const setOverride = (tenantId: string, value: number | null) => {
@@ -107,14 +126,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         {(readiness.general.length > 0 || readiness.generalHints.length > 0) && (
           <>
             <div className="small muted" style={{ marginBottom: 4 }}>Betrifft alle Mietverhältnisse:</div>
-            <ul className="findings" style={{ marginTop: 0 }}>
-              {readiness.general.map((b) => (
-                <li key={b} className="error">✗ {b}</li>
-              ))}
-              {readiness.generalHints.map((h) => (
-                <li key={h} className="warning">⚠ {h}</li>
-              ))}
-            </ul>
+            <IssueList errors={readiness.general} warnings={readiness.generalHints} targets={readiness.targets} onFix={applyFix} style={{ marginTop: 0 }} />
           </>
         )}
         {readiness.tenants.map((t) => {
@@ -145,14 +157,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                 </div>
               )}
               {!rel && (t.blockers.length > 0 || t.hints.length > 0) && (
-                <ul className="findings" style={{ marginTop: 6 }}>
-                  {t.blockers.map((b) => (
-                    <li key={b} className="error">✗ {b}</li>
-                  ))}
-                  {t.hints.map((h) => (
-                    <li key={h} className="warning">⚠ {h}</li>
-                  ))}
-                </ul>
+                <IssueList errors={t.blockers} warnings={t.hints} targets={readiness.targets} onFix={applyFix} style={{ marginTop: 6 }} />
               )}
             </div>
           );
@@ -202,7 +207,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" id="kosten">
         <div className="row" style={{ marginBottom: 12 }}>
           <h2 style={{ margin: 0 }}>Kostenpositionen</h2>
           <span className="spacer" />
@@ -266,7 +271,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                 {result.tenants.map((r) => {
                   const overridden = statement.prepaymentOverrides[r.tenant.id] !== undefined;
                   return (
-                    <tr key={r.tenant.id + r.start}>
+                    <tr key={r.tenant.id + r.start} id={`vz-${r.tenant.id}`}>
                       <td>
                         {r.tenant.name}
                         <div className="muted small">{r.unit.name}</div>
@@ -390,7 +395,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         })}
         {(result.vacancies.length > 0 || result.co2.length > 0 || result.landlordItems.length > 0) && (
           <>
-            <h3 style={{ marginTop: 16 }}>Trägst du als Vermieter</h3>
+            <h3 id="vermieteranteil" style={{ marginTop: 16 }}>Trägst du als Vermieter</h3>
             <table className="compact">
               <tbody>
                 {result.vacancies.map((v) => (

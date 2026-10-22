@@ -296,3 +296,12 @@ tr.row-flag td { background: var(--warn-soft); }
 .sync-status { margin-left: auto; font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
 .sync-status.saved { color: var(--ok); }
 .sync-status.error { color: var(--danger); }
+.flash { animation: flash 1.8s ease-out; }
+@keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+@media (prefers-reduced-motion: reduce) { .flash { animation: none; outline: 3px solid var(--accent); } }
+.findings li a.fix, .findings li button.fix { margin-left: 6px; font-weight: 600; }
+.findings li button.fix { padding: 2px 8px; font-size: 0.82rem; }
+.missing-list a { color: inherit; }
+.findings li.clickable { cursor: pointer; }
+.findings li.clickable:hover { filter: brightness(0.97); text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 2px; }
+.findings li a.fix { color: inherit; white-space: nowrap; }

@@ -4,6 +4,7 @@ import type { AppData, Statement, Tenant } from "./types";
 import { agreementFor } from "./lease";
 import { estimatePropertyTax, propertyTaxStart } from "./propertyTax";
 import { checkAnnual } from "./weg";
+import { link, type Target } from "./nav";
 
 /** Vermieter eines Mietverhältnisses: abweichend am Mieter hinterlegt oder aus den Einstellungen */
 export const landlordFor = (tenant: Tenant, data: AppData) => tenant.landlord ?? data.settings.landlord;
@@ -20,6 +21,11 @@ export interface TenantReadiness {
   ready: boolean;
 }
 
+/** Wohin ein Klick auf einen Hinweis führt; `fix` trägt den fehlenden Betrag direkt ein */
+export interface IssueTarget extends Target {
+  fix?: { kind: "tax" | "waste"; amount: number };
+}
+
 export interface Readiness {
   /** Blocker, die alle Mietverhältnisse betreffen (Kosten, WEG-Abrechnung …) */
   general: string[];
@@ -30,6 +36,8 @@ export interface Readiness {
   hints: string[];
   /** alle Mietverhältnisse freigabefähig */
   ready: boolean;
+  /** Sprungziel je Hinweistext */
+  targets: Record<string, IssueTarget>;
 }
 
 const uniq = (xs: string[]) => [...new Set(xs)];
@@ -43,45 +51,72 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
   const general: string[] = [];
   const generalHints: string[] = [];
   const property = data.properties.find((p) => p.id === statement.propertyId);
-  if (!property) return { general: ["Objekt nicht gefunden."], generalHints: [], tenants: [], blockers: ["Objekt nicht gefunden."], hints: [], ready: false };
+  if (!property)
+    return { general: ["Objekt nicht gefunden."], generalHints: [], tenants: [], blockers: ["Objekt nicht gefunden."], hints: [], ready: false, targets: {} };
+  const targets: Record<string, IssueTarget> = {};
+  const to = (text: string, target: IssueTarget) => {
+    targets[text] = target;
+    return text;
+  };
+  const here = (f: string, label: string): IssueTarget => ({ href: link(`abrechnungen/${statement.id}`, { f }), label });
+  const objectPage = (params: Record<string, string>, label: string): IssueTarget => ({ href: link(`objekte/${property.id}`, params), label });
+  const annualPage = (id: string, label = "Zur WEG-Jahresabrechnung"): IssueTarget => ({ href: link(`weg/jahresabrechnung/${id}`, { f: "positionen" }), label });
   const year = Number(statement.periodStart.slice(0, 4));
   const result = calculateStatement(statement, property, data.tenants);
 
-  if (statement.costs.length === 0) general.push("Es sind keine Ist-Kosten erfasst.");
+  if (statement.costs.length === 0) {
+    const source = property.type === "etw" ? data.wegAnnuals.find((a) => a.propertyId === property.id && a.year === year) : undefined;
+    general.push(to("Es sind keine Ist-Kosten erfasst.", source ? annualPage(source.id, "Aus der WEG-Jahresabrechnung übernehmen") : here("kosten", "Kosten erfassen")));
+  }
 
   // Eigentumswohnung: Ist-Kosten kommen aus der WEG-Jahresabrechnung
   if (property.type === "etw") {
     for (const unit of property.units) {
       const annual = data.wegAnnuals.find((a) => a.propertyId === property.id && a.unitId === unit.id && a.year === year);
       if (!annual) {
-        general.push(`Die WEG-Jahresabrechnung ${year} für ${unit.name} fehlt (Ist-Kosten). Ein Wirtschaftsplan ersetzt sie nicht.`);
+        general.push(
+          to(
+            `Die WEG-Jahresabrechnung ${year} für ${unit.name} fehlt (Ist-Kosten). Ein Wirtschaftsplan ersetzt sie nicht.`,
+            objectPage({ f: "weg-unterlagen" }, "Jahresabrechnung erfassen"),
+          ),
+        );
         continue;
       }
-      for (const f of checkAnnual(annual)) if (f.level === "error") general.push(`WEG-Jahresabrechnung ${year}: ${f.text}`);
+      for (const f of checkAnnual(annual)) if (f.level === "error") general.push(to(`WEG-Jahresabrechnung ${year}: ${f.text}`, annualPage(annual.id)));
       const open = annual.positions.filter((p) => p.classification === "review");
-      if (open.length) general.push(`${open.length} Position(en) der WEG-Jahresabrechnung ${year} sind noch als „Prüfung erforderlich“ markiert: ${open.map((p) => p.label).join(", ")}.`);
+      if (open.length)
+        general.push(
+          to(
+            `${open.length} Position(en) der WEG-Jahresabrechnung ${year} sind noch als „Prüfung erforderlich“ markiert: ${open.map((p) => p.label).join(", ")}.`,
+            annualPage(annual.id, "Positionen bewerten"),
+          ),
+        );
       const unreviewed = annual.positions.filter((p) => p.classification === "allocable" && !p.reviewed);
-      if (unreviewed.length) general.push(`${unreviewed.length} umlagefähige Position(en) der WEG-Jahresabrechnung ${year} sind noch nicht als geprüft bestätigt.`);
+      if (unreviewed.length)
+        general.push(
+          to(`${unreviewed.length} umlagefähige Position(en) der WEG-Jahresabrechnung ${year} sind noch nicht als geprüft bestätigt.`, annualPage(annual.id, "Positionen bestätigen")),
+        );
       const transferred = new Set(statement.costs.map((c) => c.sourcePositionId));
       const missing = annual.positions.filter(
         (p) => p.classification === "allocable" && p.reviewed && p.heating !== "component" && p.amount !== 0 && !transferred.has(p.id),
       );
-      if (missing.length) generalHints.push(`Noch nicht übernommen: ${missing.map((p) => p.label).join(", ")}.`);
+      if (missing.length) generalHints.push(to(`Noch nicht übernommen: ${missing.map((p) => p.label).join(", ")}.`, here("kosten", "Zur Übernahme")));
     }
   }
 
   // Übernommene Beträge müssen noch zur Quelle passen
   for (const c of statement.costs) {
     if (!c.sourcePositionId) {
-      if (!c.source) generalHints.push(`„${c.label}“ ist manuell erfasst und hat keinen Beleg.`);
+      if (!c.source) generalHints.push(to(`„${c.label}“ ist manuell erfasst und hat keinen Beleg.`, here("kosten", "Zur Position")));
       continue;
     }
     const annual = data.wegAnnuals.find((a) => a.id === c.sourceAnnualId);
     const pos = annual?.positions.find((p) => p.id === c.sourcePositionId);
-    if (!pos) general.push(`„${c.label}“: Die Quellposition in der WEG-Jahresabrechnung existiert nicht mehr.`);
+    if (!pos) general.push(to(`„${c.label}“: Die Quellposition in der WEG-Jahresabrechnung existiert nicht mehr.`, here("kosten", "Zur Position")));
     else if (pos.amount !== (c.sourceAmount ?? c.amount))
-      general.push(`„${c.label}“: Die WEG-Jahresabrechnung wurde geändert (jetzt ${eur(pos.amount)}). Bitte die Position neu übernehmen.`);
-    else if (pos.classification !== "allocable") general.push(`„${c.label}“ ist in der WEG-Jahresabrechnung nicht mehr als umlagefähig bewertet.`);
+      general.push(to(`„${c.label}“: Die WEG-Jahresabrechnung wurde geändert (jetzt ${eur(pos.amount)}). Bitte die Position neu übernehmen.`, here("kosten", "Zur Position")));
+    else if (pos.classification !== "allocable")
+      general.push(to(`„${c.label}“ ist in der WEG-Jahresabrechnung nicht mehr als umlagefähig bewertet.`, annualPage(annual!.id)));
   }
 
   // Grundsteuer gegen Schätzung aus Grundsteuerwert und Hebesatz prüfen
@@ -100,7 +135,10 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
   if (beforeStart) {
     for (const c of [...taxItems, ...wasteItems]) {
       general.push(
-        `„${c.label}“: Du trägst die Abgaben der Gemeinde erst ab ${formatDate(chargeStart!)} (Bescheid an den Eigentümer zum 1. Januar). Kosten, die du nicht getragen hast, darfst du nicht umlegen.`,
+        to(
+          `„${c.label}“: Du trägst die Abgaben der Gemeinde erst ab ${formatDate(chargeStart!)} (Bescheid an den Eigentümer zum 1. Januar). Kosten, die du nicht getragen hast, darfst du nicht umlegen.`,
+          here("kosten", "Position entfernen"),
+        ),
       );
     }
   }
@@ -108,13 +146,16 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
     const entered = taxItems.reduce((a, c) => a + c.amount, 0);
     if (Math.abs(entered - reference.tax) > Math.max(5, reference.tax * 0.05)) {
       generalHints.push(
-        `Grundsteuer ${eur(entered)} weicht von ${reference.source} mit ${eur(reference.tax)} ab. Bitte mit dem Bescheid der Gemeinde für das Abrechnungsjahr abgleichen.`,
+        to(
+          `Grundsteuer ${eur(entered)} weicht von ${reference.source} mit ${eur(reference.tax)} ab. Bitte mit dem Bescheid der Gemeinde für das Abrechnungsjahr abgleichen.`,
+          here("kosten", "Zur Grundsteuer"),
+        ),
       );
     }
   }
-  for (const x of result.landlordItems) generalHints.push(`„${x.label}“: ${eur(x.amount)} trägt der Vermieter (${x.reason}).`);
+  for (const x of result.landlordItems) generalHints.push(to(`„${x.label}“: ${eur(x.amount)} trägt der Vermieter (${x.reason}).`, here("vermieteranteil", "Details")));
   for (const w of result.warnings) generalHints.push(w);
-  if (result.tenants.length === 0) generalHints.push("Im Abrechnungszeitraum gab es keinen Mieter.");
+  if (result.tenants.length === 0) generalHints.push(to("Im Abrechnungszeitraum gab es keinen Mieter.", objectPage({ f: "mieter" }, "Mieter erfassen")));
 
   // Je Mietverhältnis: Vertrag, Vermieter, Vorauszahlungen
   const tenants: TenantReadiness[] = result.tenants.map((t) => {
@@ -122,35 +163,58 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
     const hints: string[] = [];
     const lease = t.tenant.lease;
     if (!lease) {
-      hints.push(`Die Betriebskostenvereinbarung im Mietvertrag von ${t.tenant.name} ist nicht erfasst – die Umlagefähigkeit wurde nicht gegen den Vertrag geprüft.`);
+      hints.push(
+        to(
+          `Die Betriebskostenvereinbarung im Mietvertrag von ${t.tenant.name} ist nicht erfasst – die Umlagefähigkeit wurde nicht gegen den Vertrag geprüft.`,
+          objectPage({ t: t.tenant.id, f: "vertrag" }, "Vereinbarung erfassen"),
+        ),
+      );
     } else {
       for (const c of statement.costs) {
         if (c.key === "direct" && c.directUnitId !== t.unit.id) continue;
         const m = agreementFor(c.label, c.category, lease);
-        if (m.status === "not_agreed") hints.push(`„${c.label}“ wird ${t.tenant.name} nicht berechnet (${m.text}); der Anteil bleibt beim Vermieter.`);
-        else if (m.status === "partial") hints.push(`„${c.label}“: ${m.text}. Bitte anhand der Rechnung bestätigen.`);
+        if (m.status === "not_agreed")
+          hints.push(to(`„${c.label}“ wird ${t.tenant.name} nicht berechnet (${m.text}); der Anteil bleibt beim Vermieter.`, objectPage({ t: t.tenant.id, f: "vertrag" }, "Mietvertrag ansehen")));
+        else if (m.status === "partial") hints.push(to(`„${c.label}“: ${m.text}. Bitte anhand der Rechnung bestätigen.`, here("kosten", "Zur Position")));
       }
       if (property.type === "etw" && !beforeStart && property.wasteFeeAnnual && lease.agreedCategories.includes(8) && !wasteItems.length) {
         hints.push(
-          `Die Müllgebühr laut Bescheid der Gemeinde (${eur(property.wasteFeeAnnual)} pro Jahr) ist vereinbar, aber nicht erfasst. Trage sie als „Müllbeseitigung“ (Nr. 8) direkt für die Wohnung ein.`,
+          to(
+            `Die Müllgebühr laut Bescheid der Gemeinde (${eur(property.wasteFeeAnnual)} pro Jahr) ist vereinbar, aber nicht erfasst. Trage sie als „Müllbeseitigung“ (Nr. 8) direkt für die Wohnung ein.`,
+            { ...here("kosten", `Jetzt eintragen (${eur(property.wasteFeeAnnual)})`), fix: { kind: "waste", amount: property.wasteFeeAnnual } },
+          ),
         );
       }
       if (property.type === "etw" && !beforeStart && lease.propertyTaxIndividual && lease.agreedCategories.includes(1) && !taxItems.length) {
         hints.push(
-          `Die Grundsteuer ist vereinbart, aber nicht erfasst. Trage den Jahresbetrag aus dem Grundsteuerbescheid der Gemeinde ein (direkt der Wohnung zugeordnet)${est ? ` – zur Kontrolle: ${eur(est.tax)} pro Jahr laut ${est.source}` : ""}.`,
+          to(
+            `Die Grundsteuer ist vereinbart, aber nicht erfasst. Trage den Jahresbetrag aus dem Grundsteuerbescheid der Gemeinde ein (direkt der Wohnung zugeordnet)${est ? ` – zur Kontrolle: ${eur(est.tax)} pro Jahr laut ${est.source}` : ""}.`,
+            est
+              ? { ...here("kosten", `Jetzt eintragen (${eur(est.tax)})`), fix: { kind: "tax", amount: est.tax } }
+              : here("kosten", "Grundsteuer eintragen"),
+          ),
         );
       }
     }
     if (statement.prepaymentsConfirmed[t.tenant.id] !== true) {
-      blockers.push(`Vorauszahlungen von ${t.tenant.name} (${formatDate(t.start)}–${formatDate(t.end)}) sind nicht bestätigt. Bitte die tatsächlich gezahlten Beträge prüfen.`);
+      blockers.push(
+        to(
+          `Vorauszahlungen von ${t.tenant.name} (${formatDate(t.start)}–${formatDate(t.end)}) sind nicht bestätigt. Bitte die tatsächlich gezahlten Beträge prüfen.`,
+          here(`vz-${t.tenant.id}`, "Vorauszahlungen prüfen"),
+        ),
+      );
     }
-    if (!t.prepayments && statement.prepaymentOverrides[t.tenant.id] === undefined) hints.push(`Für ${t.tenant.name} sind keine Vorauszahlungen hinterlegt. Stimmt das?`);
+    if (!t.prepayments && statement.prepaymentOverrides[t.tenant.id] === undefined)
+      hints.push(to(`Für ${t.tenant.name} sind keine Vorauszahlungen hinterlegt. Stimmt das?`, objectPage({ t: t.tenant.id, f: "miete" }, "Vorauszahlungen eintragen")));
     const landlord = landlordFor(t.tenant, data);
     if (!landlord.name || !landlord.address) {
       blockers.push(
         t.tenant.landlord
-          ? `Name und Anschrift des Vermieters von ${t.tenant.name} fehlen (beim Mieter unter „Anderer Vermieter für dieses Mietverhältnis“).`
-          : "Name und Anschrift des Vermieters fehlen (Einstellungen).",
+          ? to(
+              `Name und Anschrift des Vermieters von ${t.tenant.name} fehlen (beim Mieter unter „Anderer Vermieter für dieses Mietverhältnis“).`,
+              objectPage({ t: t.tenant.id, f: "vermieter" }, "Vermieter eintragen"),
+            )
+          : to("Name und Anschrift des Vermieters fehlen (Einstellungen).", { href: link("einstellungen", { f: "vermieter" }), label: "Vermieter eintragen" }),
       );
     }
     return { tenantId: t.tenant.id, name: t.tenant.name, blockers: uniq(blockers), hints: uniq(hints), ready: general.length === 0 && blockers.length === 0 };
@@ -158,7 +222,7 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
 
   const blockers = uniq([...general, ...tenants.flatMap((t) => t.blockers)]);
   const hints = uniq([...generalHints, ...tenants.flatMap((t) => t.hints)]);
-  return { general: uniq(general), generalHints: uniq(generalHints), tenants, blockers, hints, ready: blockers.length === 0 };
+  return { general: uniq(general), generalHints: uniq(generalHints), tenants, blockers, hints, ready: blockers.length === 0, targets };
 }
 
 /** Eingefrorener Stand eines Mietverhältnisses: alles, was das Anschreiben braucht */

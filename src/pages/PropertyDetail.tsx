@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { go, parseHash } from "../lib/nav";
 import Sparkline from "../components/Sparkline";
 import { Balance, Delta, Kpi, NumberInput, type PageProps } from "../components/ui";
 import { calculateStatement } from "../lib/calc";
@@ -17,6 +18,23 @@ import { newTenant, saveTenant, TenantForm, TenantTable } from "./Tenants";
 export default function PropertyDetail({ data, update, propertyId }: PageProps & { propertyId: string }) {
   const p = data.properties.find((x) => x.id === propertyId);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  // Sprung aus einem Hinweis: ?t=<Mieter> öffnet dessen Formular (bei jedem Klick erneut)
+  useEffect(() => {
+    const open = () => {
+      const id = parseHash().params.t;
+      const t = id ? data.tenants.find((x) => x.id === id) : undefined;
+      if (t) setEditingTenant(structuredClone(t));
+    };
+    open();
+    window.addEventListener("hashchange", open);
+    return () => window.removeEventListener("hashchange", open);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const closeTenant = () => {
+    setEditingTenant(null);
+    // Mieter-Parameter entfernen, damit derselbe Hinweis das Formular wieder öffnen kann
+    if (parseHash().params.t) history.replaceState(null, "", `#/objekte/${propertyId}`);
+  };
   const [valDate, setValDate] = useState(todayISO());
   const [valValue, setValValue] = useState(0);
   const [valNote, setValNote] = useState("");
@@ -85,12 +103,22 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
       {missing.length > 0 && (
         <div className="alert info">
           <strong>Für eine vollständige Auswertung fehlen noch:</strong>
-          <ul className="checklist">
+          <ul className="checklist missing-list">
             {missing.map((x) => (
-              <li key={x}>{x}</li>
+              <li key={x.text}>
+                <a
+                  href={x.href}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    go(x.href);
+                  }}
+                >
+                  {x.text} →
+                </a>
+              </li>
             ))}
           </ul>
-          <a href={`#/objekte/${p.id}/bearbeiten`}>Objektdaten ergänzen</a> · Mietangaben über „Bearbeiten“ beim Mieter unten
+          <span className="small">Ein Klick führt direkt zur passenden Eingabe.</span>
         </div>
       )}
 
@@ -187,7 +215,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
 
       <AccountCard data={data} property={p} />
 
-      <div className="card">
+      <div className="card" id="wertentwicklung">
         <h2>Wertentwicklung</h2>
         {m.history.length >= 2 ? (
           <Sparkline points={m.history} height={110} label={`Wertverlauf ${p.name}`} />
@@ -235,7 +263,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         <p className="hint" style={{ marginTop: 8 }}>Aktualisiere den Marktwert z. B. einmal im Jahr – wie den Kurs einer Aktie im Depot.</p>
       </div>
 
-      <div className="card">
+      <div className="card" id="mieter">
         <div className="row" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>Einheiten und Mieter</h2>
           <span className="spacer" />
@@ -289,7 +317,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
       {p.type === "etw" && <CostOverview data={data} property={p} />}
 
       {p.type === "etw" && (
-        <div className="card">
+        <div className="card" id="weg-unterlagen">
           <div className="row" style={{ marginBottom: 8 }}>
             <h2 style={{ margin: 0 }}>WEG-Unterlagen</h2>
             <span className="spacer" />
@@ -463,10 +491,10 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         <TenantForm
           data={data}
           initial={editingTenant}
-          onClose={() => setEditingTenant(null)}
+          onClose={closeTenant}
           onSave={(t) => {
             saveTenant(update, t);
-            setEditingTenant(null);
+            closeTenant();
           }}
         />
       )}

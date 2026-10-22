@@ -62,7 +62,7 @@ export default function PositionsTable({
           {positions.map((p) => {
             const uncertain = p.confidence !== undefined && p.confidence < 0.8;
             return (
-              <tr key={p.id} className={highlight?.has(p.id) ? "row-flag" : undefined}>
+              <tr key={p.id} id={`pos-${p.id}`} className={highlight?.has(p.id) ? "row-flag" : undefined}>
                 <td>
                   <input
                     value={p.label}

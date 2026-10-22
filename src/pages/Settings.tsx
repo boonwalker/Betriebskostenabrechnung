@@ -40,7 +40,7 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
       <h1>Einstellungen</h1>
       {message && <div className="alert info">{message}</div>}
 
-      <div className="card stack">
+      <div className="card stack" id="vermieter">
         <h2>Vermieter</h2>
         <p className="muted small">Erscheint als Absender und Bankverbindung auf den Abrechnungen.</p>
         <div className="grid">

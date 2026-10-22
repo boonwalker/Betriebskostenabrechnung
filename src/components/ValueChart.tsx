@@ -204,7 +204,7 @@ export default function ValueChart({
       <strong>{formatEUR0(point.value)}</strong>
       <span>
         {formatDate(point.date)}
-        {idx > 0 && ` · ${formatSignedEUR0(delta)} seit ${formatDate(sorted[0].date)}`}
+        {idx > 0 ? ` · ${formatSignedEUR0(delta)} seit ${formatDate(sorted[0].date)}` : " · Beginn"}
       </span>
     </div>
   );

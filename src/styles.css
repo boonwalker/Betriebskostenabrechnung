@@ -415,15 +415,16 @@ tfoot td { background: var(--tint); }
 .value-chart svg { display: block; cursor: crosshair; outline: none; touch-action: pan-y; -webkit-touch-callout: none; }
 .value-chart.locked svg { touch-action: none; }
 .value-chart circle { transition: r 0.12s ease-out, fill-opacity 0.12s ease-out; }
-.value-chart-readout.compact { min-height: 1.4em; margin: 2px 0 0; gap: 8px; font-size: 0.8rem; }
+.value-chart-readout.compact { flex-direction: row; align-items: baseline; height: 1.4em; overflow: hidden; margin: 2px 0 0; gap: 8px; font-size: 0.8rem; }
 .value-chart-readout.compact strong { font-size: 0.9rem; }
 .value-chart-readout.compact span { font-size: 0.8rem; }
 @media (prefers-reduced-motion: reduce) { .value-chart circle { transition: none; } }
 .value-chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .value-chart-axis { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
-.value-chart-readout { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
-.value-chart-readout strong { font-size: 1.35rem; color: var(--head); font-variant-numeric: tabular-nums; }
-.value-chart-readout span { color: var(--muted); font-size: 0.87rem; }
+/* Feste Zweizeiligkeit: Wert oben, Datum darunter – beides ohne Umbruch, damit beim Ziehen nichts springt */
+.value-chart-readout { display: flex; flex-direction: column; gap: 0; margin-bottom: 4px; min-width: 0; }
+.value-chart-readout strong { font-size: 1.35rem; line-height: 1.25; color: var(--head); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.value-chart-readout span { color: var(--muted); font-size: 0.87rem; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .value-chart-hint { margin-top: 2px; }
 
 /* Handy: Kopfzeile einzeilig – Reiter nebeneinander, Titel steht schon in der Leiste des Viewers */

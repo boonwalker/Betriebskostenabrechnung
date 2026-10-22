@@ -305,3 +305,4 @@ tr.row-flag td { background: var(--warn-soft); }
 .findings li.clickable { cursor: pointer; }
 .findings li.clickable:hover { filter: brightness(0.97); text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 2px; }
 .findings li a.fix { color: inherit; white-space: nowrap; }
+[id] { scroll-margin-top: 90px; }

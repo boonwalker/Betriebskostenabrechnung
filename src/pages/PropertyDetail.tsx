@@ -112,13 +112,24 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         <div className="card">
           <h2>Vermögensentwicklung seit {ACQ_LABEL[p.acquisitionType ?? "purchase"]} ({formatDate(p.purchaseDate)})</h2>
           <div className="kpi-row" style={{ marginBottom: 12 }}>
-            <Kpi label="Vermögenswert heute" value={formatEUR0(w.current.wealth)} hint="Marktwert − Restschuld + Cashflow" />
+            <Kpi
+              label="Vermögenswert heute"
+              value={formatEUR0(w.current.wealth)}
+              hint={w.current.withdrawn ? "Marktwert − Restschuld + Cashflow − Entnahmen" : "Marktwert − Restschuld + Cashflow"}
+            />
             <Kpi
               label="Einstand"
               value={formatEUR0(w.baseline)}
               hint={p.acquisitionType && p.acquisitionType !== "purchase" ? "Wert bei Erwerb + Nebenkosten − Darlehen" : "Kaufpreis + Nebenkosten − Darlehen"}
             />
             <Kpi label="Cashflow seit Erwerb" value={formatSignedEUR0(w.current.cumulative)} hint="Miete + Vorauszahlungen − Hausgeld − Kosten − Raten" />
+            {w.current.withdrawn > 0 && (
+              <Kpi
+                label="Entnommen seit Erwerb"
+                value={formatEUR0(w.current.withdrawn)}
+                hint={`Mietkonto ${formatSignedEUR0(w.current.cumulative - w.current.withdrawn)}`}
+              />
+            )}
             <Kpi label="Zuwachs" value={formatSignedEUR0(w.gain)} hint={w.baseline > 0 ? formatPct(w.gain / w.baseline) : undefined} />
           </div>
           {w.points.length >= 2 && <Sparkline points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} height={110} label={`Vermögensentwicklung ${p.name}`} />}
@@ -130,6 +141,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
                   <th className="num">Marktwert</th>
                   <th className="num">Restschuld</th>
                   <th className="num">Cashflow im Jahr</th>
+                  {w.current.withdrawn > 0 && <th className="num">Entnahmen</th>}
                   <th className="num">Vermögenswert</th>
                 </tr>
               </thead>
@@ -140,6 +152,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
                     <td className="num">{formatEUR0(y.value)}</td>
                     <td className="num">{formatEUR0(y.debt)}</td>
                     <td className="num">{formatSignedEUR0(y.cashflow)}</td>
+                    {w.current.withdrawn > 0 && <td className="num">{formatEUR0(-y.withdrawn)}</td>}
                     <td className="num"><strong>{formatEUR0(y.wealth)}</strong></td>
                   </tr>
                 ))}
@@ -154,8 +167,9 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
           )}
           <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
             Monatlich: Miete{p.type === "etw" ? " und Betriebskostenvorauszahlungen" : ""} wie vereinbart
-            {p.type === "etw" ? ", abzüglich Hausgeld (laut Wirtschaftsplan des Jahres) und Grundsteuer" : ""}, eigener Kosten und Kreditraten; Ergebnisse freigegebener
-            Abrechnungen im Monat der Freigabe. Marktwert linear zwischen den Bewertungen. Vor Steuern.
+            {p.type === "etw" ? ", abzüglich Hausgeld (laut Wirtschaftsplan des Jahres) sowie Grundsteuer und Müll laut Bescheid ab dem Jahr, ab dem du sie trägst" : ""},
+            eigener Kosten und Kreditraten; Ergebnisse freigegebener Abrechnungen im Monat der Freigabe; Entnahmen vom Mietkonto mindern den Wert. Marktwert linear zwischen
+            den Bewertungen. Vor Steuern.
           </p>
         </div>
       ) : (
@@ -462,14 +476,15 @@ const ACQ_LABEL: Record<NonNullable<Property["acquisitionType"]>, string> = { pu
 
 /** Jahresübersicht: Stand am Jahresende bzw. heute, Cashflow des Jahres */
 function yearRows(w: WealthSeries) {
-  const years = new Map<number, { year: number; value: number; debt: number; wealth: number; cashflow: number; partial: boolean }>();
+  const years = new Map<number, { year: number; value: number; debt: number; wealth: number; cashflow: number; withdrawn: number; partial: boolean }>();
   for (const pt of w.points) {
     const year = Number(pt.date.slice(0, 4));
-    const row = years.get(year) ?? { year, value: 0, debt: 0, wealth: 0, cashflow: 0, partial: false };
+    const row = years.get(year) ?? { year, value: 0, debt: 0, wealth: 0, cashflow: 0, withdrawn: 0, partial: false };
     row.value = pt.value;
     row.debt = pt.debt;
     row.wealth = pt.wealth;
     row.cashflow += pt.cashflow;
+    row.withdrawn += pt.withdrawal;
     row.partial = !pt.date.endsWith("-12-31");
     years.set(year, row);
   }

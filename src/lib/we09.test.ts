@@ -320,7 +320,19 @@ describe("Mietvertrag WE 09 (§ 3, § 6)", () => {
     const data = appData({ tenants: [tenantWithLease()], wegAnnuals: [confirmed] });
     const r = statementReadiness({ ...st, costs: items }, data);
     expect(r.hints.some((h) => h.includes("Dachrinnenreinigung"))).toBe(true);
-    expect(r.hints.some((h) => h.includes("Grundsteuer"))).toBe(true);
+    // Grundsteuer und Müll trägt der Eigentümer erst ab 01.01.2026 – für 2024 kein Hinweis
+    expect(r.hints.some((h) => h.includes("Grundsteuer"))).toBe(false);
+  });
+
+  it("Abgaben der Gemeinde: 2025 nicht umlegbar, ab 2026 Hinweis auf Grundsteuer und Müll", () => {
+    const data = appData({ tenants: [tenantWithLease()], wegAnnuals: [] });
+    const tax = { id: "gs", category: 1, label: "Grundsteuer", amount: 194.42, key: "direct" as const, directUnitId: "we09-u" };
+    const r25 = statementReadiness({ ...we09Statement(2025), costs: [tax] }, data);
+    expect(r25.general.some((g) => g.includes("erst ab 01.01.2026"))).toBe(true);
+    const ins = { id: "v", category: 13, label: "Gebäudeversicherung", amount: 196, key: "direct" as const, directUnitId: "we09-u" };
+    const r26 = statementReadiness({ ...we09Statement(2026), costs: [ins] }, appData({ tenants: [we09Tenant()] }));
+    expect(r26.hints.some((h) => h.includes("Grundsteuer ist vereinbart"))).toBe(true);
+    expect(r26.hints.some((h) => h.includes("Müllgebühr"))).toBe(true);
   });
 
   it("schließt nicht vereinbarte sonstige Betriebskosten aus", () => {
@@ -349,22 +361,26 @@ describe("Prognose 2025 für den Mieter WE 09", () => {
   it("rechnet zeitanteilig ab Mietbeginn und nach dem Vertragsschlüssel", () => {
     const f = forecastForTenant(we09Plan2025(), we09Property(), we09Tenant())!;
     // Plan umlagefähig 1.228,20 € − Dachwartung (ungeklärt) 19,60 € − Wohnungsstationen nach WE 56,36 € + nach MEA 30,38 €
-    // = 1.182,62 €, dazu Grundsteuer laut Bescheid 336,96 € (individuell umgelegt, § 6 Nr. 3 Mietvertrag)
-    expect(f.propertyTaxYear).toBe(336.96);
-    expect(f.expectedYear).toBe(1519.58);
+    // = 1.182,62 €. Grundsteuer und Müll trägt der Eigentümer erst ab 01.01.2026 – 2025 nicht umlegbar
+    expect(f.charges).toEqual([]);
+    expect(f.expectedYear).toBe(1182.62);
     expect(f.uncertainYear).toBe(19.6);
     expect(f.days).toBe(153);
     expect(f.prepayments).toBe(650);
-    expect(f.expectedShare).toBe(636.97);
-    expect(f.result).toBe(-13.03);
-  });
-
-  it("ohne Grundsteuer im Bescheid: 495,73 € Kosten, 154,27 € Guthaben", () => {
-    const p = { ...we09Property(), propertyTaxAnnual: null, propertyTaxRate: null };
-    const f = forecastForTenant(we09Plan2025(), p, we09Tenant())!;
-    expect(f.expectedYear).toBe(1182.62);
     expect(f.expectedShare).toBe(495.73);
     expect(f.result).toBe(-154.27);
+  });
+
+  it("2026 (Plan 2025 fortgeschrieben): Grundsteuer 194,42 € und Müll 142,55 € kommen dazu", () => {
+    const plan = { ...we09Plan2025(), year: 2026 };
+    const f = forecastForTenant(plan, we09Property(), we09Tenant())!;
+    expect(f.charges.map((c) => [c.label, c.year])).toEqual([
+      ["Grundsteuer", 194.42],
+      ["Müllgebühr", 142.55],
+    ]);
+    expect(f.expectedYear).toBe(1519.59);
+    expect(f.prepayments).toBe(1560);
+    expect(f.result).toBe(-40.41);
   });
 });
 

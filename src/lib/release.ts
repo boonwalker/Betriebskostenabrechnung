@@ -2,7 +2,7 @@ import { calculateStatement, type Co2Result, type TenantResult } from "./calc";
 import { formatDate } from "./dates";
 import type { AppData, Statement, Tenant } from "./types";
 import { agreementFor } from "./lease";
-import { estimatePropertyTax } from "./propertyTax";
+import { estimatePropertyTax, propertyTaxStart } from "./propertyTax";
 import { checkAnnual } from "./weg";
 
 /** Vermieter eines Mietverhältnisses: abweichend am Mieter hinterlegt oder aus den Einstellungen */
@@ -93,7 +93,18 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
       : null;
   const est = reference;
   const taxItems = statement.costs.filter((c) => c.category === 1);
-  if (reference && taxItems.length) {
+  const wasteItems = statement.costs.filter((c) => c.category === 8 && /m(ü|ue)ll|abfall/i.test(c.label));
+  // Abgaben der Gemeinde trägt der Eigentümer erst ab dem 1. Januar nach dem Erwerb (§ 9 GrStG), sofern nichts anderes erfasst ist
+  const chargeStart = property.type === "etw" ? propertyTaxStart(property) : null;
+  const beforeStart = chargeStart !== null && statement.periodEnd < chargeStart;
+  if (beforeStart) {
+    for (const c of [...taxItems, ...wasteItems]) {
+      general.push(
+        `„${c.label}“: Du trägst die Abgaben der Gemeinde erst ab ${formatDate(chargeStart!)} (Bescheid an den Eigentümer zum 1. Januar). Kosten, die du nicht getragen hast, darfst du nicht umlegen.`,
+      );
+    }
+  }
+  if (reference && taxItems.length && !beforeStart) {
     const entered = taxItems.reduce((a, c) => a + c.amount, 0);
     if (Math.abs(entered - reference.tax) > Math.max(5, reference.tax * 0.05)) {
       generalHints.push(
@@ -119,7 +130,12 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
         if (m.status === "not_agreed") hints.push(`„${c.label}“ wird ${t.tenant.name} nicht berechnet (${m.text}); der Anteil bleibt beim Vermieter.`);
         else if (m.status === "partial") hints.push(`„${c.label}“: ${m.text}. Bitte anhand der Rechnung bestätigen.`);
       }
-      if (property.type === "etw" && lease.propertyTaxIndividual && lease.agreedCategories.includes(1) && !taxItems.length) {
+      if (property.type === "etw" && !beforeStart && property.wasteFeeAnnual && lease.agreedCategories.includes(8) && !wasteItems.length) {
+        hints.push(
+          `Die Müllgebühr laut Bescheid der Gemeinde (${eur(property.wasteFeeAnnual)} pro Jahr) ist vereinbar, aber nicht erfasst. Trage sie als „Müllbeseitigung“ (Nr. 8) direkt für die Wohnung ein.`,
+        );
+      }
+      if (property.type === "etw" && !beforeStart && lease.propertyTaxIndividual && lease.agreedCategories.includes(1) && !taxItems.length) {
         hints.push(
           `Die Grundsteuer ist vereinbart, aber nicht erfasst. Trage den Jahresbetrag aus dem Grundsteuerbescheid der Gemeinde ein (direkt der Wohnung zugeordnet)${est ? ` – zur Kontrolle: ${eur(est.tax)} pro Jahr laut ${est.source}` : ""}.`,
         );

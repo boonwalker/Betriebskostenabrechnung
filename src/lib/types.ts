@@ -32,6 +32,17 @@ export interface Loan {
 /** Art des Erwerbs: bestimmt Einstand, eingesetztes Eigenkapital und Abschreibung */
 export type AcquisitionType = "purchase" | "gift" | "inheritance";
 
+/** Regelmäßige Entnahme vom Mietkonto auf ein privates Konto – steuerlich ohne Bedeutung */
+export interface Withdrawal {
+  id: string;
+  /** erste Entnahme; danach monatlich am selben Tag */
+  from: ISODate;
+  /** letzte Entnahme (leer: läuft weiter) */
+  to: ISODate | null;
+  monthly: number;
+  note: string;
+}
+
 export interface Valuation {
   id: string;
   date: ISODate;
@@ -88,6 +99,12 @@ export interface Property {
   propertyTaxRate?: number | null;
   /** Grundsteuer pro Jahr laut Bescheid der Gemeinde (maßgeblich vor der Schätzung) */
   propertyTaxAnnual?: number | null;
+  /** Müllgebühr pro Jahr laut Grundbesitzabgabenbescheid, falls die Gemeinde sie dem Eigentümer berechnet */
+  wasteFeeAnnual?: number | null;
+  /** ab wann du die Abgaben der Gemeinde trägst; leer: 1. Januar nach dem Erwerb (§ 9 GrStG) */
+  propertyTaxFrom?: ISODate | null;
+  /** regelmäßige Entnahmen vom Mietkonto (Privatentnahmen) */
+  withdrawals?: Withdrawal[];
 }
 
 /** Mietstand ab einem Stichtag (Mietvertrag, Mieterhöhung, Anpassung der Vorauszahlung) */

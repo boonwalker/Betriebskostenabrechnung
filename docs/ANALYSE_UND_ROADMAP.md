@@ -184,6 +184,15 @@ Der Feststellungsbescheid des Finanzamts vom 05.09.2025 nennt einen Grundsteuerw
 
 Prognose 2025 aus dem Wirtschaftsplan: erwartete Kosten 495,73 € (1.182,62 € × 153/365) gegenüber 650 € Vorauszahlungen. Voraussichtlich also rund 154 € Guthaben, ohne Heizkosten-Saisoneffekt und ohne Grundsteuer.
 
+### Grundbesitzabgaben 2026 und Entnahmen
+
+Bescheid der Stadt für 2026: Grundsteuer B 34,78 € × 559 % = 194,42 € (die Schätzung der App stimmt auf den Cent) plus Restmüll 60 l 142,55 €, zusammen 336,97 € (vierteljährlich 84,24 €). Der Eigentümer trägt beides erst ab 01.01.2026 (§ 9 GrStG, Bescheid 2025 an die Eltern). Folgen:
+
+- Abrechnung 2025 für den neuen Mieter: keine Grundsteuer und keine Müllgebühr (nicht selbst getragen). Die App blockiert die Freigabe, falls sie trotzdem erfasst sind.
+- Ab 2026: Grundsteuer (Nr. 1, individuell laut § 6 Nr. 3) und Müllbeseitigung (Nr. 8) direkt der Wohnung zuordnen; die App weist darauf hin.
+- Prognose 2026 (Plan 2025 fortgeschrieben): 1.182,62 € + 194,42 € + 142,55 € = 1.519,59 € gegenüber 1.560 € Vorauszahlungen, also rund 40 € Guthaben.
+- Vermögensentwicklung: Abgaben erst ab 2026; Privatentnahmen vom Mietkonto (300 € monatlich ab 01.09.2025) mindern den Vermögenswert des Objekts, steuerlich ohne Bedeutung.
+
 ### Erwerb WE 09
 
 Schenkung der Eltern mit Übergang von Nutzen und Lasten am 01.08.2025 – zeitgleich mit dem Mieterwechsel. Die Vermögensentwicklung beginnt im August 2025; Startwert ist vorerst der Grundsteuerwert (112.200 €) als Untergrenze. Für die Abschreibung fehlen noch die Anschaffungskosten der Eltern und deren Erwerbsjahr (§ 11d EStDV), z. B. aus deren Anlage V oder Kaufvertrag.

@@ -1,7 +1,7 @@
 import { sumRent } from "./calc";
 import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
 import { propertyMetrics } from "./finance";
-import { propertyTaxPerYear } from "./propertyTax";
+import { municipalCharges, propertyTaxStart } from "./propertyTax";
 import { releasedTenant } from "./release";
 import type { AppData, ISODate, Loan, Property } from "./types";
 
@@ -14,7 +14,11 @@ export interface WealthPoint {
   cashflow: number;
   /** aufsummierter Cashflow seit Erwerb */
   cumulative: number;
-  /** Marktwert − Restschuld + aufsummierter Cashflow */
+  /** Entnahme vom Mietkonto in diesem Monat */
+  withdrawal: number;
+  /** aufsummierte Entnahmen seit Erwerb */
+  withdrawn: number;
+  /** Marktwert − Restschuld + aufsummierter Cashflow − Entnahmen */
   wealth: number;
 }
 
@@ -94,7 +98,12 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
   const tenants = data.tenants.filter((t) => t.propertyId === property.id);
   const loans = property.loans.map((l) => schedule(l, months));
   const ownCostsYear = property.maintenanceAnnual + property.managementAnnual + property.otherCostsAnnual;
-  const taxEstimate = propertyTaxPerYear(property) ?? 0;
+  // Grundsteuer und Müllgebühr laut Bescheid der Gemeinde, ab dem Tag, ab dem du sie trägst
+  const chargesBill = municipalCharges(property);
+  const taxEstimate = chargesBill.find((c) => c.key === "tax")?.amount ?? 0;
+  const wasteYear = chargesBill.find((c) => c.key === "waste")?.amount ?? 0;
+  const taxStart = propertyTaxStart(property) ?? acq;
+  const withdrawals = property.withdrawals ?? [];
 
   // Hausgeld laut Wirtschaftsplan des Jahres; ohne Plan gilt der letzte frühere Plan weiter (wie bei der WEG üblich)
   const plansWithHausgeld = data.economicPlans.filter((p) => p.propertyId === property.id && p.monthlyHausgeld !== null);
@@ -122,6 +131,7 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
 
   const points: WealthPoint[] = [];
   let cumulative = 0;
+  let withdrawn = 0;
   months.forEach((m, i) => {
     const monthStart = `${m}-01`;
     const monthEnd = fromDay(toDay(addMonths(monthStart, 1)) - 1);
@@ -135,14 +145,28 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
       if (!tr) continue;
       income += sumRent(t, tr.start, tr.end, (r) => r.coldRent + (r.surcharge ?? 0) + (isEtw ? r.prepaymentOperating + r.prepaymentHeating : 0));
     }
+    // Grundsteuer erst ab dem Tag, ab dem du sie trägst
+    const taxRange = intersect(range.start, range.end, taxStart, "9999-12-31");
+    const taxShare = taxRange ? daysInclusive(taxRange.start, taxRange.end) / daysInclusive(monthStart, monthEnd) : 0;
     const costs =
-      (isEtw ? hausgeldMonthly(year) + propertyTaxYear(year) / 12 : 0) * share + (ownCostsYear / 12) * share + loans.reduce((a, l) => a + l.payment[i], 0);
+      (isEtw ? hausgeldMonthly(year) * share + ((propertyTaxYear(year) + wasteYear) / 12) * taxShare : 0) +
+      (ownCostsYear / 12) * share +
+      loans.reduce((a, l) => a + l.payment[i], 0);
     const cashflow = round2(income - costs + (settlements.get(m) ?? 0));
     cumulative = round2(cumulative + cashflow);
+    // Entnahme am Stichtag des Monats, sofern schon erfolgt
+    const withdrawal = round2(
+      withdrawals.reduce((a, w) => {
+        const day = `${m}-${w.from.slice(8, 10)}`;
+        const due = day > monthEnd ? monthEnd : day;
+        return w.from <= due && (!w.to || due <= w.to) && due <= today && due >= acq ? a + w.monthly : a;
+      }, 0),
+    );
+    withdrawn = round2(withdrawn + withdrawal);
     const date = monthEnd < today ? monthEnd : today;
     const value = round2(valueAt(property, date));
     const debt = round2(loans.reduce((a, l) => a + l.debt[i], 0));
-    points.push({ date, value, debt, cashflow, cumulative, wealth: round2(value - debt + cumulative) });
+    points.push({ date, value, debt, cashflow, cumulative, withdrawal, withdrawn, wealth: round2(value - debt + cumulative - withdrawn) });
   });
 
   const current = { ...points[points.length - 1] };
@@ -152,7 +176,7 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
   if (property.loans.length && property.loans.every((l) => l.startDate) && entered > 0) {
     loanDeviation = round2(entered - current.debt);
     current.debt = entered;
-    current.wealth = round2(current.value - entered + current.cumulative);
+    current.wealth = round2(current.value - entered + current.cumulative - current.withdrawn);
     points[points.length - 1] = current;
   }
   const metrics = propertyMetrics(property, data.tenants, today, data.settings.marginalTaxRate);

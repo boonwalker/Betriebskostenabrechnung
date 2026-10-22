@@ -109,13 +109,17 @@ describe("WE 09: Schenkung zum 01.08.2025", () => {
     const s = wealthSeries(p, d, "2025-12-31")!;
     expect(s.points[0].date).toBe("2025-08-31");
     expect(s.points).toHaveLength(5);
-    // 480 + 20 Stellplatz + 130 Vorauszahlung − 160,31 Hausgeld − 28,08 Grundsteuer laut Bescheid
-    expect(s.points[0].cashflow).toBeCloseTo(630 - 160.31 - 28.08, 2);
+    // 480 + 20 Stellplatz + 130 Vorauszahlung − 160,31 Hausgeld; Grundsteuer und Müll erst ab 2026
+    expect(s.points[0].cashflow).toBeCloseTo(630 - 160.31, 2);
+    // Entnahme 300 € monatlich ab 01.09.2025: Aug 0, Sep–Dez 4 × 300
+    expect(s.points[0].withdrawal).toBe(0);
+    expect(s.current.withdrawn).toBe(1200);
+    expect(s.current.wealth).toBe(112200 + 5 * 469.69 - 1200);
     // Schenkung: kein eigenes Geld eingesetzt außer Nebenkosten; Startwert = Grundsteuerwert
     expect(s.baseline).toBe(112200);
     expect(s.current.value).toBe(112200);
     // 2026 ohne eigenen Plan: Hausgeld laut Plan 2025 läuft weiter
     const s26 = wealthSeries(p, d, "2026-03-31")!;
-    expect(s26.points[s26.points.length - 1].cashflow).toBeCloseTo(630 - 160.31 - 28.08, 2);
+    expect(s26.points[s26.points.length - 1].cashflow).toBeCloseTo(630 - 160.31 - 336.97 / 12, 2);
   });
 });

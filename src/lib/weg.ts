@@ -6,7 +6,7 @@ import { daysInclusive, intersect } from "./dates";
 import { agreementFor, amountByLease, tenantsInPeriod } from "./lease";
 import type { CostItem, EconomicPlan, HeatingBill, LeaseAgreement, LedgerPosition, Property, Statement, Tenant, WegAnnualStatement } from "./types";
 import { uid } from "./model";
-import { propertyTaxPerYear } from "./propertyTax";
+import { municipalCharges, propertyTaxStart } from "./propertyTax";
 
 /*
  * Drei Ebenen, die nie vermischt werden:
@@ -528,8 +528,8 @@ export interface TenantForecast {
   expectedShare: number;
   uncertainShare: number;
   prepayments: number;
-  /** darin enthaltene Grundsteuer pro Jahr (individuell umgelegt laut Mietvertrag) */
-  propertyTaxYear: number;
+  /** Abgaben laut Bescheid der Gemeinde (Grundsteuer, Müll), soweit vereinbart und von dir getragen – in expectedYear/expectedShare enthalten */
+  charges: { label: string; year: number; share: number }[];
   /** > 0: voraussichtliche Nachzahlung, < 0: voraussichtliches Guthaben */
   result: number;
 }
@@ -555,24 +555,36 @@ export function forecastForTenant(plan: EconomicPlan, property: Property, tenant
     if (p.classification === "review" || agreement?.status === "partial") uncertain += cents;
     else expected += cents;
   }
-  // Grundsteuer steht nicht im Wirtschaftsplan: Bescheid der Gemeinde, sofern im Mietvertrag vereinbart
-  const tax = propertyTaxPerYear(property);
-  const taxAgreed = !tenant.lease || (tenant.lease.agreedCategories.includes(1) && tenant.lease.propertyTaxIndividual);
-  const propertyTaxYear = tax && taxAgreed && property.units.length === 1 ? tax : 0;
-  expected += toCents(propertyTaxYear);
   const days = daysInclusive(range.start, range.end);
   const yearDays = daysInclusive(yearStart, yearEnd);
+  // Grundsteuer und Müll stehen nicht im Wirtschaftsplan: Bescheid der Gemeinde an die Wohnung (nur Einzelwohnung),
+  // umlegbar nur, soweit vereinbart und ab dem Tag, ab dem du sie trägst (§ 9 GrStG: Eigentümer am 1. Januar)
+  const chargeStart = propertyTaxStart(property);
+  const chargeRange = chargeStart ? intersect(range.start, range.end, chargeStart, yearEnd) : range;
+  const lease = tenant.lease;
+  const charges =
+    property.units.length === 1 && chargeRange
+      ? municipalCharges(property)
+          .filter((c) => !lease || (lease.agreedCategories.includes(c.category) && (c.key !== "tax" || lease.propertyTaxIndividual)))
+          .map((c) => ({
+            label: c.label,
+            year: c.amount,
+            share: Math.round((toCents(c.amount) * daysInclusive(chargeRange.start, chargeRange.end)) / yearDays) / 100,
+          }))
+      : [];
+  const chargesYear = sumCents(charges.map((c) => toCents(c.year)));
+  const chargesShare = sumCents(charges.map((c) => toCents(c.share)));
   const prepayments = calcPrepayments(tenant, range.start, range.end).total;
-  const expectedShare = Math.round((expected * days) / yearDays) / 100;
+  const expectedShare = fromCents(Math.round((expected * days) / yearDays) + chargesShare);
   return {
-    expectedYear: fromCents(expected),
+    expectedYear: fromCents(expected + chargesYear),
     uncertainYear: fromCents(uncertain),
     days,
     yearDays,
     expectedShare,
     uncertainShare: Math.round((uncertain * days) / yearDays) / 100,
     prepayments,
-    propertyTaxYear,
+    charges,
     result: fromCents(toCents(expectedShare) - toCents(prepayments)),
   };
 }

@@ -23,6 +23,7 @@ export default function Dashboard({ data }: { data: AppData }) {
   const totalGain = withSeries.reduce((a, x) => a + x.w!.gain, 0);
   const totalBaseline = withSeries.reduce((a, x) => a + x.w!.baseline, 0);
   const totalCumulative = withSeries.reduce((a, x) => a + x.w!.current.cumulative, 0);
+  const totalWithdrawn = withSeries.reduce((a, x) => a + x.w!.current.withdrawn, 0);
   const portfolio = portfolioMetrics(
     metrics.map((x) => x.m),
     data.properties.reduce((a, p) => a + p.purchasePrice, 0),
@@ -51,7 +52,7 @@ export default function Dashboard({ data }: { data: AppData }) {
             <div className="muted small">Vermögenswert (Marktwert − Restschuld + Cashflow seit Erwerb)</div>
             <div className="hero">{formatEUR0(totalWealth)}</div>
             {withSeries.length > 0 && (
-              <Delta value={totalGain} pct={totalBaseline > 0 ? totalGain / totalBaseline : null} suffix={`ggü. Einstand · Cashflow bisher ${formatSignedEUR0(totalCumulative)}`} />
+              <Delta value={totalGain} pct={totalBaseline > 0 ? totalGain / totalBaseline : null} suffix={`ggü. Einstand · Cashflow bisher ${formatSignedEUR0(totalCumulative)}${totalWithdrawn ? ` · entnommen ${formatEUR0(totalWithdrawn)}` : ""}`} />
             )}
           </div>
           <div className="kpi-row">
@@ -161,6 +162,7 @@ function PropertyTile({
         Marktwert {formatEUR0(m.marketValue)}
         {m.loanBalance > 0 && ` · Restschuld ${formatEUR0(m.loanBalance)}`}
         {w && ` · Cashflow ${formatSignedEUR0(w.current.cumulative)}`}
+        {w && w.current.withdrawn > 0 && ` · entnommen ${formatEUR0(w.current.withdrawn)}`}
       </div>
       <div className="tile-chart">
         {w && w.points.length >= 2 ? (

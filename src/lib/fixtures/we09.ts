@@ -51,8 +51,12 @@ export function we09Property(): Property {
     // Feststellungsbescheid vom 05.09.2025 (Zurechnung ab 01.01.2026); Hebesatz Wohngrundstücke Heinsberg ab 2026
     propertyTaxValue: 112200,
     propertyTaxRate: 559,
-    // Grundsteuer laut Angabe des Eigentümers: 28,08 € pro Monat
-    propertyTaxAnnual: 336.96,
+    // Grundbesitzabgabenbescheid 2026 der Stadt: Grundsteuer B 34,78 € × 559 % = 194,42 €, Restmüll 60 l 142,55 €
+    // (zusammen 336,97 €, vierteljährlich 84,24 €). Getragen ab 01.01.2026 – 2025 ging der Bescheid an die Eltern.
+    propertyTaxAnnual: 194.42,
+    wasteFeeAnnual: 142.55,
+    // Privatentnahme vom Mietkonto
+    withdrawals: [{ id: "we09-w1", from: "2025-09-01", to: null, monthly: 300, note: "Entnahme vom Mietkonto" }],
   };
 }
 

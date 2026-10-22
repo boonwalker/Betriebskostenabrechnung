@@ -179,7 +179,7 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
     current.wealth = round2(current.value - entered + current.cumulative - current.withdrawn);
     points[points.length - 1] = current;
   }
-  const metrics = propertyMetrics(property, data.tenants, today, data.settings.marginalTaxRate);
+  const metrics = propertyMetrics(property, data.tenants, today, data.settings.marginalTaxRate, data.economicPlans);
   const baseline = round2(metrics.invested - property.loans.reduce((a, l) => a + l.principal, 0));
   return { points, baseline, current, gain: round2(current.wealth - baseline), loanDeviation: loanDeviation && Math.abs(loanDeviation) > 1 ? loanDeviation : null };
 }

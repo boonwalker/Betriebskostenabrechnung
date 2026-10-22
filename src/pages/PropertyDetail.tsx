@@ -34,7 +34,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
 
   const today = todayISO();
   const taxRate = data.settings.marginalTaxRate;
-  const m = propertyMetrics(p, data.tenants, today, taxRate);
+  const m = propertyMetrics(p, data.tenants, today, taxRate, data.economicPlans);
   const w = wealthSeries(p, data, today);
   const missing = missingInfo(p, data.tenants);
   const tenants = data.tenants.filter((t) => t.propertyId === p.id).sort((a, b) => a.moveIn.localeCompare(b.moveIn));
@@ -104,7 +104,13 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         <div className="kpi-row">
           <Kpi label="Eigenkapital im Objekt" value={formatEUR0(m.netWorth)} hint={`Restschuld ${formatEUR0(m.loanBalance)}`} />
           <Kpi label="Mietrendite brutto / netto" value={`${formatPct(m.grossYield)} / ${formatPct(m.netYield)}`} hint={`Kaltmiete ${formatEUR0(m.annualColdRent)} p. a.`} />
-          <Kpi label="Cashflow / Monat nach Steuern" value={formatSignedEUR0(m.cashflowAfterTax / 12)} hint={`vor Steuern ${formatSignedEUR0(m.cashflowBeforeTax / 12)}`} />
+          <Kpi
+            label="Cashflow / Monat nach Steuern"
+            value={formatSignedEUR0(m.cashflowAfterTax / 12)}
+            hint={`vor Steuern ${formatSignedEUR0(m.cashflowBeforeTax / 12)} · Steuersatz ${formatNum(taxRate)} %${
+              m.annualDepreciation === 0 ? " · ohne Abschreibung" : ""
+            }`}
+          />
           <Kpi label="Eigenkapitalrendite p. a." value={formatPct(m.equityReturn)} hint="Cashflow n. St. + Tilgung, ohne Wertänderung" />
         </div>
       </div>
@@ -337,7 +343,10 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
           <table className="compact fin-table">
             <tbody>
               <Line label="Nettokaltmiete (aktuell × 12)" value={m.annualColdRent} />
-              <Line label="− nicht umlagefähige Kosten" value={-m.nonAllocableCosts} />
+              <Line
+                label={`− nicht umlagefähige Kosten${m.hausgeldPlanYear ? ` (Hausgeld laut Wirtschaftsplan ${m.hausgeldPlanYear}, inkl. Rücklage ${formatEUR0(m.reserve)})` : ""}`}
+                value={-m.nonAllocableCosts}
+              />
               <Line label="= Reinertrag" value={m.annualColdRent - m.nonAllocableCosts} sum />
               <Line label="− Zinsen" value={-m.annualInterest} />
               <Line label="− Tilgung" value={-m.annualPrincipal} />

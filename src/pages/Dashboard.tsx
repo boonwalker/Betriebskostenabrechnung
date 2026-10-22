@@ -13,7 +13,7 @@ export default function Dashboard({ data }: { data: AppData }) {
   const lastYear = String(new Date().getFullYear() - 1);
   const metrics = data.properties.map((p) => ({
     p,
-    m: propertyMetrics(p, data.tenants, today, data.settings.marginalTaxRate),
+    m: propertyMetrics(p, data.tenants, today, data.settings.marginalTaxRate, data.economicPlans),
     w: wealthSeries(p, data, today),
   }));
   // Vermögenswert je Objekt: Marktwert − Restschuld + aufsummierter Cashflow (ohne Erwerbsdaten nur Marktwert − Restschuld)

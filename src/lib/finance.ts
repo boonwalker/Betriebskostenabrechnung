@@ -1,6 +1,6 @@
 import { daysInclusive } from "./dates";
 import { rentAt } from "./model";
-import type { ISODate, Property, Tenant } from "./types";
+import type { EconomicPlan, ISODate, Property, Tenant } from "./types";
 
 export interface ValuePoint {
   date: ISODate;
@@ -24,8 +24,12 @@ export interface PropertyMetrics {
   unitsLet: number;
   /** aktuelle Nettokaltmiete p. a. */
   annualColdRent: number;
-  /** nicht umlagefähige Bewirtschaftungskosten p. a. */
+  /** nicht umlagefähige Bewirtschaftungskosten p. a. (inkl. Rücklage) */
   nonAllocableCosts: number;
+  /** davon Zuführung zur Erhaltungsrücklage (steuerlich erst bei Verwendung abziehbar) */
+  reserve: number;
+  /** Jahr des Wirtschaftsplans, aus dem das Hausgeld stammt (null: manuelle Angaben) */
+  hausgeldPlanYear: number | null;
 
   loanBalance: number;
   annualInterest: number;
@@ -67,7 +71,22 @@ export function isCurrentTenant(t: Tenant, today: ISODate) {
   return t.moveIn <= today && (!t.moveOut || t.moveOut >= today);
 }
 
-export function propertyMetrics(property: Property, allTenants: Tenant[], today: ISODate, marginalTaxRate: number): PropertyMetrics {
+const isReserve = (label: string) => /r(ü|ue)cklage/i.test(label);
+
+/** Wirtschaftsplan des laufenden Jahres, sonst der letzte frühere (sonst der früheste spätere) */
+function currentPlan(plans: EconomicPlan[], today: ISODate): EconomicPlan | null {
+  const year = Number(today.slice(0, 4));
+  const sorted = [...plans].sort((a, b) => b.year - a.year);
+  return sorted.find((p) => p.year <= year) ?? sorted[sorted.length - 1] ?? null;
+}
+
+export function propertyMetrics(
+  property: Property,
+  allTenants: Tenant[],
+  today: ISODate,
+  marginalTaxRate: number,
+  plans: EconomicPlan[] = [],
+): PropertyMetrics {
   const acquisitionCosts = property.transferTax + property.notaryCosts + property.brokerFee;
   const invested = property.purchasePrice + acquisitionCosts;
 
@@ -93,9 +112,18 @@ export function propertyMetrics(property: Property, allTenants: Tenant[], today:
   }, 0);
   const unitsLet = new Set(current.map((t) => t.unitId)).size;
 
-  const reserve = property.hausgeldReserveMonthly * 12;
-  const deductibleRunning =
-    property.hausgeldManagementMonthly * 12 + property.maintenanceAnnual + property.managementAnnual + property.otherCostsAnnual;
+  // Eigentumswohnung: nicht umlagefähiger Teil des Hausgelds laut Wirtschaftsplan (Kennzeichnung der Verwaltung),
+  // ohne Plan aus den manuellen Angaben
+  const plan = property.type === "etw" ? currentPlan(plans.filter((p) => p.propertyId === property.id), today) : null;
+  let reserve = property.hausgeldReserveMonthly * 12;
+  let hausgeldDeductible = property.hausgeldManagementMonthly * 12;
+  if (plan) {
+    const ownerPositions = plan.positions.filter((p) => p.declaredAllocable === false || (p.declaredAllocable === null && p.classification === "non_allocable"));
+    const cents = (ps: typeof ownerPositions) => ps.reduce((a, p) => a + Math.round(p.amount * 100), 0);
+    reserve = cents(ownerPositions.filter((p) => isReserve(p.label))) / 100;
+    hausgeldDeductible = cents(ownerPositions.filter((p) => !isReserve(p.label))) / 100;
+  }
+  const deductibleRunning = hausgeldDeductible + property.maintenanceAnnual + property.managementAnnual + property.otherCostsAnnual;
   const nonAllocableCosts = deductibleRunning + reserve;
 
   const loanBalance = property.loans.reduce((a, l) => a + l.balance, 0);
@@ -139,6 +167,8 @@ export function propertyMetrics(property: Property, allTenants: Tenant[], today:
     unitsLet,
     annualColdRent,
     nonAllocableCosts,
+    reserve,
+    hausgeldPlanYear: plan?.year ?? null,
     loanBalance,
     annualInterest,
     annualDebtService,

@@ -112,3 +112,20 @@ describe("migrate", () => {
     expect(data.settings.anthropicApiKey).toBe("k");
   });
 });
+
+describe("WE 09: Kennzahlen mit Hausgeld laut Wirtschaftsplan", async () => {
+  const { showcaseData } = await import("./demo");
+  it("zieht den nicht umlagefähigen Teil des Hausgelds ab, Rücklage steuerlich nicht", () => {
+    const d = showcaseData();
+    const m = propertyMetrics(d.properties[0], d.tenants, "2026-10-22", 35, d.economicPlans);
+    expect(m.hausgeldPlanYear).toBe(2025);
+    expect(m.annualColdRent).toBe(6000);
+    // Verwaltung 380 + Rücklage 220,50 + Bank 11,76 + Instandhaltung 73,50 + Sonstiges 9,80
+    expect(m.nonAllocableCosts).toBeCloseTo(695.56, 2);
+    expect(m.reserve).toBeCloseTo(220.5, 2);
+    expect(m.cashflowBeforeTax / 12).toBeCloseTo(442.04, 2);
+    // zu versteuern: 6.000 − 475,06 (ohne Rücklage, ohne AfA – Anschaffungskosten der Eltern fehlen)
+    expect(m.taxableResult).toBeCloseTo(5524.94, 2);
+    expect(m.cashflowAfterTax / 12).toBeCloseTo(442.04 - (5524.94 * 0.35) / 12, 2);
+  });
+});

@@ -68,7 +68,10 @@ export default function App() {
           </nav>
           {sync !== "local" && (
             <span className={`sync-status ${sync}`} title="Speicherort deiner Daten">
-              {sync === "loading" ? "Lade Daten …" : sync === "saving" ? "Speichert …" : sync === "saved" ? "✓ Gespeichert" : "⚠ Nicht gespeichert"}
+              <span aria-hidden="true">{sync === "loading" || sync === "saving" ? "…" : sync === "saved" ? "✓" : "⚠"}</span>
+              <span className="sync-text">
+                {sync === "loading" ? " Lade Daten" : sync === "saving" ? " Speichert" : sync === "saved" ? " Gespeichert" : " Nicht gespeichert"}
+              </span>
             </span>
           )}
         </div>

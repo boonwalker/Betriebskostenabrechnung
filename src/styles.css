@@ -419,3 +419,18 @@ tfoot td { background: var(--tint); }
 .value-chart-readout strong { font-size: 1.35rem; color: var(--head); font-variant-numeric: tabular-nums; }
 .value-chart-readout span { color: var(--muted); font-size: 0.87rem; }
 .value-chart-hint { margin-top: 2px; }
+
+/* Handy: Kopfzeile einzeilig – Reiter nebeneinander, Titel steht schon in der Leiste des Viewers */
+@media (max-width: 640px) {
+  .app-header-inner { flex-wrap: nowrap; gap: 6px; min-height: 48px; padding-top: 4px; padding-bottom: 4px; }
+  .brand { display: none; }
+  .nav { flex-wrap: nowrap; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { padding: 6px 7px; font-size: 0.9rem; white-space: nowrap; }
+  .sync-status { margin-left: auto; }
+  .sync-text { display: none; }
+}
+@media (max-width: 360px) {
+  .app-header-inner { padding-left: 10px; padding-right: 10px; }
+  .nav a { padding: 6px 6px; font-size: 0.82rem; }
+}

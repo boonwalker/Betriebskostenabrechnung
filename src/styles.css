@@ -597,3 +597,7 @@ table.meters .unit { font-weight: 400; color: var(--muted); }
   table.meters td input { padding-left: 6px; padding-right: 6px; }
 }
 table.meters tr.meter-sum.first th, table.meters tr.meter-sum.first td { border-top: 2px solid var(--border); }
+.meter-unit + .meter-unit { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.meter-mode { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: var(--tint); color: var(--head); font-size: 0.92rem; }
+.meter-mode.change { background: var(--warn-soft); }
+table.meters input.carried { font-style: italic; color: var(--muted); }

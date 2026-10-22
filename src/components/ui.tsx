@@ -35,6 +35,7 @@ export function NumberInput({
   style,
   ariaLabel,
   allowEmpty,
+  className,
 }: {
   value: number | undefined;
   /** bei allowEmpty: NaN für ein leeres Feld (statt 0) */
@@ -43,6 +44,7 @@ export function NumberInput({
   style?: React.CSSProperties;
   ariaLabel?: string;
   allowEmpty?: boolean;
+  className?: string;
 }) {
   const fmt = (n: number | undefined) => (n === undefined || Number.isNaN(n) ? "" : formatNum(n));
   const [text, setText] = useState(fmt(value));
@@ -52,7 +54,7 @@ export function NumberInput({
   }, [value, focused]);
   return (
     <input
-      className="num"
+      className={className ? `num ${className}` : "num"}
       inputMode="decimal"
       value={text}
       placeholder={placeholder}

@@ -70,11 +70,20 @@ export default function StatementEditor({ data, update, statementId }: PageProps
   };
 
   const readiness = statementReadiness(statement, data);
-  // Wohnungen mit Nutzerwechsel im Zeitraum: Zählerstände je Stichtag erfassen
+  // Zählerstände je Wohnung: mit Nutzerwechsel an jedem Stichtag (für die Aufteilung nötig), sonst nur Anfang und Ende (zur Kontrolle)
   const allSegs = buildSegments(property.units, data.tenants.filter((t) => t.propertyId === property.id), statement.periodStart, statement.periodEnd);
-  const changeUnits = property.units
+  const meterUnits = property.units
     .map((unit) => ({ unit, segs: allSegs.filter((sg) => sg.unitId === unit.id) }))
-    .filter((x) => x.segs.length > 1);
+    .filter((x) => x.segs.some((sg) => sg.tenantId));
+  // Anfangsstand = Endstand der Vorjahresabrechnung
+  const previous = data.statements
+    .filter((s) => s.propertyId === property.id && s.periodEnd < statement.periodStart)
+    .sort((x, y) => y.periodEnd.localeCompare(x.periodEnd))[0];
+  const carried = (unitId: string, meter: MeterKind) => {
+    const row = previous?.meterReadings?.[unitId]?.[meter];
+    const last = row?.[row.length - 1];
+    return last === null || last === undefined ? undefined : last;
+  };
   // Gesperrt erst, wenn alle Mietverhältnisse freigegeben sind; einzelne Freigaben bleiben eingefroren
   const released = statement.status === "released";
   const year = Number(statement.periodStart.slice(0, 4));
@@ -329,81 +338,6 @@ export default function StatementEditor({ data, update, statementId }: PageProps
         <p className="muted small" style={{ marginTop: 12 }}>
           Vergleiche die Vorauszahlungen mit deinen Kontoauszügen. Weicht der gezahlte Betrag vom Mietvertrag ab (z. B. Rückstände), trage ihn ein und bestätige ihn erst dann.
         </p>
-        {changeUnits.map(({ unit, segs }) => {
-          const dates = meterDates(segs);
-          const values = statement.meterReadings?.[unit.id] ?? {};
-          const setValue = (meter: MeterKind, i: number, v: number | null) => {
-            const row = [...(values[meter] ?? dates.map(() => null))];
-            while (row.length < dates.length) row.push(null);
-            row[i] = v;
-            set({ meterReadings: { ...statement.meterReadings, [unit.id]: { ...values, [meter]: row } } });
-          };
-          const who = (sg: (typeof segs)[number]) => (sg.tenantId ? data.tenants.find((t) => t.id === sg.tenantId)?.name : "Leerstand");
-          const meters = (Object.keys(METER_LABELS) as MeterKind[]).map((meter) => {
-            const consumption = segmentConsumption(statement, unit.id, segs, meter);
-            const raw = values[meter];
-            return { meter, raw, consumption, invalid: !!raw && raw.every((v) => v !== null && v !== undefined) && !consumption };
-          });
-          return (
-            <div key={unit.id} style={{ marginTop: 16 }}>
-              <h3>Zählerstände beim Nutzerwechsel – {unit.name}</h3>
-              <div className="table-wrap">
-                <table className="transposed meters">
-                  <thead>
-                    <tr>
-                      <th />
-                      {meters.map(({ meter }) => (
-                        <th key={meter} scope="col" className="num">{METER_SHORT[meter]}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dates.map((d, i) => (
-                      <tr key={d + i}>
-                        <th scope="row">
-                          {i === 0 ? "Beginn" : i === dates.length - 1 ? "Ende" : "Wechsel"}
-                          <div>{formatDate(d)}</div>
-                        </th>
-                        {meters.map(({ meter, raw }) => (
-                          <td key={meter} className="num">
-                            <NumberInput
-                              value={raw?.[i] ?? undefined}
-                              allowEmpty
-                              onChange={(v) => setValue(meter, i, Number.isFinite(v) ? v : null)}
-                              ariaLabel={`${METER_LABELS[meter]} ${formatDate(d)}`}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                    {segs.map((sg, si) => (
-                      <tr key={si} className={si === 0 ? "meter-sum first" : "meter-sum"}>
-                        <th scope="row">Verbrauch {who(sg)}</th>
-                        {meters.map(({ meter, consumption, invalid }) => (
-                          <td key={meter} className="num wrap">
-                            {invalid ? (
-                              si === 0 && <span className="badge danger">Stände fallen – Tippfehler oder Zählertausch?</span>
-                            ) : consumption ? (
-                              <strong>{formatNum(consumption[si])}</strong>
-                            ) : (
-                              <span className="muted">–</span>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="hint" style={{ marginTop: 10 }}>
-                Stände zum Beginn, zu jedem Wechsel und zum Ende des Zeitraums – z. B. aus dem Übergabeprotokoll und der Heizkosten- bzw. Wasserabrechnung („Ablesewert
-                alt/neu“). Daraus ergibt sich der Verbrauch je Mieter. Ohne Stände gilt § 9b Abs. 2 HeizkostenV (Heizung nach Gradtagzahlen, sonst nach Zeit). Kennst
-                du nur den Verbrauch je Mieter (z. B. aus der Nutzerwechsel-Abrechnung des Messdienstes), trage Beginn 0, beim Wechsel den Verbrauch des ersten Mieters und am
-                Ende die Summe ein.
-              </p>
-            </div>
-          );
-        })}
         {(result.vacancies.length > 0 || result.co2.length > 0 || result.landlordItems.length > 0) && (
           <>
             <h3 id="vermieteranteil" style={{ marginTop: 16 }}>Trägst du als Vermieter</h3>
@@ -437,6 +371,118 @@ export default function StatementEditor({ data, update, statementId }: PageProps
           </>
         )}
       </div>
+
+      {meterUnits.length > 0 && (
+        <div className="card" id="zaehler">
+          <h2>Zählerstände</h2>
+          {meterUnits.map(({ unit, segs }) => {
+            const dates = meterDates(segs);
+            const change = segs.length > 1;
+            const stored = statement.meterReadings?.[unit.id] ?? {};
+            // Leerer Anfangsstand wird aus dem Endstand der Vorjahresabrechnung übernommen
+            const rowOf = (meter: MeterKind) => {
+              const row = [...(stored[meter] ?? [])];
+              while (row.length < dates.length) row.push(null);
+              const carry = carried(unit.id, meter);
+              const fromPrevious = (row[0] === null || row[0] === undefined) && carry !== undefined;
+              if (fromPrevious) row[0] = carry;
+              return { row, fromPrevious };
+            };
+            const values = Object.fromEntries((Object.keys(METER_LABELS) as MeterKind[]).map((m) => [m, rowOf(m).row]));
+            const effective = { ...statement, meterReadings: { ...statement.meterReadings, [unit.id]: values } };
+            const setValue = (meter: MeterKind, i: number, v: number | null) => {
+              const row = [...values[meter]];
+              row[i] = v;
+              set({ meterReadings: { ...statement.meterReadings, [unit.id]: { ...stored, [meter]: row } } });
+            };
+            const who = (sg: (typeof segs)[number]) => (sg.tenantId ? data.tenants.find((t) => t.id === sg.tenantId)?.name : "Leerstand");
+            const meters = (Object.keys(METER_LABELS) as MeterKind[]).map((meter) => {
+              const consumption = segmentConsumption(effective, unit.id, segs, meter);
+              const { row: raw, fromPrevious } = rowOf(meter);
+              return { meter, raw, fromPrevious, consumption, invalid: raw.every((v) => v !== null && v !== undefined) && !consumption };
+            });
+            const anyCarried = meters.some((m) => m.fromPrevious);
+            return (
+              <div key={unit.id} className="meter-unit">
+                {property.units.length > 1 && <h3>{unit.name}</h3>}
+                <p className={`meter-mode ${change ? "change" : ""}`}>
+                  {change ? (
+                    <>
+                      <strong>Mieterwechsel am {formatDate(segs[1].start)}</strong> – mit den Ständen zum Wechsel wird der Verbrauch auf die Mieter aufgeteilt.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Kein Mieterwechsel {year}</strong> – die Kosten der Wohnung gehen vollständig an {who(segs.find((sg) => sg.tenantId)!)}. Die Stände dienen
+                      nur der Kontrolle des Verbrauchs{anyCarried ? "; trag einfach den Endstand ein." : "."}
+                    </>
+                  )}
+                </p>
+                <div className="table-wrap">
+                  <table className="transposed meters">
+                    <thead>
+                      <tr>
+                        <th />
+                        {meters.map(({ meter }) => (
+                          <th key={meter} scope="col" className="num">{METER_SHORT[meter]}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dates.map((d, i) => (
+                        <tr key={d + i}>
+                          <th scope="row">
+                            {i === 0 ? "Beginn" : i === dates.length - 1 ? "Ende" : "Wechsel"}
+                            <div>{formatDate(d)}</div>
+                          </th>
+                          {meters.map(({ meter, raw, fromPrevious }) => (
+                            <td key={meter} className="num">
+                              <NumberInput
+                                value={raw[i] ?? undefined}
+                                allowEmpty
+                                className={i === 0 && fromPrevious ? "carried" : undefined}
+                                onChange={(v) => setValue(meter, i, Number.isFinite(v) ? v : null)}
+                                ariaLabel={`${METER_LABELS[meter]} ${formatDate(d)}`}
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                      {segs.map((sg, si) => (
+                        <tr key={si} className={si === 0 ? "meter-sum first" : "meter-sum"}>
+                          <th scope="row">{change ? `Verbrauch ${who(sg)}` : "Verbrauch"}</th>
+                          {meters.map(({ meter, consumption, invalid }) => (
+                            <td key={meter} className="num wrap">
+                              {invalid ? (
+                                si === 0 && <span className="badge danger">Stände fallen – Tippfehler oder Zählertausch?</span>
+                              ) : consumption ? (
+                                <strong>{formatNum(consumption[si])}</strong>
+                              ) : (
+                                <span className="muted">–</span>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="hint" style={{ marginTop: 10 }}>
+                  {anyCarried && <>Kursive Anfangsstände stammen aus der Abrechnung {previous!.periodStart.slice(0, 4)} – überschreibbar. </>}
+                  {change ? (
+                    <>
+                      Stände z. B. aus dem Übergabeprotokoll und der Heizkosten- bzw. Wasserabrechnung („Ablesewert alt/neu“). Ohne Stände gilt § 9b Abs. 2 HeizkostenV
+                      (Heizung nach Gradtagzahlen, sonst nach Zeit). Kennst du nur den Verbrauch je Mieter (z. B. aus der Nutzerwechsel-Abrechnung des Messdienstes), trage
+                      Beginn 0, beim Wechsel den Verbrauch des ersten Mieters und am Ende die Summe ein.
+                    </>
+                  ) : (
+                    <>Der Endstand wird im nächsten Jahr automatisch zum Anfangsstand.</>
+                  )}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       </fieldset>
 

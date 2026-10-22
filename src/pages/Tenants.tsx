@@ -179,8 +179,9 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
             Name
             <input value={t.name} onChange={(e) => setT({ ...t, name: e.target.value })} placeholder="z. B. Familie Müller" autoFocus />
           </label>
+          {data.properties.length > 1 && (
           <label className="field">
-            Objekt
+            Immobilie
             <select
               value={t.propertyId}
               onChange={(e) => {
@@ -193,14 +194,17 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
               ))}
             </select>
           </label>
-          <label className="field">
-            Einheit
-            <select value={t.unitId} onChange={(e) => setT({ ...t, unitId: e.target.value })}>
-              {property?.units.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </label>
+          )}
+          {(property?.units.length ?? 0) > 1 && (
+            <label className="field">
+              Wohnung im Haus
+              <select value={t.unitId} onChange={(e) => setT({ ...t, unitId: e.target.value })}>
+                {property?.units.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="field">
             Einzug (Mietbeginn)
             <input

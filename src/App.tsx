@@ -53,7 +53,7 @@ export default function App() {
   else if (section === "abrechnungen" && id) page = <StatementEditor data={data} update={update} statementId={id} />;
   else if (section === "abrechnungen") page = <Statements data={data} update={update} />;
   else if (section === "einstellungen") page = <SettingsPage data={data} update={update} replace={replace} />;
-  else page = <Dashboard data={data} />;
+  else page = <Dashboard data={data} replace={replace} />;
 
   return (
     <>

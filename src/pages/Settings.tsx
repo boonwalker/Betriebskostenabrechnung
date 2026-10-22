@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { NumberInput, type PageProps } from "../components/ui";
+import { markBackup } from "../lib/backup";
 import { demoData } from "../lib/demo";
 import { we09Annual2024, we09Plan2025, we09PreviousTenant, we09Property, we09Tenant } from "../lib/fixtures/we09";
 import { emptyData, exportData, parseBackup } from "../lib/store";
@@ -17,9 +18,10 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
     const blob = new Blob([exportData(data)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `betriebskosten-sicherung-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `immofriend-sicherung-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
+    markBackup();
   };
 
   const restore = async (file: File) => {
@@ -100,7 +102,7 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
         </p>
       </div>
 
-      <div className="card stack">
+      <div className="card stack" id="sicherung">
         <h2>Daten</h2>
         <p className="small">
           Alle Daten werden ausschließlich lokal in diesem Browser gespeichert. Erstelle regelmäßig eine Sicherung – beim Löschen der Browserdaten gehen sie sonst verloren.
@@ -130,24 +132,26 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
           >
             Beispieldaten laden
           </button>
-          <button
-            onClick={() => {
-              if (data.properties.some((p) => p.id === "we09-p")) {
-                setMessage("Der Testfall WE 09 ist bereits geladen.");
-                return;
-              }
-              update((d) => ({
-                ...d,
-                properties: [...d.properties, we09Property()],
-                tenants: [...d.tenants, we09PreviousTenant(), we09Tenant()],
-                wegAnnuals: [...d.wegAnnuals, we09Annual2024()],
-                economicPlans: [...d.economicPlans, we09Plan2025()],
-              }));
-              setMessage("Testfall WE 09 (Jahresabrechnung 2024, Wirtschaftsplan 2025) wurde ergänzt.");
-            }}
-          >
-            Testfall WE 09 hinzufügen
-          </button>
+          {import.meta.env.VITE_SHOWCASE && (
+            <button
+              onClick={() => {
+                if (data.properties.some((p) => p.id === "we09-p")) {
+                  setMessage("Der Testfall WE 09 ist bereits geladen.");
+                  return;
+                }
+                update((d) => ({
+                  ...d,
+                  properties: [...d.properties, we09Property()],
+                  tenants: [...d.tenants, we09PreviousTenant(), we09Tenant()],
+                  wegAnnuals: [...d.wegAnnuals, we09Annual2024()],
+                  economicPlans: [...d.economicPlans, we09Plan2025()],
+                }));
+                setMessage("Testfall WE 09 (Jahresabrechnung 2024, Wirtschaftsplan 2025) wurde ergänzt.");
+              }}
+            >
+              Testfall WE 09 hinzufügen
+            </button>
+          )}
           <button
             className="danger"
             onClick={() => {

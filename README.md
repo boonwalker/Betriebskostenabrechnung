@@ -43,6 +43,16 @@ npm run build      # Produktions-Build nach dist/
 
 Die Abrechnung steckt in `src/lib/calc.ts`, die Renditeberechnung in `src/lib/finance.ts` – beide getrennt von der Oberfläche. Das Auslesen der Belege steckt in `src/lib/extract.ts`. Gespeicherte Daten älterer Versionen werden beim Laden automatisch übernommen (`migrate` in `src/lib/model.ts`).
 
+## Als Homebildschirm-App nutzen
+
+Die öffentliche Version liegt auf GitHub Pages: **https://boonwalker.github.io/Betriebskostenabrechnung/**
+
+- iPhone: Link in Safari öffnen → Teilen → „Zum Home-Bildschirm“. Android: in Chrome „App installieren“.
+- Die App startet leer und speichert alles nur im Browser des Geräts (kein Konto, kein Server). Sicherungen gibt es unter Einstellungen → Daten; die App erinnert nach 30 Tagen daran.
+- Manifest, Icons und Service Worker (`public/`) machen sie installierbar und offline startfähig.
+- Bei jedem Push auf `claude/betriebskosten-app` baut `.github/workflows/pages.yml` die App neu und veröffentlicht sie. Einmalig nötig: unter *Settings → Pages* als Quelle „GitHub Actions“ wählen.
+- Die Vorführdaten (Testfall WE 09) sind nur im Vorführ-Build enthalten, nicht in der öffentlichen Version.
+
 ## Hinweis
 
 Die App ist eine Hilfe beim Erstellen, aber keine Rechts- oder Steuerberatung. Prüfe Umlageschlüssel und Kostenarten anhand deines Mietvertrags. Die steuerliche Betrachtung ist eine vereinfachte Jahresschätzung (z. B. ohne Sonder-AfA, Erhaltungsaufwand-Verteilung nach § 82b EStDV oder Zufluss-/Abflussprinzip).

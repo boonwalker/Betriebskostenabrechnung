@@ -1,4 +1,4 @@
-import type { AppData, ISODate, Property, RentPeriod, Statement, Tenant } from "./types";
+import type { AppData, EconomicPlan, ISODate, Property, RentPeriod, Statement, Tenant } from "./types";
 
 export const uid = () => crypto.randomUUID();
 
@@ -112,7 +112,7 @@ export const PROPERTY_TYPE_LABELS: Record<Property["type"], string> = {
 };
 
 /** Angaben, die für Abrechnung und Rendite noch fehlen */
-export function missingInfo(p: Property, tenants: Tenant[]): string[] {
+export function missingInfo(p: Property, tenants: Tenant[], plans: EconomicPlan[] = []): string[] {
   const out: string[] = [];
   const free = (p.acquisitionType ?? "purchase") !== "purchase";
   if (!p.purchasePrice) out.push(free ? "Verkehrswert bei Schenkung bzw. Erbschaft (für die Vermögensentwicklung)" : "Kaufpreis (für Rendite und Abschreibung)");
@@ -127,7 +127,9 @@ export function missingInfo(p: Property, tenants: Tenant[]): string[] {
         : "Aktueller Marktwert (Schätzung)",
     );
   if (p.units.some((u) => !u.area)) out.push("Wohnfläche aller Einheiten (Umlageschlüssel)");
-  if (p.type === "etw" && !p.hausgeldMonthly) out.push("Hausgeld laut Wirtschaftsplan der WEG");
+  // Hausgeld kommt aus dem erfassten Wirtschaftsplan; die Handangabe ist nur der Ersatz ohne Plan
+  const hasPlan = plans.some((x) => x.propertyId === p.id && x.monthlyHausgeld !== null);
+  if (p.type === "etw" && !p.hausgeldMonthly && !hasPlan) out.push("Hausgeld: Wirtschaftsplan der WEG erfassen");
   const today = new Date().toISOString().slice(0, 10);
   for (const t of tenants.filter((t) => t.propertyId === p.id && (!t.moveOut || t.moveOut >= today))) {
     const r = rentAt(t, today);

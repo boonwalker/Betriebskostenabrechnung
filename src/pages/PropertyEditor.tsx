@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { NumberInput, type PageProps } from "../components/ui";
-import { depreciationRate } from "../lib/finance";
+import { currentPlan, depreciationRate } from "../lib/finance";
 import { estimatePropertyTax, impliedRate, propertyTaxStart } from "../lib/propertyTax";
 import { formatEUR, formatNum, formatPct } from "../lib/format";
 import { newProperty, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
@@ -20,6 +20,11 @@ export function Field({ label, hint, children, wide }: { label: string; hint?: s
 export default function PropertyEditor({ data, update, propertyId }: PageProps & { propertyId: string | null }) {
   const existing = propertyId ? data.properties.find((p) => p.id === propertyId) : undefined;
   const [p, setP] = useState<Property>(() => (existing ? structuredClone(existing) : newProperty()));
+  const plan = currentPlan(
+    data.economicPlans.filter((x) => x.propertyId === p.id && x.monthlyHausgeld !== null),
+    todayISO(),
+  );
+  const ownerYear = plan ? plan.positions.filter((x) => x.declaredAllocable === false).reduce((a, x) => a + x.amount, 0) : 0;
   if (propertyId && !existing) return <div className="card empty">Objekt nicht gefunden.</div>;
 
   const set = (patch: Partial<Property>) => setP((x) => ({ ...x, ...patch }));
@@ -331,9 +336,20 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         <h2>Laufende Kosten, die du selbst trägst</h2>
         <p className="hint">Diese Kosten sind nicht auf die Mieter umlegbar und mindern deine Rendite. Umlagefähige Betriebskosten erfasst du in der jährlichen Abrechnung.</p>
         <div className="grid">
-          {p.type === "etw" && (
+          {p.type === "etw" && plan && (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div className="alert info small">
+                <strong>Hausgeld laut Wirtschaftsplan {plan.year}:</strong> {formatEUR(plan.monthlyHausgeld ?? 0)} pro Monat
+                {plan.monthlyReserve != null ? `, davon Erhaltungsrücklage ${formatEUR(plan.monthlyReserve)}` : ""}. Davon trägst du selbst (nicht umlagefähig laut
+                Verwaltung) {formatEUR(ownerYear / 12)} pro Monat bzw. {formatEUR(ownerYear)} pro Jahr. Die App nimmt diese Werte automatisch aus dem Plan des jeweiligen
+                Jahres; ohne neuen Plan gilt der letzte weiter.{" "}
+                <a href={`#/weg/wirtschaftsplan/${plan.id}`}>Wirtschaftsplan öffnen</a>
+              </div>
+            </div>
+          )}
+          {p.type === "etw" && !plan && (
             <>
-              <Field label="Hausgeld gesamt / Monat (€)" hint="laut aktuellem Wirtschaftsplan der WEG">
+              <Field label="Hausgeld gesamt / Monat (€)" hint="laut aktuellem Wirtschaftsplan der WEG – oder den Plan unter „WEG-Unterlagen“ erfassen">
                 <NumberInput value={p.hausgeldMonthly} onChange={(hausgeldMonthly) => set({ hausgeldMonthly })} />
               </Field>
               <Field label="davon Verwaltervergütung / Monat (€)" hint="nicht umlagefähig, steuerlich abziehbar">

@@ -74,7 +74,7 @@ export function isCurrentTenant(t: Tenant, today: ISODate) {
 const isReserve = (label: string) => /r(ü|ue)cklage/i.test(label);
 
 /** Wirtschaftsplan des laufenden Jahres, sonst der letzte frühere (sonst der früheste spätere) */
-function currentPlan(plans: EconomicPlan[], today: ISODate): EconomicPlan | null {
+export function currentPlan(plans: EconomicPlan[], today: ISODate): EconomicPlan | null {
   const year = Number(today.slice(0, 4));
   const sorted = [...plans].sort((a, b) => b.year - a.year);
   return sorted.find((p) => p.year <= year) ?? sorted[sorted.length - 1] ?? null;

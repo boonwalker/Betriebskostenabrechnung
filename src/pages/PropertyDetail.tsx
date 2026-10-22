@@ -36,7 +36,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
   const taxRate = data.settings.marginalTaxRate;
   const m = propertyMetrics(p, data.tenants, today, taxRate, data.economicPlans);
   const w = wealthSeries(p, data, today);
-  const missing = missingInfo(p, data.tenants);
+  const missing = missingInfo(p, data.tenants, data.economicPlans);
   const tenants = data.tenants.filter((t) => t.propertyId === p.id).sort((a, b) => a.moveIn.localeCompare(b.moveIn));
   const shownTenants = tenants.filter((t) => showFormer || !t.moveOut || t.moveOut >= today);
   const statements = data.statements.filter((s) => s.propertyId === p.id).sort((a, b) => b.periodStart.localeCompare(a.periodStart));

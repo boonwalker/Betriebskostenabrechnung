@@ -70,7 +70,7 @@ export default function Dashboard({ data }: { data: AppData }) {
 
       <div className="tiles">
         {metrics.map(({ p, m, w }) => (
-          <PropertyTile key={p.id} p={p} m={m} w={w} missing={missingInfo(p, data.tenants).length} needsStatement={openStatement(p)} lastYear={lastYear} />
+          <PropertyTile key={p.id} p={p} m={m} w={w} missing={missingInfo(p, data.tenants, data.economicPlans).length} needsStatement={openStatement(p)} lastYear={lastYear} />
         ))}
         <a className="tile tile-add" href="#/objekte/neu">
           <span className="tile-add-plus">+</span>

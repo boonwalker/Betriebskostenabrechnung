@@ -137,8 +137,11 @@ export function demoData(): AppData {
 
 /** Startzustand der Vorführversion: nur der Testfall WE 09 */
 export function showcaseData(): AppData {
+  const base = emptyData();
   return {
-    ...emptyData(),
+    ...base,
+    // Grenzsteuersatz 2025 laut Eigentümer
+    settings: { ...base.settings, marginalTaxRate: 34.1 },
     properties: [we09Property()],
     tenants: [we09PreviousTenant(), we09Tenant()],
     wegAnnuals: [we09Annual2024()],

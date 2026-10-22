@@ -13,7 +13,7 @@ import { accountLedger } from "../lib/account";
 import { planCheckpoints, planSplit, summarizeAnnual, summarizePlan } from "../lib/weg";
 import { Checkpoints } from "../components/Charts";
 import WegImport from "../components/WegImport";
-import { newTenant, saveTenant, TenantForm, TenantTable } from "./Tenants";
+import { isRecent, newTenant, saveTenant, TenantForm, TenantTable } from "./Tenants";
 
 export default function PropertyDetail({ data, update, propertyId }: PageProps & { propertyId: string }) {
   const p = data.properties.find((x) => x.id === propertyId);
@@ -56,7 +56,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
   const w = wealthSeries(p, data, today);
   const missing = missingInfo(p, data.tenants, data.economicPlans);
   const tenants = data.tenants.filter((t) => t.propertyId === p.id).sort((a, b) => a.moveIn.localeCompare(b.moveIn));
-  const shownTenants = tenants.filter((t) => showFormer || !t.moveOut || t.moveOut >= today);
+  const shownTenants = tenants.filter((t) => showFormer || isRecent(t, today));
   const statements = data.statements.filter((s) => s.propertyId === p.id).sort((a, b) => b.periodStart.localeCompare(a.periodStart));
   const wegDocs: (WegAnnualStatement | EconomicPlan)[] = [...data.wegAnnuals, ...data.economicPlans]
     .filter((d) => d.propertyId === p.id)

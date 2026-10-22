@@ -1,3 +1,4 @@
+import { focusElement } from "../lib/nav";
 import { useState } from "react";
 import { Modal, NumberInput, type PageProps } from "../components/ui";
 import { formatDate, todayISO } from "../lib/dates";
@@ -68,7 +69,7 @@ export default function Tenants({ data, update }: PageProps) {
 
       {data.properties.map((p) => {
         const tenants = data.tenants
-          .filter((t) => t.propertyId === p.id && (showFormer || !t.moveOut || t.moveOut >= today))
+          .filter((t) => t.propertyId === p.id && (showFormer || isRecent(t, today)))
           .sort((a, b) => a.moveIn.localeCompare(b.moveIn));
         return (
           <div className="card" key={p.id}>
@@ -97,6 +98,9 @@ export default function Tenants({ data, update }: PageProps) {
   );
 }
 
+/** Aktuelle Mieter und solche, die in den letzten zwei Jahren ausgezogen sind (für sie steht oft noch eine Abrechnung an) */
+export const isRecent = (t: Tenant, today: string) => !t.moveOut || t.moveOut >= `${Number(today.slice(0, 4)) - 2}${today.slice(4)}`;
+
 export function TenantTable({ data, tenants, onEdit, onRemove }: { data: AppData; tenants: Tenant[]; onEdit: (t: Tenant) => void; onRemove?: (t: Tenant) => void }) {
   const today = todayISO();
   return (
@@ -120,7 +124,27 @@ export function TenantTable({ data, tenants, onEdit, onRemove }: { data: AppData
             const unit = data.properties.find((p) => p.id === t.propertyId)?.units.find((u) => u.id === t.unitId);
             return (
               <tr key={t.id}>
-                <td>{t.name}</td>
+                <td>
+                  {t.name}
+                  {t.moveOut && t.moveOut < today && (
+                    <div className="small">
+                      {t.mailingAddress.trim() ? (
+                        <span className="muted">neue Anschrift: {t.mailingAddress.trim().replace(/\n/g, ", ")}</span>
+                      ) : (
+                        <button
+                          className="badge danger"
+                          style={{ border: 0, cursor: "pointer" }}
+                          onClick={() => {
+                            onEdit(t);
+                            focusElement("anschrift");
+                          }}
+                        >
+                          ⚠ neue Anschrift fehlt – eintragen
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </td>
                 <td>{unit?.name ?? "–"}</td>
                 <td>{formatDate(t.moveIn)} – {t.moveOut ? formatDate(t.moveOut) : "heute"}</td>
                 <td className="num">{t.persons}</td>
@@ -194,6 +218,12 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
             Auszug (leer = wohnt noch dort)
             <input type="date" value={t.moveOut ?? ""} onChange={(e) => setT({ ...t, moveOut: e.target.value || null })} />
           </label>
+          {t.moveOut && (
+            <label className="field" id="anschrift" style={{ gridColumn: "1 / -1" }}>
+              Neue Postanschrift nach dem Auszug (für die Betriebskostenabrechnung)
+              <textarea rows={2} value={t.mailingAddress} onChange={(e) => setT({ ...t, mailingAddress: e.target.value })} placeholder={"Straße Nr.\nPLZ Ort"} />
+            </label>
+          )}
           <label className="field">
             Personen im Haushalt
             <NumberInput value={t.persons} onChange={(persons) => setT({ ...t, persons })} />
@@ -292,10 +322,12 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
           )}
         </div>
 
-        <label className="field" id="anschrift">
-          {t.moveOut && t.moveOut < todayISO() ? "Aktuelle Postanschrift (nach dem Auszug – Pflicht für die Abrechnung)" : "Anschrift für die Abrechnung (leer = Anschrift der Wohnung)"}
-          <textarea rows={2} value={t.mailingAddress} onChange={(e) => setT({ ...t, mailingAddress: e.target.value })} placeholder={"Straße Nr.\nPLZ Ort"} />
-        </label>
+        {!t.moveOut && (
+          <label className="field">
+            Abweichende Postanschrift für die Abrechnung (leer = Anschrift der Wohnung)
+            <textarea rows={2} value={t.mailingAddress} onChange={(e) => setT({ ...t, mailingAddress: e.target.value })} placeholder={"Straße Nr.\nPLZ Ort"} />
+          </label>
+        )}
         <div className="field">
           Anrede im Anschreiben
           <div className="row">

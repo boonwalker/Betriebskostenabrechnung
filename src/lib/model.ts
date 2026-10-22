@@ -142,6 +142,11 @@ export function missingInfo(p: Property, tenants: Tenant[], plans: EconomicPlan[
   const hasPlan = plans.some((x) => x.propertyId === p.id && x.monthlyHausgeld !== null);
   if (p.type === "etw" && !p.hausgeldMonthly && !hasPlan) out.push({ text: "Hausgeld: Wirtschaftsplan der WEG erfassen", href: detail("f=weg-unterlagen") });
   const today = new Date().toISOString().slice(0, 10);
+  // Ausgezogene Mieter der letzten zwei Jahre: für die Abrechnung wird die neue Anschrift gebraucht
+  const twoYearsAgo = `${Number(today.slice(0, 4)) - 2}${today.slice(4)}`;
+  for (const t of tenants.filter((t) => t.propertyId === p.id && t.moveOut && t.moveOut < today && t.moveOut >= twoYearsAgo && !t.mailingAddress.trim())) {
+    out.push({ text: `Neue Anschrift von ${t.name} (ausgezogen)`, href: detail(`t=${t.id}&f=anschrift`) });
+  }
   for (const t of tenants.filter((t) => t.propertyId === p.id && (!t.moveOut || t.moveOut >= today))) {
     const r = rentAt(t, today);
     if (!r?.coldRent) out.push({ text: `Kaltmiete von ${t.name}`, href: detail(`t=${t.id}&f=miete`) });

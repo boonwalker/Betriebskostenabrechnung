@@ -1,18 +1,22 @@
 :root {
-  --bg: #f6f7f9;
+  /* Palette wie im Anschreiben: Petrol als Akzent, Dunkelblau für Kopf und Überschriften */
+  --bg: #f1f5f6;
   --surface: #ffffff;
-  --text: #1c2430;
-  --muted: #5d6b7e;
-  --border: #dde2ea;
-  --accent: #1f6feb;
-  --accent-soft: #e8f0fe;
+  --text: #1d2a36;
+  --muted: #5b6b78;
+  --border: #d9e1e5;
+  --accent: #2f6b73;
+  --accent-strong: #24565d;
+  --accent-soft: #e3eff0;
+  --head: #1f3347;
+  --tint: #eef4f5;
   --danger: #c9372c;
   --danger-soft: #fdecea;
   --ok: #1a7f37;
   --ok-soft: #e6f4ea;
   --warn: #9a6700;
   --warn-soft: #fff8e1;
-  --radius: 8px;
+  --radius: 10px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -128,7 +132,7 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 .alert { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; }
 .alert.warn { background: var(--warn-soft); color: var(--warn); }
 .alert.danger { background: var(--danger-soft); color: var(--danger); }
-.alert.info { background: var(--accent-soft); color: #1a4fa0; }
+.alert.info { background: var(--accent-soft); color: var(--accent-strong); }
 
 .stat { font-size: 1.6rem; font-weight: 700; }
 .balance-pos { color: var(--danger); font-weight: 600; }
@@ -247,7 +251,7 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 }
 
 /* Portfolio */
-:root { --spark: #8a97a8; }
+:root { --spark: #7fa5ab; }
 .hero { font-size: 2.6rem; font-weight: 700; line-height: 1.1; margin: 2px 0 4px; }
 .portfolio-head { display: grid; grid-template-columns: minmax(240px, 1fr) 2fr; gap: 24px; align-items: center; }
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
@@ -263,7 +267,7 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
   border-radius: var(--radius); padding: 18px; color: inherit; text-decoration: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.tile:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(31, 111, 235, 0.12); }
+.tile:hover { border-color: var(--accent); box-shadow: 0 4px 16px rgba(31, 51, 71, 0.12); }
 .tile-title { font-weight: 650; font-size: 1.05rem; }
 .tile-value { font-size: 1.7rem; font-weight: 700; margin-top: 14px; }
 .tile-chart { margin: 10px 0 4px; min-height: 48px; display: flex; align-items: center; }
@@ -293,7 +297,7 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 .findings li { padding: 6px 10px; border-radius: 6px; margin-bottom: 4px; font-size: 0.87rem; }
 .findings li.error { background: var(--danger-soft); color: var(--danger); }
 .findings li.warning { background: var(--warn-soft); color: var(--warn); }
-.findings li.info { background: var(--accent-soft); color: #1a4fa0; }
+.findings li.info { background: var(--accent-soft); color: var(--accent-strong); }
 tr.row-flag td { background: var(--warn-soft); }
 .positions td { vertical-align: top; }
 .status-draft { background: var(--warn-soft); color: var(--warn); }
@@ -315,7 +319,7 @@ tr.row-flag td { background: var(--warn-soft); }
 .wizard-steps span.done { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
 
 /* Auswertungsgrafiken */
-:root { --series-0: #1f6feb; --series-1: #8a97a8; --series-2: #c3ccd8; }
+:root { --series-0: #2f6b73; --series-1: #9aaab6; --series-2: #c9d4da; }
 .meter { position: relative; height: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 99px; overflow: hidden; }
 .meter-fill { height: 100%; background: var(--series-0); border-radius: 99px; }
 .meter-fill.over { background: var(--danger); }
@@ -360,3 +364,47 @@ tr.row-flag td { background: var(--warn-soft); }
 .findings li.clickable:hover { filter: brightness(0.97); text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 2px; }
 .findings li a.fix { color: inherit; white-space: nowrap; }
 [id] { scroll-margin-top: 90px; }
+
+
+/* ---------- Gestaltung angelehnt an das Anschreiben ---------- */
+h1, h2 { color: var(--head); letter-spacing: -0.01em; }
+h1 { font-size: 1.6rem; }
+h3 { color: var(--head); }
+
+/* Kopfzeile: dunkelblau mit Petrol-Leiste wie der Briefkopf */
+.app-header { background: var(--head); border-bottom: 4px solid var(--accent); }
+.brand { color: #fff; letter-spacing: -0.01em; }
+.nav a { color: rgba(255, 255, 255, 0.72); }
+.nav a:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.nav a.active { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.sync-status { color: rgba(255, 255, 255, 0.7); }
+.sync-status.saved { color: #9fd8b4; }
+.sync-status.error { color: #ffb4a9; }
+
+.card { box-shadow: 0 1px 2px rgba(31, 51, 71, 0.05); }
+button.primary:hover, .btn.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); filter: none; }
+button:focus-visible, .btn:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+/* Tabellen: Kopf wie im Anschreiben, Summen hinterlegt */
+th { color: var(--head); background: var(--tint); }
+tfoot td { background: var(--tint); }
+.fin-table tr.sum td { background: var(--tint); border-top: 1.5px solid var(--accent); }
+
+/* Kennzahlen-Kopf (Portfolio und Objekt): dunkle Fläche wie der Ergebnisblock */
+.card.portfolio-head { background: var(--head); border-color: var(--head); color: #fff; }
+.card.portfolio-head .muted { color: rgba(255, 255, 255, 0.7); }
+.card.portfolio-head .hero, .card.portfolio-head .kpi-value { color: #fff; }
+.card.portfolio-head .delta.up { color: #9fd8b4; }
+.card.portfolio-head .delta.down { color: #ffb4a9; }
+.card.portfolio-head .delta.flat { color: rgba(255, 255, 255, 0.7); }
+.card.portfolio-head .kpi { border-left: 1px solid rgba(255, 255, 255, 0.16); padding-left: 14px; }
+
+/* Kacheln: Petrol-Leiste oben wie der Briefkopf */
+.tile { border-top: 4px solid var(--accent); }
+.tile-value { color: var(--head); }
+.tile-add { border-top: 2px dashed var(--border); }
+.badge.neutral { background: var(--tint); color: var(--muted); }
+
+.wizard-steps span.active { background: var(--accent); border-color: var(--accent); }
+.app-header-inner { padding-top: 6px; padding-bottom: 6px; }

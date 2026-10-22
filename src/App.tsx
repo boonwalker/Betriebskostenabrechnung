@@ -33,7 +33,7 @@ const NAV = [
 ] as const;
 
 export default function App() {
-  const [data, update, replace] = useAppData();
+  const [data, update, replace, sync] = useAppData();
   const [section = "", id, sub] = useHashRoute();
 
   let page;
@@ -61,6 +61,11 @@ export default function App() {
               </a>
             ))}
           </nav>
+          {sync !== "local" && (
+            <span className={`sync-status ${sync}`} title="Speicherort deiner Daten">
+              {sync === "loading" ? "Lade Daten …" : sync === "saving" ? "Speichert …" : sync === "saved" ? "✓ Gespeichert" : "⚠ Nicht gespeichert"}
+            </span>
+          )}
         </div>
       </header>
       <main>{page}</main>

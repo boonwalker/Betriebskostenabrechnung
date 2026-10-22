@@ -46,3 +46,12 @@ Die Abrechnung steckt in `src/lib/calc.ts`, die Renditeberechnung in `src/lib/fi
 ## Hinweis
 
 Die App ist eine Hilfe beim Erstellen, aber keine Rechts- oder Steuerberatung. Prüfe Umlageschlüssel und Kostenarten anhand deines Mietvertrags. Die steuerliche Betrachtung ist eine vereinfachte Jahresschätzung (z. B. ohne Sonder-AfA, Erhaltungsaufwand-Verteilung nach § 82b EStDV oder Zufluss-/Abflussprinzip).
+
+## Vorführversion als Artifact
+
+`VITE_SHOWCASE=1 npx vite build --base=./` baut die Vorführversion (Startdaten: Testfall WE 09). Als Artifact veröffentlicht speichert sie den
+gesamten Datenbestand zusätzlich in der Artifact-Datenbank (`appdata/state`, nur für den Eigentümer lesbar, ohne API-Schlüssel). Dieser Stand hat
+Vorrang vor dem Browser-Speicher und bleibt bei neuen Versionen erhalten.
+
+Wichtig für Änderungen: den Speicherschlüssel der Vorführversion nicht mehr ändern und Startdaten nicht über neue Schlüssel einspielen –
+Datenänderungen per Migration (`migrate`) oder gezielt im Datenbank-Dokument vornehmen, sonst gehen Eingaben verloren.

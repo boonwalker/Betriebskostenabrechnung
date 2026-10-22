@@ -468,7 +468,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         <div className="row" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>Betriebskostenabrechnungen</h2>
           <span className="spacer" />
-          <a className="btn" href="#/abrechnungen">Neue Abrechnung</a>
+          <a className="btn primary" href="#/abrechnungen">+ Abrechnung</a>
         </div>
         {statements.length === 0 ? (
           <p className="muted">Noch keine Abrechnung für dieses Objekt.</p>

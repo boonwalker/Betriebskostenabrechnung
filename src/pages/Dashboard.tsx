@@ -1,4 +1,4 @@
-import Sparkline from "../components/Sparkline";
+import ValueChart from "../components/ValueChart";
 import { Delta, Kpi } from "../components/ui";
 import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
@@ -166,7 +166,7 @@ function PropertyTile({
       </div>
       <div className="tile-chart">
         {w && w.points.length >= 2 ? (
-          <Sparkline points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />
+          <ValueChart compact points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />
         ) : (
           <div className="muted small">Der Verlauf erscheint ab dem zweiten Monat nach Erwerb.</div>
         )}

@@ -1,6 +1,7 @@
 import { focusElement } from "../lib/nav";
 import { useState, type ReactNode } from "react";
 import { Modal, NumberInput, type PageProps } from "../components/ui";
+import { HouseFloor, HouseFrame, TenantCard, TenantProfile, VacantCard } from "../components/TenantCards";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR } from "../lib/format";
 import { newRentPeriod, rentAt, uid, warmRent } from "../lib/model";
@@ -36,11 +37,14 @@ export function saveTenant(update: PageProps["update"], t: Tenant) {
 export default function Tenants({ data, update }: PageProps) {
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [showFormer, setShowFormer] = useState(false);
+  const [viewing, setViewing] = useState<string | null>(null);
+  const viewingTenant = data.tenants.find((t) => t.id === viewing) ?? null;
   const today = todayISO();
 
   const remove = (t: Tenant) => {
-    if (!confirm(`Mieter „${t.name}“ löschen? Tipp: Bei Auszug besser ein Auszugsdatum eintragen, damit ältere Abrechnungen stimmen.`)) return;
+    if (!confirm(`Mieter „${t.name}“ löschen? Tipp: Bei Auszug besser ein Auszugsdatum eintragen, damit ältere Abrechnungen stimmen.`)) return false;
     update((d) => ({ ...d, tenants: d.tenants.filter((x) => x.id !== t.id) }));
+    return true;
   };
 
   if (data.properties.length === 0) {
@@ -70,18 +74,40 @@ export default function Tenants({ data, update }: PageProps) {
       {data.properties.map((p) => {
         const tenants = data.tenants
           .filter((t) => t.propertyId === p.id && (showFormer || notMovedOut(t, today)))
-          .sort((a, b) => a.moveIn.localeCompare(b.moveIn));
+          .sort((a, b) => b.moveIn.localeCompare(a.moveIn));
+        const multiUnit = p.units.length > 1;
         return (
-          <div className="card" key={p.id}>
-            <h2><a href={`#/objekte/${p.id}`} style={{ color: "inherit" }}>{p.name}</a></h2>
-            {tenants.length === 0 ? (
-              <p className="muted">Keine Mieter erfasst.</p>
-            ) : (
-              <TenantTable data={data} tenants={tenants} onEdit={(t) => setEditing(structuredClone(t))} onRemove={remove} />
-            )}
-          </div>
+          <HouseFrame property={p} key={p.id}>
+            {p.units.map((u) => {
+              const here = tenants.filter((t) => t.unitId === u.id);
+              const occupied = here.some((t) => notMovedOut(t, today));
+              return (
+                <HouseFloor key={u.id} label={multiUnit ? u.name : undefined}>
+                  {here.map((t) => (
+                    <TenantCard key={t.id} tenant={t} onOpen={() => setViewing(t.id)} />
+                  ))}
+                  {!occupied && <VacantCard onRent={() => setEditing(newTenant(data, p.id, u.id))} />}
+                </HouseFloor>
+              );
+            })}
+          </HouseFrame>
         );
       })}
+
+      {viewingTenant && !editing && (
+        <TenantProfile
+          data={data}
+          tenant={viewingTenant}
+          onClose={() => setViewing(null)}
+          onEdit={(focus) => {
+            setEditing(structuredClone(viewingTenant));
+            if (focus) focusElement(focus);
+          }}
+          onRemove={() => {
+            if (remove(viewingTenant)) setViewing(null);
+          }}
+        />
+      )}
 
       {editing && (
         <TenantForm

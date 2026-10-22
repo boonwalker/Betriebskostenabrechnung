@@ -140,6 +140,7 @@ export function TenantTable({ data, tenants, onEdit, onRemove }: { data: AppData
           {row("Auszug", (c) => (c.t.moveOut ? formatDate(c.t.moveOut) : "–"))}
           {row("Personen", (c) => c.t.persons)}
           {row("Kaltmiete", (c) => formatEUR(c.r?.coldRent ?? 0))}
+          {row("Stellplatz", (c) => formatEUR(c.r?.surcharge ?? 0))}
           {row("BK-Vorauszahlung", (c) => formatEUR(c.r?.prepaymentOperating ?? 0))}
           {row("HK-Vorauszahlung", (c) => formatEUR(c.r?.prepaymentHeating ?? 0))}
           {row("Warmmiete", (c) => <strong>{formatEUR(warmRent(c.r))}</strong>)}
@@ -266,7 +267,7 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
                 <tr>
                   <th>gültig ab</th>
                   <th className="num">Kaltmiete</th>
-                  <th className="num">Zuschlag</th>
+                  <th className="num">Stellplatz</th>
                   <th className="num">BK-Vorausz.</th>
                   <th className="num">HK-Vorausz.</th>
                   <th className="num">Warmmiete</th>
@@ -281,7 +282,7 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
                     </td>
                     <td style={{ minWidth: 95 }}><NumberInput value={r.coldRent} onChange={(coldRent) => setRent(r.id, { coldRent })} ariaLabel="Kaltmiete" /></td>
                     <td style={{ minWidth: 85 }} title="z. B. Stellplatz – Teil der Miete, keine Betriebskosten">
-                      <NumberInput value={r.surcharge ?? 0} onChange={(surcharge) => setRent(r.id, { surcharge })} ariaLabel="Zuschlag" />
+                      <NumberInput value={r.surcharge ?? 0} onChange={(surcharge) => setRent(r.id, { surcharge })} ariaLabel="Stellplatz" />
                     </td>
                     <td style={{ minWidth: 95 }}><NumberInput value={r.prepaymentOperating} onChange={(v) => setRent(r.id, { prepaymentOperating: v })} ariaLabel="Betriebskostenvorauszahlung" /></td>
                     <td style={{ minWidth: 95 }}><NumberInput value={r.prepaymentHeating} onChange={(v) => setRent(r.id, { prepaymentHeating: v })} ariaLabel="Heizkostenvorauszahlung" /></td>

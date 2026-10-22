@@ -322,7 +322,8 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
                     ),
                   )}
                   {row("Kaltmiete", ({ r }) => (r ? formatEUR(r.coldRent) : "–"))}
-                  {row("je m²", ({ u, r }) => (r && u.area ? formatEUR(r.coldRent / u.area) : "–"))}
+                  {row("Stellplatz", ({ r }) => (r ? formatEUR(r.surcharge ?? 0) : "–"))}
+                  {row("Kaltmiete je m²", ({ u, r }) => (r && u.area ? formatEUR(r.coldRent / u.area) : "–"))}
                   {row("Warmmiete", ({ r }) => (r ? <strong>{formatEUR(warmRent(r))}</strong> : "–"))}
                 </tbody>
               </table>

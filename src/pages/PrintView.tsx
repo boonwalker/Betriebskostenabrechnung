@@ -155,7 +155,12 @@ function Letter({
 }) {
   const landlord = landlordFor(r.tenant, data);
   const rule = r.tenant.lease?.allocationRule ?? "weg";
-  const address = r.tenant.mailingAddress.trim() || `${r.unit.name}\n${property.address.replace(/,\s*/g, "\n")}`;
+  // Postanschrift: nach Auszug die hinterlegte neue Anschrift, sonst die Anschrift des Objekts (ohne Wohnungsbezeichnung)
+  const address = r.tenant.mailingAddress.trim() || property.address.replace(/,\s*/g, "\n");
+  // Anrede je Mietverhältnis: du oder Sie
+  const du = !!r.tenant.informal;
+  const w = (sie: string, duText: string) => (du ? duText : sie);
+  const firstName = r.tenant.name.trim().split(/\s+/)[0];
   const stillLiving = !r.tenant.moveOut || r.tenant.moveOut > statement.periodEnd;
   // Hochrechnung auf 12 Monate, aufgerundet auf volle Euro
   const newMonthly = Math.ceil(((r.totalCosts / r.days) * periodDays) / 12);
@@ -217,23 +222,23 @@ function Letter({
   });
 
   const result =
-    r.balance > 0 ? { kind: "due", label: "Ihre Nachzahlung", amount: r.balance } : r.balance < 0 ? { kind: "credit", label: "Ihr Guthaben", amount: -r.balance } : null;
+    r.balance > 0 ? { kind: "due", label: w("Ihre Nachzahlung", "Deine Nachzahlung"), amount: r.balance } : r.balance < 0 ? { kind: "credit", label: w("Ihr Guthaben", "Dein Guthaben"), amount: -r.balance } : null;
   const year = statement.periodStart.slice(0, 4);
   const prepaymentRows =
     overridden || !r.prepaymentsCalculated.heating
       ? [
           {
-            label: "abzüglich Ihrer geleisteten Vorauszahlungen",
+            label: w("abzüglich Ihrer geleisteten Vorauszahlungen", "abzüglich deiner geleisteten Vorauszahlungen"),
             amount: r.prepayments,
           },
         ]
       : [
           {
-            label: "abzüglich Ihrer Vorauszahlungen auf die Betriebskosten",
+            label: w("abzüglich Ihrer Vorauszahlungen auf die Betriebskosten", "abzüglich deiner Vorauszahlungen auf die Betriebskosten"),
             amount: r.prepaymentsCalculated.operating,
           },
           {
-            label: "abzüglich Ihrer Vorauszahlungen auf die Heizkosten",
+            label: w("abzüglich Ihrer Vorauszahlungen auf die Heizkosten", "abzüglich deiner Vorauszahlungen auf die Heizkosten"),
             amount: r.prepaymentsCalculated.heating,
           },
         ];
@@ -248,12 +253,13 @@ function Letter({
     const own = cost?.leaseAmounts?.[rule]?.basis ?? cost?.basis;
     if (item.key === "direct" && !item.basisUnit && own) {
       const time = r.days < periodDays ? ` × ${r.days}/${periodDays} Tage` : "";
-      return `nach ${own.label} · gesamt ${formatBasis(own.total)} ${own.unit} · Ihr Anteil ${formatBasis(own.share)} ${own.unit}${time}`;
+      return `nach ${own.label} · gesamt ${formatBasis(own.total)} ${own.unit} · ${w("Ihr", "dein")} Anteil ${formatBasis(own.share)} ${own.unit}${time}`;
     }
     if (item.key === "direct" && !item.basisUnit && !wegShare(item)) {
-      return r.days < periodDays ? `direkt Ihrer Wohnung zugeordnet · Ihr Anteil ${share}` : "direkt Ihrer Wohnung zugeordnet";
+      const direct = `direkt ${w("Ihrer", "deiner")} Wohnung zugeordnet`;
+      return r.days < periodDays ? `${direct} · ${w("Ihr", "dein")} Anteil ${share}` : direct;
     }
-    return [`nach ${key}`, total && total !== "–" ? `gesamt ${total}` : null, `Ihr Anteil ${share}`].filter(Boolean).join(" · ");
+    return [`nach ${key}`, total && total !== "–" ? `gesamt ${total}` : null, `${w("Ihr", "dein")} Anteil ${share}`].filter(Boolean).join(" · ");
   };
   const houseTotal = (item: ItemShare) => (item.basisUnit ? formatEUR(item.total) : (wegTotal(item) ?? formatEUR(item.total)));
   const paymentText =
@@ -283,9 +289,10 @@ function Letter({
         <div className="letter-sub">{draft ? "Entwurf · vorläufig · nicht versenden" : `Wohnung ${r.unit.name} · ${property.address || property.name}`}</div>
       </div>
 
-      <p>Guten Tag {r.tenant.name},</p>
+      <p>{du ? `Hallo ${firstName},` : `Guten Tag ${r.tenant.name},`}</p>
       <p>
-        hiermit erhalten Sie die Abrechnung der Betriebskosten für die von Ihnen gemietete Wohnung <strong>{r.unit.name}</strong> im Objekt{" "}
+        {w("hiermit erhalten Sie die Abrechnung der Betriebskosten für die von Ihnen gemietete Wohnung", "hiermit erhältst du die Abrechnung der Betriebskosten für die von dir gemietete Wohnung")}{" "}
+        <strong>{r.unit.name}</strong> im Objekt{" "}
         {property.address || property.name} für den Zeitraum {formatDate(r.start)} bis {formatDate(r.end)}.
       </p>
 
@@ -293,7 +300,7 @@ function Letter({
         <table className="letter-facts">
           <tbody>
             <tr>
-              <th>Ihr Abrechnungszeitraum</th>
+              <th>{w("Ihr", "Dein")} Abrechnungszeitraum</th>
               <td>
                 {formatDate(r.start)} – {formatDate(r.end)} ({r.days} von {periodDays} Tagen)
               </td>
@@ -329,14 +336,14 @@ function Letter({
       </div>
 
       <h2>
-        <span className="letter-num">1</span> Ihre Kosten im Einzelnen
+        <span className="letter-num">1</span> {w("Ihre", "Deine")} Kosten im Einzelnen
       </h2>
       <table className="letter-costs">
         <thead>
           <tr>
             <th>Kostenart und Verteilung</th>
             <th className="num">Kosten gesamt</th>
-            <th className="num">Ihr Anteil</th>
+            <th className="num">{w("Ihr", "Dein")} Anteil</th>
           </tr>
         </thead>
         <tbody>
@@ -353,7 +360,7 @@ function Letter({
         </tbody>
         <tfoot>
           <tr className="letter-subtotal">
-            <td colSpan={2}>Summe Ihrer Betriebskosten</td>
+            <td colSpan={2}>Summe {w("Ihrer", "deiner")} Betriebskosten</td>
             <td className="num">{formatEUR(r.totalCosts)}</td>
           </tr>
           {prepaymentRows.map((p) => (
@@ -382,17 +389,17 @@ function Letter({
           </p>
         ) : fromWeg ? (
           <p>
-            Die Kosten sind nach den in der Wohnungseigentümergemeinschaft geltenden Verteilungsschlüsseln auf Ihre Wohnung verteilt (§ 556a Abs. 3 BGB); Grundlage ist
+            Die Kosten sind nach den in der Wohnungseigentümergemeinschaft geltenden Verteilungsschlüsseln auf {w("Ihre", "deine")} Wohnung verteilt (§ 556a Abs. 3 BGB); Grundlage ist
             die Jahresabrechnung der Hausverwaltung
             {property.wegManager ? ` (${property.wegManager})` : ""}. Nicht umlagefähige Kosten wie Verwaltung, Instandhaltung und die Erhaltungsrücklage sind nicht
             enthalten.
           </p>
         ) : (
-          <p>Abgerechnet sind die im Mietvertrag vereinbarten Betriebskosten nach § 2 BetrKV. Direkt zugeordnete Kosten betreffen allein Ihre Wohnung.</p>
+          <p>Abgerechnet sind die im Mietvertrag vereinbarten Betriebskosten nach § 2 BetrKV. Direkt zugeordnete Kosten betreffen allein {w("Ihre", "deine")} Wohnung.</p>
         )}
         {r.days < periodDays && (
           <p>
-            Sie haben die Wohnung nur einen Teil des Jahres gemietet; die Kosten sind deshalb zeitanteilig ({r.days} von {periodDays} Tagen) berechnet.
+            {w("Sie haben", "Du hast")} die Wohnung nur einen Teil des Jahres gemietet; die Kosten sind deshalb zeitanteilig ({r.days} von {periodDays} Tagen) berechnet.
           </p>
         )}
         {r.items.some((i) => i.key === "persons") && (
@@ -407,7 +414,7 @@ function Letter({
               ? `; Verteilung ${n.heating.baseSharePct} % nach Fläche, ${100 - n.heating.baseSharePct} % nach Verbrauch (HeizkostenV)`
               : ""}
             . {n.heating.components.map((c) => `${c.label} ${formatEUR(c.amount)}`).join(", ")}
-            {n.heating.consumptionHeatingKwh !== null ? `. Ihr Verbrauch: Heizung ${formatNum(n.heating.consumptionHeatingKwh)} kWh` : ""}
+            {n.heating.consumptionHeatingKwh !== null ? `. ${w("Ihr", "Dein")} Verbrauch: Heizung ${formatNum(n.heating.consumptionHeatingKwh)} kWh` : ""}
             {n.heating.consumptionWaterKwh !== null ? `, Warmwasser ${formatNum(n.heating.consumptionWaterKwh)} kWh` : ""}.
           </p>
         ))}
@@ -417,15 +424,15 @@ function Letter({
             <p key={c.costId}>
               <strong>CO2-Kosten ({c.label}):</strong> Im Abrechnungszeitraum sind CO2-Kosten von {formatEUR(c.co2Cost)} bei einem Ausstoß von {formatNum(c.co2Kg)} kg CO2
               angefallen ({formatNum(c.kgPerM2Year)} kg je m² Wohnfläche und Jahr). Nach dem Stufenmodell des CO2KostAufG (Stufe {c.stage}) trägt der Vermieter{" "}
-              {c.landlordPct} % ({formatEUR(c.landlordAmount)}); dieser Anteil ist oben bereits abgezogen. Ihr Anteil an den CO2-Kosten beträgt {formatEUR(tenantCo2)}.
+              {c.landlordPct} % ({formatEUR(c.landlordAmount)}); dieser Anteil ist oben bereits abgezogen. {w("Ihr", "Dein")} Anteil an den CO2-Kosten beträgt {formatEUR(tenantCo2)}.
             </p>
           );
         })}
         {labor > 0 && (
           <p>
-            <strong>Steuerermäßigung nach § 35a EStG:</strong> In Ihren Kosten sind Arbeitskosten enthalten für haushaltsnahe Dienstleistungen (Abs. 2){" "}
-            {formatEUR(r.labor35a.service)} und für Handwerkerleistungen (Abs. 3) {formatEUR(r.labor35a.craftsman)}. Sie können 20 % davon in Ihrer
-            Einkommensteuererklärung geltend machen.
+            <strong>Steuerermäßigung nach § 35a EStG:</strong> In {w("Ihren", "deinen")} Kosten sind Arbeitskosten enthalten für haushaltsnahe Dienstleistungen (Abs. 2){" "}
+            {formatEUR(r.labor35a.service)} und für Handwerkerleistungen (Abs. 3) {formatEUR(r.labor35a.craftsman)}. {w("Sie können", "Du kannst")} 20 % davon in{" "}
+            {w("Ihrer", "deiner")} Einkommensteuererklärung geltend machen.
           </p>
         )}
       </div>
@@ -435,31 +442,31 @@ function Letter({
       </h2>
       {result?.kind === "due" && (
         <p>
-          Bitte überweisen Sie den Nachzahlungsbetrag von <strong>{formatEUR(result.amount)}</strong> {paymentText}
+          {w("Bitte überweisen Sie", "Bitte überweise")} den Nachzahlungsbetrag von <strong>{formatEUR(result.amount)}</strong> {paymentText}
           {landlord.iban ? <> auf das Konto IBAN {landlord.iban}</> : null} unter Angabe des Verwendungszwecks „Betriebskosten {year}, {r.unit.name}“.
         </p>
       )}
       {result?.kind === "credit" && (
         <p>
-          Das Guthaben von <strong>{formatEUR(result.amount)}</strong> überweisen wir Ihnen{" "}
-          {r.tenant.lease?.paymentTerm === "endOfNextMonth" ? "bis zum Ende des auf den Zugang dieser Abrechnung folgenden Kalendermonats" : "in den nächsten Tagen"} auf
-          Ihr bekanntes Konto.
+          Das Guthaben von <strong>{formatEUR(result.amount)}</strong> {w("überweise ich Ihnen", "überweise ich dir")}{" "}
+          {r.tenant.lease?.paymentTerm === "endOfNextMonth" ? "bis zum Ende des auf den Zugang dieser Abrechnung folgenden Kalendermonats" : "in den nächsten Tagen"} auf{" "}
+          {w("Ihr", "dein")} bekanntes Konto.
         </p>
       )}
-      {!result && <p>Ihre Vorauszahlungen decken die Kosten genau; es ist nichts zu zahlen.</p>}
+      {!result && <p>{w("Ihre", "Deine")} Vorauszahlungen decken die Kosten genau; es ist nichts zu zahlen.</p>}
       {suggestAdjustment && stillLiving && newMonthly !== currentMonthly && (
         <p>
-          Auf Grundlage dieser Abrechnung werden Ihre monatlichen Vorauszahlungen auf die Betriebs- und Heizkosten gemäß § 560 Abs. 4 BGB ab dem übernächsten Monat nach
+          Auf Grundlage dieser Abrechnung werden {w("Ihre", "deine")} monatlichen Vorauszahlungen auf die Betriebs- und Heizkosten gemäß § 560 Abs. 4 BGB ab dem übernächsten Monat nach
           Zugang dieses Schreibens von insgesamt {formatEUR(currentMonthly)} auf {formatEUR(newMonthly)} angepasst.
         </p>
       )}
       <div className="letter-closing">
         <p className="letter-small">
-          Die Rechnungen und Belege zu dieser Abrechnung können Sie nach vorheriger Terminabsprache gerne einsehen. Einwendungen gegen die Abrechnung können Sie bis zum
-          Ablauf des zwölften Monats nach Zugang dieser Abrechnung mitteilen (§ 556 Abs. 3 BGB).
+          Die Rechnungen und Belege zu dieser Abrechnung {w("können Sie", "kannst du")} nach vorheriger Terminabsprache gerne einsehen. Einwendungen gegen die Abrechnung{" "}
+          {w("können Sie", "kannst du")} bis zum Ablauf des zwölften Monats nach Zugang dieser Abrechnung mitteilen (§ 556 Abs. 3 BGB).
         </p>
         <p className="letter-sign">
-          Mit freundlichen Grüßen
+          {w("Mit freundlichen Grüßen", "Viele Grüße")}
           <br />
           <br />
           {landlord.name}

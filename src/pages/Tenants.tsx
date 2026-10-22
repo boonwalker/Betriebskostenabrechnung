@@ -292,10 +292,21 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
           )}
         </div>
 
-        <label className="field">
-          Anschrift für die Abrechnung (leer = Anschrift der Wohnung; nach Auszug die neue Anschrift)
-          <textarea rows={2} value={t.mailingAddress} onChange={(e) => setT({ ...t, mailingAddress: e.target.value })} />
+        <label className="field" id="anschrift">
+          {t.moveOut && t.moveOut < todayISO() ? "Aktuelle Postanschrift (nach dem Auszug – Pflicht für die Abrechnung)" : "Anschrift für die Abrechnung (leer = Anschrift der Wohnung)"}
+          <textarea rows={2} value={t.mailingAddress} onChange={(e) => setT({ ...t, mailingAddress: e.target.value })} placeholder={"Straße Nr.\nPLZ Ort"} />
         </label>
+        <div className="field">
+          Anrede im Anschreiben
+          <div className="row">
+            <label className="row">
+              <input type="radio" name="anrede" checked={!t.informal} onChange={() => setT({ ...t, informal: false })} /> Sie
+            </label>
+            <label className="row">
+              <input type="radio" name="anrede" checked={!!t.informal} onChange={() => setT({ ...t, informal: true })} /> du
+            </label>
+          </div>
+        </div>
         <div className="row">
           <span className="spacer" />
           <button onClick={onClose}>Abbrechen</button>

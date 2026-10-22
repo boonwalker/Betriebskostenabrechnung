@@ -509,12 +509,23 @@ describe("Freigabe je Mietverhältnis", () => {
     const { data, st } = setup();
     const withFather = {
       ...data,
-      tenants: [{ ...we09PreviousTenant(), landlord: { name: "Vater", address: "Straße 1\n52525 Ort", iban: "" } }, we09Tenant()],
+      tenants: [
+        { ...we09PreviousTenant(), mailingAddress: "Neue Straße 2\n52525 Ort", landlord: { name: "Vater", address: "Straße 1\n52525 Ort", iban: "" } },
+        we09Tenant(),
+      ],
     };
     const ready = { ...st, prepaymentsConfirmed: { "we09-t": true, "we09-vormieterin": true } };
     const all = releaseStatement(ready, withFather);
     expect(all.status).toBe("released");
     expect(revokeRelease(all, withFather, "we09-t").status).toBe("partial");
+  });
+
+  it("verlangt nach dem Auszug die aktuelle Postanschrift", () => {
+    const { data, st } = setup();
+    const r = statementReadiness(st, data);
+    const prev = r.tenants.find((t) => t.tenantId === "we09-vormieterin")!;
+    const text = prev.blockers.find((b) => b.includes("aktuelle Postanschrift"))!;
+    expect(r.targets[text].href).toContain("f=anschrift");
   });
 
   it("übernimmt frühere Freigaben der ganzen Abrechnung", () => {

@@ -235,6 +235,8 @@ export function we09TrialTenant2024(): Tenant {
     ...we09Tenant(),
     id: "we09-probe",
     name: "Probelauf-Mieter",
+    // Platzhalter: nach dem Auszug verlangt die Freigabe eine aktuelle Postanschrift
+    mailingAddress: "Musterweg 1\n12345 Musterstadt",
     moveIn: "2024-01-01",
     moveOut: "2024-12-31",
     rentHistory: [{ id: "we09-probe-r", validFrom: "2024-01-01", coldRent: 480, surcharge: 20, prepaymentOperating: 130, prepaymentHeating: 0 }],

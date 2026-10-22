@@ -174,6 +174,8 @@ export interface Tenant {
   lease?: LeaseAgreement | null;
   /** Vermieter dieses Mietverhältnisses, falls abweichend von den Einstellungen (z. B. Voreigentümer) */
   landlord?: Landlord | null;
+  /** Anrede im Anschreiben: true = du, sonst Sie */
+  informal?: boolean;
 }
 
 /**

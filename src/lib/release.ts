@@ -220,6 +220,15 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
           : to("Name und Anschrift des Vermieters fehlen (Einstellungen).", { href: link("einstellungen", { f: "vermieter" }), label: "Vermieter eintragen" }),
       );
     }
+    // Ausgezogene Mieter erreicht das Anschreiben nur unter ihrer neuen Anschrift
+    if (t.tenant.moveOut && t.tenant.moveOut < new Date().toISOString().slice(0, 10) && !t.tenant.mailingAddress.trim()) {
+      blockers.push(
+        to(
+          `${t.tenant.name} ist am ${formatDate(t.tenant.moveOut)} ausgezogen – die aktuelle Postanschrift fehlt.`,
+          objectPage({ t: t.tenant.id, f: "anschrift" }, "Anschrift eintragen"),
+        ),
+      );
+    }
     return { tenantId: t.tenant.id, name: t.tenant.name, blockers: uniq(blockers), hints: uniq(hints), ready: general.length === 0 && blockers.length === 0 };
   });
 

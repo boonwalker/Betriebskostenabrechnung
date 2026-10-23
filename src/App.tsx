@@ -38,7 +38,6 @@ const NAV = (portfolio: boolean) => [
   ["", portfolio ? "Portfolio" : "Objekte"],
   ["mieter", "Mieter"],
   ["abrechnungen", "Abrechnungen"],
-  ["einstellungen", "Einstellungen"],
 ];
 
 export default function App() {
@@ -96,6 +95,12 @@ export default function App() {
               </span>
             </span>
           )}
+          <a className={`nav-profile ${section === "einstellungen" ? "active" : ""}`} href="#/einstellungen" aria-label="Einstellungen" title="Einstellungen">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4.5 20.5c.9-3.9 4-6 7.5-6s6.6 2.1 7.5 6" />
+            </svg>
+          </a>
         </div>
       </header>
       <main>{page}</main>

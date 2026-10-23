@@ -26,6 +26,8 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); }
+/* iOS vergrößert längere Textblöcke sonst eigenmächtig (vor allem in der breiten Kopie fürs PDF) */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 h1, h2, h3 { line-height: 1.25; margin: 0 0 0.75rem; }
 h1 { font-size: 1.5rem; }
 h2 { font-size: 1.2rem; }

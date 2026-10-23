@@ -57,6 +57,9 @@ export async function lettersToPdf(letters: { el: HTMLElement; attachments: PdfA
             }
           }
         }
+        // iOS-Textvergrößerung abschalten: Die Kopie ist 1100 px breit, auf dem Handy würde Safari
+        // längere Absätze sonst stark vergrößern (Briefkopf klein, Fließtext riesig)
+        printCss.push("html, body, * { -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }");
         const style = doc.createElement("style");
         style.textContent = printCss.join("\n");
         doc.head.appendChild(style);

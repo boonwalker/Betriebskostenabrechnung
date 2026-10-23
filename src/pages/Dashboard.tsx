@@ -30,9 +30,6 @@ export default function Dashboard({ data }: { data: AppData }) {
     data.properties.reduce((a, p) => a + p.purchasePrice, 0),
   );
 
-  // Objekte, bei denen Angaben für Vermögen und Rendite fehlen (z. B. beim Anlegen übersprungen)
-  const incomplete = data.properties.map((p) => ({ p, items: wealthMissing(p) })).filter((x) => x.items.length > 0);
-
   const steps = [
     { done: !!data.settings.landlord.name, label: <>Deine Vermieterdaten in den <a href="#/einstellungen">Einstellungen</a> hinterlegen</> },
     { done: data.properties.length > 0, label: <>Ein <a href="#/objekte/neu">Objekt</a> mit Wohnungen, Kaufdaten und Finanzierung anlegen</> },
@@ -77,25 +74,6 @@ export default function Dashboard({ data }: { data: AppData }) {
               hint={`vor Steuern ${formatSignedEUR0(portfolio.cashflowBeforeTax / 12)}`}
             />
           </div>
-        </div>
-      )}
-
-      {incomplete.length > 0 && (
-        <div className="alert info portfolio-missing">
-          <strong>Damit das Portfolio rechnen kann, fehlen noch:</strong>
-          {incomplete.map(({ p, items }) => (
-            <div key={p.id} className="portfolio-missing-object">
-              <span className="small">{p.name}</span>
-              <ul className="checklist missing-list">
-                {items.map((x) => (
-                  <li key={x.text}>
-                    <a href={x.href}>{x.text} →</a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-          <span className="small">Für die Betriebskostenabrechnung brauchst du diese Angaben nicht.</span>
         </div>
       )}
 
@@ -171,6 +149,9 @@ function PropertyTile({
   needsStatement: boolean;
   lastYear: string;
 }) {
+  const wealthItems = w ? [] : wealthMissing(p);
+  // im Hinweis bereits genannte Angaben nicht noch einmal mitzählen
+  const otherMissing = missing - wealthItems.length;
   return (
     <a className="tile" href={`#/objekte/${p.id}`}>
       <div className="row" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
@@ -182,26 +163,48 @@ function PropertyTile({
         <span className="badge neutral">{PROPERTY_TYPE_LABELS[p.type]}</span>
       </div>
 
-      <div className="muted small" style={{ marginTop: 12 }}>Vermögenswert</div>
-      <div className="tile-value" style={{ marginTop: 0 }}>{formatEUR0(w?.current.wealth ?? m.netWorth)}</div>
       {w ? (
-        <Delta value={w.gain} pct={w.baseline > 0 ? w.gain / w.baseline : null} />
+        <>
+          <div className="muted small" style={{ marginTop: 12 }}>Vermögenswert</div>
+          <div className="tile-value" style={{ marginTop: 0 }}>{formatEUR0(w.current.wealth)}</div>
+          <Delta value={w.gain} pct={w.baseline > 0 ? w.gain / w.baseline : null} />
+          <div className="muted small">
+            Marktwert {formatEUR0(m.marketValue)}
+            {m.loanBalance > 0 && ` · Restschuld ${formatEUR0(m.loanBalance)}`}
+            {` · Cashflow ${formatSignedEUR0(w.current.cumulative)}`}
+            {w.current.withdrawn > 0 && ` · entnommen ${formatEUR0(w.current.withdrawn)}`}
+          </div>
+          <div className="tile-chart">
+            {w.points.length >= 2 ? (
+              <ValueChart compact points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />
+            ) : (
+              <div className="muted small">Der Verlauf erscheint ab dem zweiten Monat nach Erwerb.</div>
+            )}
+          </div>
+        </>
       ) : (
-        <div className="muted small">Erwerbsdatum und -wert fehlen</div>
+        // ohne Erwerbsdaten keine Vermögensentwicklung: stattdessen sagen, was dafür noch fehlt
+        <div className="tile-missing">
+          <strong className="small">Für die Vermögensentwicklung fehlen noch:</strong>
+          <ul>
+            {wealthItems.map((x) => (
+              <li key={x.text}>
+                <span
+                  role="link"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.location.hash = x.href;
+                  }}
+                >
+                  {x.text} →
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
-      <div className="muted small">
-        Marktwert {formatEUR0(m.marketValue)}
-        {m.loanBalance > 0 && ` · Restschuld ${formatEUR0(m.loanBalance)}`}
-        {w && ` · Cashflow ${formatSignedEUR0(w.current.cumulative)}`}
-        {w && w.current.withdrawn > 0 && ` · entnommen ${formatEUR0(w.current.withdrawn)}`}
-      </div>
-      <div className="tile-chart">
-        {w && w.points.length >= 2 ? (
-          <ValueChart compact points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />
-        ) : (
-          <div className="muted small">Der Verlauf erscheint ab dem zweiten Monat nach Erwerb.</div>
-        )}
-      </div>
 
       <div className="tile-stats">
         <div>
@@ -218,10 +221,10 @@ function PropertyTile({
         </div>
       </div>
 
-      {(needsStatement || missing > 0) && (
+      {(needsStatement || otherMissing > 0) && (
         <div className="row" style={{ marginTop: 10, gap: 6 }}>
           {needsStatement && <span className="badge warn">⚠ Abrechnung {lastYear} offen</span>}
-          {missing > 0 && <span className="badge neutral">ⓘ {missing} Angabe{missing === 1 ? "" : "n"} fehlen</span>}
+          {otherMissing > 0 && <span className="badge neutral">ⓘ {otherMissing} Angabe{otherMissing === 1 ? "" : "n"} fehlen</span>}
         </div>
       )}
     </a>

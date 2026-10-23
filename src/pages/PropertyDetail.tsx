@@ -7,7 +7,7 @@ import { calculateStatement } from "../lib/calc";
 import { addMonths, formatDate, todayISO } from "../lib/dates";
 import { isCurrentTenant, propertyMetrics } from "../lib/finance";
 import { formatEUR, formatEUR0, formatNum, formatPct, formatSignedEUR0 } from "../lib/format";
-import { ensureStatement, missingInfo, PROPERTY_TYPE_LABELS, rentAt, uid, warmRent } from "../lib/model";
+import { ensureStatement, missingInfo, portfolioOn, PROPERTY_TYPE_LABELS, rentAt, uid, warmRent } from "../lib/model";
 import type { EconomicPlan, Property, Tenant, WegAnnualStatement } from "../lib/types";
 import { wealthSeries, type WealthSeries } from "../lib/wealth";
 import { accountLedger } from "../lib/account";
@@ -55,7 +55,8 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
   const taxRate = data.settings.marginalTaxRate;
   const m = propertyMetrics(p, data.tenants, today, taxRate, data.economicPlans);
   const w = wealthSeries(p, data, today);
-  const missing = missingInfo(p, data.tenants, data.economicPlans);
+  const portfolio = portfolioOn(data.settings);
+  const missing = missingInfo(p, data.tenants, data.economicPlans, portfolio);
   const tenants = data.tenants.filter((t) => t.propertyId === p.id).sort((a, b) => a.moveIn.localeCompare(b.moveIn));
   const shownTenants = tenants.filter((t) => showFormer || notMovedOut(t, today));
   const statements = data.statements.filter((s) => s.propertyId === p.id).sort((a, b) => b.periodStart.localeCompare(a.periodStart));
@@ -88,7 +89,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
     <>
       <div className="page-head">
         <div>
-          <a href="#/" className="small">← Portfolio</a>
+          <a href="#/" className="small">← {portfolio ? "Portfolio" : "Objekte"}</a>
           <h1>{p.name}</h1>
           <div className="muted small">
             {p.address} · {PROPERTY_TYPE_LABELS[p.type]}
@@ -103,7 +104,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
 
       {missing.length > 0 && (
         <div className="alert info">
-          <strong>Für eine vollständige Auswertung fehlen noch:</strong>
+          <strong>{portfolio ? "Für eine vollständige Auswertung fehlen noch:" : "Für die Abrechnung fehlen noch:"}</strong>
           <ul className="checklist missing-list">
             {missing.map((x) => (
               <li key={x.text}>
@@ -123,159 +124,163 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         </div>
       )}
 
-      <div className="card portfolio-head">
-        <div>
-          <div className="muted small">Marktwert{m.marketValueDate ? ` (Stand ${formatDate(m.marketValueDate)})` : ""}</div>
-          <div className="hero">{formatEUR0(m.marketValue)}</div>
-          {m.invested > 0 && <Delta value={m.valueGain} pct={m.valueGainPct} suffix={`ggü. Einstand ${formatEUR0(m.invested)}`} />}
-          {m.appreciationPa !== null && <div className="muted small">Wertentwicklung {formatPct(m.appreciationPa)} pro Jahr seit Kauf</div>}
-        </div>
-        <div className="kpi-row">
-          <Kpi label="Eigenkapital im Objekt" value={formatEUR0(m.netWorth)} hint={`Restschuld ${formatEUR0(m.loanBalance)}`} />
-          <Kpi label="Mietrendite brutto / netto" value={`${formatPct(m.grossYield)} / ${formatPct(m.netYield)}`} hint={`Kaltmiete ${formatEUR0(m.annualColdRent)} p. a.`} />
-          <Kpi
-            label="Cashflow / Monat nach Steuern"
-            value={formatSignedEUR0(m.cashflowAfterTax / 12)}
-            hint={`vor Steuern ${formatSignedEUR0(m.cashflowBeforeTax / 12)} · Steuersatz ${formatNum(taxRate)} %${
-              m.annualDepreciation === 0 ? " · ohne Abschreibung" : ""
-            }`}
-          />
-          <Kpi label="Eigenkapitalrendite p. a." value={formatPct(m.equityReturn)} hint="Cashflow n. St. + Tilgung, ohne Wertänderung" />
-        </div>
-      </div>
-
-      {w ? (
-        <div className="card">
-          <h2>Vermögensentwicklung seit {ACQ_LABEL[p.acquisitionType ?? "purchase"]} ({formatDate(p.purchaseDate)})</h2>
-          <div className="kpi-row" style={{ marginBottom: 12 }}>
-            <Kpi
-              label="Vermögenswert heute"
-              value={formatEUR0(w.current.wealth)}
-              hint={w.current.withdrawn ? "Marktwert − Restschuld + Cashflow − Entnahmen" : "Marktwert − Restschuld + Cashflow"}
-            />
-            <Kpi
-              label="Einstand"
-              value={formatEUR0(w.baseline)}
-              hint={p.acquisitionType && p.acquisitionType !== "purchase" ? "Wert bei Erwerb + Nebenkosten − Darlehen" : "Kaufpreis + Nebenkosten − Darlehen"}
-            />
-            <Kpi label="Cashflow seit Erwerb" value={formatSignedEUR0(w.current.cumulative)} hint="Miete + Vorauszahlungen − Hausgeld − Kosten − Raten" />
-            {w.current.withdrawn > 0 && (
+      {portfolio && (
+        <>
+          <div className="card portfolio-head">
+            <div>
+              <div className="muted small">Marktwert{m.marketValueDate ? ` (Stand ${formatDate(m.marketValueDate)})` : ""}</div>
+              <div className="hero">{formatEUR0(m.marketValue)}</div>
+              {m.invested > 0 && <Delta value={m.valueGain} pct={m.valueGainPct} suffix={`ggü. Einstand ${formatEUR0(m.invested)}`} />}
+              {m.appreciationPa !== null && <div className="muted small">Wertentwicklung {formatPct(m.appreciationPa)} pro Jahr seit Kauf</div>}
+            </div>
+            <div className="kpi-row">
+              <Kpi label="Eigenkapital im Objekt" value={formatEUR0(m.netWorth)} hint={`Restschuld ${formatEUR0(m.loanBalance)}`} />
+              <Kpi label="Mietrendite brutto / netto" value={`${formatPct(m.grossYield)} / ${formatPct(m.netYield)}`} hint={`Kaltmiete ${formatEUR0(m.annualColdRent)} p. a.`} />
               <Kpi
-                label="Entnommen seit Erwerb"
-                value={formatEUR0(w.current.withdrawn)}
-                hint={`Überschuss nach Entnahmen ${formatSignedEUR0(w.current.cumulative - w.current.withdrawn)}`}
+                label="Cashflow / Monat nach Steuern"
+                value={formatSignedEUR0(m.cashflowAfterTax / 12)}
+                hint={`vor Steuern ${formatSignedEUR0(m.cashflowBeforeTax / 12)} · Steuersatz ${formatNum(taxRate)} %${
+                  m.annualDepreciation === 0 ? " · ohne Abschreibung" : ""
+                }`}
               />
-            )}
-            <Kpi label="Zuwachs" value={formatSignedEUR0(w.gain)} hint={w.baseline > 0 ? formatPct(w.gain / w.baseline) : undefined} />
+              <Kpi label="Eigenkapitalrendite p. a." value={formatPct(m.equityReturn)} hint="Cashflow n. St. + Tilgung, ohne Wertänderung" />
+            </div>
           </div>
-          {w.points.length >= 2 && <ValueChart points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />}
-          <div className="table-wrap" style={{ marginTop: 12 }}>
-            <table className="compact">
-              <thead>
-                <tr>
-                  <th>Jahr</th>
-                  <th className="num">Marktwert</th>
-                  <th className="num">Restschuld</th>
-                  <th className="num">Cashflow im Jahr</th>
-                  {w.current.withdrawn > 0 && <th className="num">Entnahmen</th>}
-                  <th className="num">Vermögenswert</th>
-                </tr>
-              </thead>
-              <tbody>
-                {yearRows(w).map((y) => (
-                  <tr key={y.year}>
-                    <td>{y.year}{y.partial ? " (bis heute)" : ""}</td>
-                    <td className="num">{formatEUR0(y.value)}</td>
-                    <td className="num">{formatEUR0(y.debt)}</td>
-                    <td className="num">{formatSignedEUR0(y.cashflow)}</td>
-                    {w.current.withdrawn > 0 && <td className="num">{formatEUR0(-y.withdrawn)}</td>}
-                    <td className="num"><strong>{formatEUR0(y.wealth)}</strong></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {w.loanDeviation !== null && (
-            <div className="alert warn small" style={{ marginTop: 10 }}>
-              Die eingetragene Restschuld weicht um {formatEUR0(w.loanDeviation)} vom berechneten Tilgungsplan ab (z. B. Sondertilgung oder geänderte Rate). Für heute gilt die
-              eingetragene Restschuld.
+
+          {w ? (
+            <div className="card">
+              <h2>Vermögensentwicklung seit {ACQ_LABEL[p.acquisitionType ?? "purchase"]} ({formatDate(p.purchaseDate)})</h2>
+              <div className="kpi-row" style={{ marginBottom: 12 }}>
+                <Kpi
+                  label="Vermögenswert heute"
+                  value={formatEUR0(w.current.wealth)}
+                  hint={w.current.withdrawn ? "Marktwert − Restschuld + Cashflow − Entnahmen" : "Marktwert − Restschuld + Cashflow"}
+                />
+                <Kpi
+                  label="Einstand"
+                  value={formatEUR0(w.baseline)}
+                  hint={p.acquisitionType && p.acquisitionType !== "purchase" ? "Wert bei Erwerb + Nebenkosten − Darlehen" : "Kaufpreis + Nebenkosten − Darlehen"}
+                />
+                <Kpi label="Cashflow seit Erwerb" value={formatSignedEUR0(w.current.cumulative)} hint="Miete + Vorauszahlungen − Hausgeld − Kosten − Raten" />
+                {w.current.withdrawn > 0 && (
+                  <Kpi
+                    label="Entnommen seit Erwerb"
+                    value={formatEUR0(w.current.withdrawn)}
+                    hint={`Überschuss nach Entnahmen ${formatSignedEUR0(w.current.cumulative - w.current.withdrawn)}`}
+                  />
+                )}
+                <Kpi label="Zuwachs" value={formatSignedEUR0(w.gain)} hint={w.baseline > 0 ? formatPct(w.gain / w.baseline) : undefined} />
+              </div>
+              {w.points.length >= 2 && <ValueChart points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />}
+              <div className="table-wrap" style={{ marginTop: 12 }}>
+                <table className="compact">
+                  <thead>
+                    <tr>
+                      <th>Jahr</th>
+                      <th className="num">Marktwert</th>
+                      <th className="num">Restschuld</th>
+                      <th className="num">Cashflow im Jahr</th>
+                      {w.current.withdrawn > 0 && <th className="num">Entnahmen</th>}
+                      <th className="num">Vermögenswert</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {yearRows(w).map((y) => (
+                      <tr key={y.year}>
+                        <td>{y.year}{y.partial ? " (bis heute)" : ""}</td>
+                        <td className="num">{formatEUR0(y.value)}</td>
+                        <td className="num">{formatEUR0(y.debt)}</td>
+                        <td className="num">{formatSignedEUR0(y.cashflow)}</td>
+                        {w.current.withdrawn > 0 && <td className="num">{formatEUR0(-y.withdrawn)}</td>}
+                        <td className="num"><strong>{formatEUR0(y.wealth)}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {w.loanDeviation !== null && (
+                <div className="alert warn small" style={{ marginTop: 10 }}>
+                  Die eingetragene Restschuld weicht um {formatEUR0(w.loanDeviation)} vom berechneten Tilgungsplan ab (z. B. Sondertilgung oder geänderte Rate). Für heute gilt die
+                  eingetragene Restschuld.
+                </div>
+              )}
+              <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
+                Monatlich: Miete{p.type === "etw" ? " und Betriebskostenvorauszahlungen" : ""} wie vereinbart
+                {p.type === "etw" ? ", abzüglich Hausgeld (laut Wirtschaftsplan des Jahres) sowie Grundsteuer und Müll laut Bescheid ab dem Jahr, ab dem du sie trägst" : ""},
+                eigener Kosten und Kreditraten; Ergebnisse freigegebener Abrechnungen im Monat der Freigabe; Entnahmen vom Mietkonto mindern den Wert. Marktwert linear zwischen
+                den Bewertungen. Vor Steuern.
+              </p>
+            </div>
+          ) : (
+            <div className="alert info">
+              Für die Vermögensentwicklung fehlen Erwerbsdatum und Kaufpreis bzw. Wert bei Schenkung. <a href={`#/objekte/${p.id}/bearbeiten`}>Erwerb erfassen</a>
             </div>
           )}
-          <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
-            Monatlich: Miete{p.type === "etw" ? " und Betriebskostenvorauszahlungen" : ""} wie vereinbart
-            {p.type === "etw" ? ", abzüglich Hausgeld (laut Wirtschaftsplan des Jahres) sowie Grundsteuer und Müll laut Bescheid ab dem Jahr, ab dem du sie trägst" : ""},
-            eigener Kosten und Kreditraten; Ergebnisse freigegebener Abrechnungen im Monat der Freigabe; Entnahmen vom Mietkonto mindern den Wert. Marktwert linear zwischen
-            den Bewertungen. Vor Steuern.
-          </p>
-        </div>
-      ) : (
-        <div className="alert info">
-          Für die Vermögensentwicklung fehlen Erwerbsdatum und Kaufpreis bzw. Wert bei Schenkung. <a href={`#/objekte/${p.id}/bearbeiten`}>Erwerb erfassen</a>
-        </div>
-      )}
 
-      <AccountCard data={data} property={p} />
+          <AccountCard data={data} property={p} />
 
-      <div className="card" id="wertentwicklung">
-        <h2>Wertentwicklung</h2>
-        {m.history.length >= 2 ? (
-          <ValueChart points={m.history} height={200} label={`Wertverlauf ${p.name}`} />
-        ) : (
-          <p className="muted small">Trage unten eine aktuelle Schätzung ein, dann erscheint hier der Verlauf.</p>
-        )}
-        <ul className="account-list">
-          {p.purchaseDate && p.purchasePrice > 0 && (
-            <li>
-              <div className="account-what">
-                <span>{p.acquisitionType && p.acquisitionType !== "purchase" ? "Wert beim Erwerb" : "Kaufpreis"}</span>
-                <span className="small muted">{formatDate(p.purchaseDate)}</span>
-              </div>
-              <div className="account-amount">
-                <span className="out">{formatEUR0(p.purchasePrice)}</span>
-              </div>
-            </li>
-          )}
-          {[...p.valuations]
-            .sort((a, b) => a.date.localeCompare(b.date))
-            .map((v) => (
-              <li key={v.id}>
-                <div className="account-what">
-                  <span>{v.note || "Bewertung"}</span>
-                  <span className="small muted">{formatDate(v.date)}</span>
-                </div>
-                <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
-                  <div className="account-amount">
-                    <span className="out">{formatEUR0(v.value)}</span>
+          <div className="card" id="wertentwicklung">
+            <h2>Wertentwicklung</h2>
+            {m.history.length >= 2 ? (
+              <ValueChart points={m.history} height={200} label={`Wertverlauf ${p.name}`} />
+            ) : (
+              <p className="muted small">Trage unten eine aktuelle Schätzung ein, dann erscheint hier der Verlauf.</p>
+            )}
+            <ul className="account-list">
+              {p.purchaseDate && p.purchasePrice > 0 && (
+                <li>
+                  <div className="account-what">
+                    <span>{p.acquisitionType && p.acquisitionType !== "purchase" ? "Wert beim Erwerb" : "Kaufpreis"}</span>
+                    <span className="small muted">{formatDate(p.purchaseDate)}</span>
                   </div>
-                  <button className="ghost" onClick={() => setValuations(p.valuations.filter((x) => x.id !== v.id))} aria-label="Bewertung löschen">
-                    ✕
-                  </button>
-                </div>
-              </li>
-            ))}
-        </ul>
-        <div className="valuation-form">
-          <div className="account-label">Neue Bewertung</div>
-          <div className="valuation-fields">
-            <label className="field">
-              Datum
-              <input type="date" value={valDate} onChange={(e) => setValDate(e.target.value)} />
-            </label>
-            <label className="field">
-              Marktwert (€)
-              <NumberInput value={valValue || undefined} onChange={setValValue} placeholder="135.000" />
-            </label>
-            <label className="field valuation-note">
-              Quelle / Notiz
-              <input value={valNote} onChange={(e) => setValNote(e.target.value)} placeholder="z. B. BORIS.NRW, Gutachten, Vergleichsangebote" />
-            </label>
-            <button className="primary valuation-add" disabled={!valValue} onClick={addValuation}>
-              Erfassen
-            </button>
+                  <div className="account-amount">
+                    <span className="out">{formatEUR0(p.purchasePrice)}</span>
+                  </div>
+                </li>
+              )}
+              {[...p.valuations]
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .map((v) => (
+                  <li key={v.id}>
+                    <div className="account-what">
+                      <span>{v.note || "Bewertung"}</span>
+                      <span className="small muted">{formatDate(v.date)}</span>
+                    </div>
+                    <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
+                      <div className="account-amount">
+                        <span className="out">{formatEUR0(v.value)}</span>
+                      </div>
+                      <button className="ghost" onClick={() => setValuations(p.valuations.filter((x) => x.id !== v.id))} aria-label="Bewertung löschen">
+                        ✕
+                      </button>
+                    </div>
+                  </li>
+                ))}
+            </ul>
+            <div className="valuation-form">
+              <div className="account-label">Neue Bewertung</div>
+              <div className="valuation-fields">
+                <label className="field">
+                  Datum
+                  <input type="date" value={valDate} onChange={(e) => setValDate(e.target.value)} />
+                </label>
+                <label className="field">
+                  Marktwert (€)
+                  <NumberInput value={valValue || undefined} onChange={setValValue} placeholder="135.000" />
+                </label>
+                <label className="field valuation-note">
+                  Quelle / Notiz
+                  <input value={valNote} onChange={(e) => setValNote(e.target.value)} placeholder="z. B. BORIS.NRW, Gutachten, Vergleichsangebote" />
+                </label>
+                <button className="primary valuation-add" disabled={!valValue} onClick={addValuation}>
+                  Erfassen
+                </button>
+              </div>
+              <p className="small muted" style={{ margin: "8px 0 0" }}>Aktualisiere den Marktwert etwa einmal im Jahr – wie den Kurs einer Aktie im Depot.</p>
+            </div>
           </div>
-          <p className="small muted" style={{ margin: "8px 0 0" }}>Aktualisiere den Marktwert etwa einmal im Jahr – wie den Kurs einer Aktie im Depot.</p>
-        </div>
-      </div>
+        </>
+      )}
 
       <div className="card" id="mieter">
         <div className="row" style={{ marginBottom: 8 }}>
@@ -385,84 +390,88 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         </div>
       )}
 
-      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
-        <div className="card" style={{ marginBottom: 0 }}>
-          <h2>Wirtschaftlichkeit p. a.</h2>
-          <table className="compact fin-table">
-            <tbody>
-              <Line label="Nettokaltmiete (aktuell × 12)" value={m.annualColdRent} />
-              <Line
-                label={`− nicht umlagefähige Kosten${m.hausgeldPlanYear ? ` (Hausgeld laut Wirtschaftsplan ${m.hausgeldPlanYear}, inkl. Rücklage ${formatEUR0(m.reserve)})` : ""}`}
-                value={-m.nonAllocableCosts}
-              />
-              <Line label="= Reinertrag" value={m.annualColdRent - m.nonAllocableCosts} sum />
-              <Line label="− Zinsen" value={-m.annualInterest} />
-              <Line label="− Tilgung" value={-m.annualPrincipal} />
-              <Line label="= Cashflow vor Steuern" value={m.cashflowBeforeTax} sum />
-              <Line label={m.taxEffect >= 0 ? "− Einkommensteuer" : "+ Steuerersparnis"} value={-m.taxEffect} />
-              <Line label="= Cashflow nach Steuern" value={m.cashflowAfterTax} sum />
-            </tbody>
-          </table>
-          <p className="hint" style={{ marginTop: 8 }}>
-            Umlagefähige Betriebskosten sind durchlaufende Posten und hier nicht enthalten. Die Tilgung baut Vermögen auf und zählt zur Eigenkapitalrendite.
-          </p>
-        </div>
+      {portfolio && (
+        <>
+          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+            <div className="card" style={{ marginBottom: 0 }}>
+              <h2>Wirtschaftlichkeit p. a.</h2>
+              <table className="compact fin-table">
+                <tbody>
+                  <Line label="Nettokaltmiete (aktuell × 12)" value={m.annualColdRent} />
+                  <Line
+                    label={`− nicht umlagefähige Kosten${m.hausgeldPlanYear ? ` (Hausgeld laut Wirtschaftsplan ${m.hausgeldPlanYear}, inkl. Rücklage ${formatEUR0(m.reserve)})` : ""}`}
+                    value={-m.nonAllocableCosts}
+                  />
+                  <Line label="= Reinertrag" value={m.annualColdRent - m.nonAllocableCosts} sum />
+                  <Line label="− Zinsen" value={-m.annualInterest} />
+                  <Line label="− Tilgung" value={-m.annualPrincipal} />
+                  <Line label="= Cashflow vor Steuern" value={m.cashflowBeforeTax} sum />
+                  <Line label={m.taxEffect >= 0 ? "− Einkommensteuer" : "+ Steuerersparnis"} value={-m.taxEffect} />
+                  <Line label="= Cashflow nach Steuern" value={m.cashflowAfterTax} sum />
+                </tbody>
+              </table>
+              <p className="hint" style={{ marginTop: 8 }}>
+                Umlagefähige Betriebskosten sind durchlaufende Posten und hier nicht enthalten. Die Tilgung baut Vermögen auf und zählt zur Eigenkapitalrendite.
+              </p>
+            </div>
 
-        <div className="card" style={{ marginBottom: 0 }}>
-          <h2>Steuer – Anlage V (Schätzung)</h2>
-          <table className="compact fin-table">
-            <tbody>
-              <Line label="Mieteinnahmen (kalt)" value={m.annualColdRent} />
-              <Line label={`− AfA ${formatPct(m.depreciationRate)} auf Gebäudeanteil`} value={-m.annualDepreciation} />
-              <Line label="− Schuldzinsen" value={-m.annualInterest} />
-              <Line
-                label="− Verwaltung, Instandhaltung, Sonstiges"
-                value={-(m.nonAllocableCosts - p.hausgeldReserveMonthly * 12)}
-              />
-              <Line label={m.taxableResult >= 0 ? "= Überschuss" : "= Verlust (mindert dein Einkommen)"} value={m.taxableResult} sum />
-              <Line label={`Steuerwirkung bei ${formatNum(taxRate)} % Grenzsteuersatz`} value={-m.taxEffect} />
-            </tbody>
-          </table>
-          <p className="hint" style={{ marginTop: 8 }}>
-            Vereinfachte Jahresbetrachtung. Die Erhaltungsrücklage ist erst bei Verwendung abziehbar. Den Steuersatz änderst du in den{" "}
-            <a href="#/einstellungen">Einstellungen</a>. Keine Steuerberatung.
-          </p>
-        </div>
-      </div>
-
-      {p.loans.length > 0 && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <h2>Finanzierung</h2>
-          <div className="table-wrap">
-            <table className="compact">
-              <thead>
-                <tr>
-                  <th>Bank</th>
-                  <th className="num">Restschuld</th>
-                  <th className="num">Zins</th>
-                  <th className="num">Rate / Monat</th>
-                  <th>Zinsbindung bis</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.loans.map((l) => {
-                  const soon = l.fixedUntil && l.fixedUntil <= addMonths(today, 24);
-                  return (
-                    <tr key={l.id}>
-                      <td>{l.lender || "Darlehen"}</td>
-                      <td className="num">{formatEUR0(l.balance)}</td>
-                      <td className="num">{formatNum(l.interestRate)} %</td>
-                      <td className="num">{formatEUR(l.monthlyPayment)}</td>
-                      <td>
-                        {formatDate(l.fixedUntil) || "–"} {soon && <span className="badge warn">⚠ Anschlussfinanzierung planen</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="card" style={{ marginBottom: 0 }}>
+              <h2>Steuer – Anlage V (Schätzung)</h2>
+              <table className="compact fin-table">
+                <tbody>
+                  <Line label="Mieteinnahmen (kalt)" value={m.annualColdRent} />
+                  <Line label={`− AfA ${formatPct(m.depreciationRate)} auf Gebäudeanteil`} value={-m.annualDepreciation} />
+                  <Line label="− Schuldzinsen" value={-m.annualInterest} />
+                  <Line
+                    label="− Verwaltung, Instandhaltung, Sonstiges"
+                    value={-(m.nonAllocableCosts - p.hausgeldReserveMonthly * 12)}
+                  />
+                  <Line label={m.taxableResult >= 0 ? "= Überschuss" : "= Verlust (mindert dein Einkommen)"} value={m.taxableResult} sum />
+                  <Line label={`Steuerwirkung bei ${formatNum(taxRate)} % Grenzsteuersatz`} value={-m.taxEffect} />
+                </tbody>
+              </table>
+              <p className="hint" style={{ marginTop: 8 }}>
+                Vereinfachte Jahresbetrachtung. Die Erhaltungsrücklage ist erst bei Verwendung abziehbar. Den Steuersatz änderst du in den{" "}
+                <a href="#/einstellungen">Einstellungen</a>. Keine Steuerberatung.
+              </p>
+            </div>
           </div>
-        </div>
+
+          {p.loans.length > 0 && (
+            <div className="card" style={{ marginTop: 16 }}>
+              <h2>Finanzierung</h2>
+              <div className="table-wrap">
+                <table className="compact">
+                  <thead>
+                    <tr>
+                      <th>Bank</th>
+                      <th className="num">Restschuld</th>
+                      <th className="num">Zins</th>
+                      <th className="num">Rate / Monat</th>
+                      <th>Zinsbindung bis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {p.loans.map((l) => {
+                      const soon = l.fixedUntil && l.fixedUntil <= addMonths(today, 24);
+                      return (
+                        <tr key={l.id}>
+                          <td>{l.lender || "Darlehen"}</td>
+                          <td className="num">{formatEUR0(l.balance)}</td>
+                          <td className="num">{formatNum(l.interestRate)} %</td>
+                          <td className="num">{formatEUR(l.monthlyPayment)}</td>
+                          <td>
+                            {formatDate(l.fixedUntil) || "–"} {soon && <span className="badge warn">⚠ Anschlussfinanzierung planen</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <div className="card" style={{ marginTop: 16 }}>

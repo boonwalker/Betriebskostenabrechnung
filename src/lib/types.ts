@@ -398,6 +398,8 @@ export interface Settings {
   inviteCode?: string;
   /** persönlicher Grenzsteuersatz in % (inkl. Soli/KiSt) für die Renditeberechnung nach Steuern */
   marginalTaxRate: number;
+  /** false = nur Betriebskostenabrechnung, ohne Vermögen, Rendite und Finanzierung; fehlt = alles */
+  portfolio?: boolean;
 }
 
 export interface AppData {

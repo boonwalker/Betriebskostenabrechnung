@@ -32,6 +32,9 @@ export async function lettersToPdf(letters: { el: HTMLElement; attachments: PdfA
   let first = true;
 
   for (const { el, attachments } of letters) {
+    // Fußzeile nicht mitrendern, sondern unten auf jede Seite des Anschreibens setzen (mit Seitenzahl)
+    const foot = [...el.querySelectorAll(".letter-foot > span")].map((n) => (n.textContent ?? "").trim());
+    const letterPages: number[] = [];
     let breaks: number[] = [];
     const canvas = await html2canvas(el, {
       scale: 2,
@@ -92,9 +95,11 @@ export async function lettersToPdf(letters: { el: HTMLElement; attachments: PdfA
 
       if (!first) pdf.addPage();
       first = false;
+      letterPages.push(pdf.getNumberOfPages());
       pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", 0, top / PX_PER_MM, A4_W_MM, (end - y) / PX_PER_MM);
       y = end;
     }
+    drawFooter(pdf, foot, letterPages);
 
     // Anlagen: je Seite ein Blatt, Bild innerhalb der Ränder eingepasst, Bezeichnung darüber
     const counts = new Map<string, number>();
@@ -116,6 +121,23 @@ export async function lettersToPdf(letters: { el: HTMLElement; attachments: PdfA
     }
   }
   return pdf.output("blob");
+}
+
+/** Fußzeile wie in der Vorschau: Linie, links Abrechnung und Einheit, rechts die Anschrift; ab zwei Seiten mit Seitenzahl */
+function drawFooter(pdf: import("jspdf").jsPDF, [left = "", right = ""]: string[], pages: number[]) {
+  const x1 = 25, x2 = A4_W_MM - 20, line = A4_H_MM - 9.5, base = A4_H_MM - 6.5;
+  pages.forEach((n, i) => {
+    pdf.setPage(n);
+    pdf.setDrawColor(217, 225, 229);
+    pdf.setLineWidth(0.2);
+    pdf.line(x1, line, x2, line);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(91, 107, 120);
+    pdf.text(pages.length > 1 ? `${left} · Seite ${i + 1} von ${pages.length}` : left, x1, base);
+    pdf.text(right, x2, base, { align: "right" });
+  });
+  if (pages.length) pdf.setPage(pages[pages.length - 1]);
 }
 
 type Downloads = { save(r: { filename: string; data: Blob }): Promise<{ status: string }> };

@@ -3,17 +3,33 @@ import { NumberInput, type PageProps } from "../components/ui";
 import { todayISO } from "../lib/dates";
 import { depreciationRate } from "../lib/finance";
 import { formatEUR, formatPct } from "../lib/format";
-import { newProperty, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
+import { newProperty, portfolioOn, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
 import type { Loan, Property, PropertyType } from "../lib/types";
 import { AcquisitionFields, Field } from "./PropertyEditor";
 
-const STEPS = ["Objekt", "Erwerb", "Finanzierung", "Wohnungen", "Laufende Kosten", "Aktueller Wert"];
+type StepKey = "objekt" | "erwerb" | "finanzierung" | "wohnungen" | "kosten" | "wert";
+const STEP_LABELS: Record<StepKey, string> = {
+  objekt: "Objekt",
+  erwerb: "Erwerb",
+  finanzierung: "Finanzierung",
+  wohnungen: "Wohnungen",
+  kosten: "Laufende Kosten",
+  wert: "Aktueller Wert",
+};
+const ALL_STEPS: StepKey[] = ["objekt", "erwerb", "finanzierung", "wohnungen", "kosten", "wert"];
+/** Was die Betriebskostenabrechnung braucht – der Rest dient nur Vermögen, Rendite und Finanzierung */
+const BASIC_STEPS: StepKey[] = ["objekt", "wohnungen"];
 
 /**
  * Geführte Anlage eines neuen Objekts: fragt nacheinander alles ab, was für Vermögensentwicklung,
- * Rendite, Abschreibung und Betriebskostenabrechnung gebraucht wird.
+ * Rendite, Abschreibung und Betriebskostenabrechnung gebraucht wird. Die Vermögensangaben lassen sich überspringen;
+ * ohne Portfolio fragt der Assistent nur Objekt und Wohnungen ab.
  */
-export default function PropertyWizard({ update }: PageProps) {
+export default function PropertyWizard({ data, update }: PageProps) {
+  const portfolio = portfolioOn(data.settings);
+  // nur Objekt und Wohnungen abfragen (ohne Portfolio oder nach „alle Vermögensangaben überspringen“)
+  const [basic, setBasic] = useState(!portfolio);
+  const steps = basic ? BASIC_STEPS : ALL_STEPS;
   const [p, setP] = useState<Property>(() => ({ ...newProperty(), acquisitionType: "purchase" }));
   const [step, setStep] = useState(0);
   const [hasLoan, setHasLoan] = useState<boolean | null>(null);
@@ -22,43 +38,65 @@ export default function PropertyWizard({ update }: PageProps) {
   const setLoan = (id: string, patch: Partial<Loan>) => set({ loans: p.loans.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
   const free = (p.acquisitionType ?? "purchase") !== "purchase";
 
-  const stepValid = [
-    p.name.trim().length > 0,
-    !!p.purchaseDate && p.purchasePrice > 0,
-    hasLoan === false || (hasLoan === true && p.loans.length > 0 && p.loans.every((l) => l.principal > 0 && l.monthlyPayment > 0 && l.startDate)),
-    p.units.length > 0 && p.units.every((u) => u.name.trim() && u.area > 0),
-    true,
-    true,
-  ];
+  const key = steps[step];
+  const valid: Record<StepKey, boolean> = {
+    objekt: p.name.trim().length > 0,
+    erwerb: !!p.purchaseDate && p.purchasePrice > 0,
+    finanzierung:
+      hasLoan === false || (hasLoan === true && p.loans.length > 0 && p.loans.every((l) => l.principal > 0 && l.monthlyPayment > 0 && l.startDate)),
+    wohnungen: p.units.length > 0 && p.units.every((u) => u.name.trim() && u.area > 0),
+    kosten: true,
+    wert: true,
+  };
+  const last = step === steps.length - 1;
+  const wealthStep = key === "erwerb" || key === "finanzierung" || key === "kosten" || key === "wert";
 
-  const finish = () => {
+  /** Schritt ohne Angaben verlassen: Unvollständiges wird verworfen, später unter „Objektdaten bearbeiten“ nachtragbar */
+  const skip = () => {
+    if (key === "erwerb" && !valid.erwerb) set({ purchaseDate: null, purchasePrice: 0 });
+    if (key === "finanzierung") setHasLoan(false);
+    if (key === "wert") setCurrentValue(0);
+    if (last) finish(key === "wert" ? 0 : currentValue);
+    else setStep(step + 1);
+  };
+
+  /** Alle Vermögensangaben überspringen: weiter mit den Wohnungen, danach anlegen */
+  const skipAll = () => {
+    if (!valid.erwerb) set({ purchaseDate: null, purchasePrice: 0 });
+    setHasLoan(false);
+    setCurrentValue(0);
+    setBasic(true);
+    setStep(BASIC_STEPS.indexOf("wohnungen"));
+  };
+
+  function finish(value = currentValue) {
     const today = todayISO();
-    const valuations = currentValue > 0 ? [{ id: uid(), date: today, value: currentValue, note: "bei Anlage geschätzt" }] : [];
+    const valuations = value > 0 ? [{ id: uid(), date: today, value, note: "bei Anlage geschätzt" }] : [];
     // Ohne eingetragene Restschuld gilt zunächst der Darlehensbetrag; der Verlauf folgt dem Tilgungsplan
     const loans = hasLoan ? p.loans.map((l) => ({ ...l, balance: l.balance || l.principal })) : [];
     const saved = { ...p, loans, valuations };
     update((d) => ({ ...d, properties: [...d.properties, saved] }));
     window.location.hash = `#/objekte/${saved.id}`;
-  };
+  }
 
   return (
     <>
       <div className="page-head">
         <div>
-          <a href="#/" className="small">← Portfolio</a>
+          <a href="#/" className="small">← {portfolio ? "Portfolio" : "Objekte"}</a>
           <h1>Neues Objekt</h1>
         </div>
       </div>
       <div className="wizard-steps">
-        {STEPS.map((s, i) => (
+        {steps.map((s, i) => (
           <span key={s} className={i === step ? "active" : i < step ? "done" : ""}>
-            {i + 1}. {s}
+            {i + 1}. {STEP_LABELS[s]}
           </span>
         ))}
       </div>
 
       <div className="card stack">
-        {step === 0 && (
+        {key === "objekt" && (
           <>
             <h2>Um welches Objekt geht es?</h2>
             <div className="choice-row">
@@ -75,7 +113,7 @@ export default function PropertyWizard({ update }: PageProps) {
               <Field label="Anschrift">
                 <input value={p.address} onChange={(e) => set({ address: e.target.value })} placeholder="Straße Nr., PLZ Ort" />
               </Field>
-              <Field label="Baujahr (Fertigstellung)" hint={`Abschreibung ${formatPct(depreciationRate(p.yearBuilt))} p. a.`}>
+              <Field label="Baujahr (Fertigstellung)" hint={basic ? "optional" : `Abschreibung ${formatPct(depreciationRate(p.yearBuilt))} p. a.`}>
                 <input
                   type="number"
                   value={p.yearBuilt ?? ""}
@@ -87,7 +125,7 @@ export default function PropertyWizard({ update }: PageProps) {
           </>
         )}
 
-        {step === 1 && (
+        {key === "erwerb" && (
           <>
             <h2>Wie hast du das Objekt erworben?</h2>
             <p className="hint">Ab diesem Datum und Wert rechnet die App deine Vermögensentwicklung – wie den Einstand einer Aktie im Depot.</p>
@@ -100,7 +138,7 @@ export default function PropertyWizard({ update }: PageProps) {
           </>
         )}
 
-        {step === 2 && (
+        {key === "finanzierung" && (
           <>
             <h2>{free ? "Hast du ein Darlehen übernommen oder aufgenommen?" : "Wie hast du den Kauf finanziert?"}</h2>
             <div className="choice-row">
@@ -175,7 +213,7 @@ export default function PropertyWizard({ update }: PageProps) {
           </>
         )}
 
-        {step === 3 && (
+        {key === "wohnungen" && (
           <>
             <h2>Welche Wohnungen gehören dazu?</h2>
             <p className="hint">Die Wohnfläche ist Grundlage der Umlage. Bei einer Eigentumswohnung zusätzlich der Miteigentumsanteil laut Teilungserklärung.</p>
@@ -214,7 +252,7 @@ export default function PropertyWizard({ update }: PageProps) {
           </>
         )}
 
-        {step === 4 && (
+        {key === "kosten" && (
           <>
             <h2>Welche laufenden Kosten trägst du?</h2>
             <p className="hint">Diese Beträge gehen jeden Monat von deinem Cashflow ab. Umlagefähige Kosten bezahlen deine Mieter über die Vorauszahlungen.</p>
@@ -245,7 +283,7 @@ export default function PropertyWizard({ update }: PageProps) {
           </>
         )}
 
-        {step === 5 && (
+        {key === "wert" && (
           <>
             <h2>Was ist das Objekt heute wert?</h2>
             <p className="hint">
@@ -260,14 +298,29 @@ export default function PropertyWizard({ update }: PageProps) {
           </>
         )}
 
+        {wealthStep && (
+          <p className="small muted wizard-skip-hint">
+            Nur für Vermögen, Rendite und Finanzierung nötig – für die Betriebskostenabrechnung kannst du das{" "}
+            <button type="button" className="link" onClick={skipAll}>
+              alles überspringen
+            </button>{" "}
+            und später unter „Objektdaten bearbeiten“ nachtragen.
+          </p>
+        )}
+
         <div className="row" style={{ marginTop: 8 }}>
           {step > 0 && <button onClick={() => setStep(step - 1)}>Zurück</button>}
           <span className="spacer" />
-          {!stepValid[step] && <span className="small muted">{step === 2 ? "Bitte auswählen und Darlehensdaten ergänzen." : "Bitte die Pflichtangaben ausfüllen."}</span>}
-          {step < STEPS.length - 1 ? (
-            <button className="primary" disabled={!stepValid[step]} onClick={() => setStep(step + 1)}>Weiter</button>
+          {!valid[key] && <span className="small muted">{key === "finanzierung" ? "Bitte auswählen und Darlehensdaten ergänzen." : "Bitte die Pflichtangaben ausfüllen."}</span>}
+          {wealthStep && (
+            <button className="ghost" onClick={skip}>
+              Überspringen
+            </button>
+          )}
+          {!last ? (
+            <button className="primary" disabled={!valid[key]} onClick={() => setStep(step + 1)}>Weiter</button>
           ) : (
-            <button className="primary" onClick={finish}>Objekt anlegen</button>
+            <button className="primary" disabled={!valid[key]} onClick={() => finish()}>Objekt anlegen</button>
           )}
         </div>
       </div>

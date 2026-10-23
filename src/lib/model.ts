@@ -1,4 +1,4 @@
-import type { AppData, EconomicPlan, ISODate, Property, RentPeriod, Statement, Tenant } from "./types";
+import type { AppData, EconomicPlan, ISODate, Property, RentPeriod, Settings, Statement, Tenant } from "./types";
 
 export const uid = () => crypto.randomUUID();
 
@@ -152,30 +152,35 @@ export interface MissingItem {
   href: string;
 }
 
-/** Angaben, die für Abrechnung und Rendite noch fehlen – jeweils mit Sprungziel */
-export function missingInfo(p: Property, tenants: Tenant[], plans: EconomicPlan[] = []): MissingItem[] {
+/** Portfolio-Funktionen (Vermögen, Rendite, Finanzierung) eingeschaltet? */
+export const portfolioOn = (s: Pick<Settings, "portfolio">) => s.portfolio !== false;
+
+/** Angaben, die für Abrechnung und Rendite noch fehlen – jeweils mit Sprungziel; ohne Portfolio nur, was die Abrechnung braucht */
+export function missingInfo(p: Property, tenants: Tenant[], plans: EconomicPlan[] = [], portfolio = true): MissingItem[] {
   const out: MissingItem[] = [];
   const edit = (f: string) => `#/objekte/${p.id}/bearbeiten?f=${f}`;
   const detail = (q: string) => `#/objekte/${p.id}?${q}`;
   const free = (p.acquisitionType ?? "purchase") !== "purchase";
-  if (!p.purchasePrice)
-    out.push({ text: free ? "Verkehrswert bei Schenkung bzw. Erbschaft (für die Vermögensentwicklung)" : "Kaufpreis (für Rendite und Abschreibung)", href: edit("erwerb") });
-  if (!p.purchaseDate) out.push({ text: "Erwerbsdatum (für die Vermögensentwicklung)", href: edit("erwerb") });
-  if (free && !p.predecessorCost) out.push({ text: "Anschaffungskosten des Rechtsvorgängers (für die fortgeführte Abschreibung)", href: edit("erwerb") });
-  if (p.loans.some((l) => !l.startDate)) out.push({ text: "Auszahlungsdatum der Darlehen (für den Tilgungsverlauf)", href: edit("finanzierung") });
-  if (!p.yearBuilt) out.push({ text: "Baujahr (bestimmt den Abschreibungssatz)", href: edit("allgemein") });
-  if (p.valuations.length === 0)
-    out.push({
-      text:
-        free && p.purchasePrice > 0 && p.purchasePrice === p.propertyTaxValue
-          ? "Aktueller Marktwert (bisher nur Grundsteuerwert als Untergrenze)"
-          : "Aktueller Marktwert (Schätzung)",
-      href: detail("f=wertentwicklung"),
-    });
+  if (portfolio) {
+    if (!p.purchasePrice)
+      out.push({ text: free ? "Verkehrswert bei Schenkung bzw. Erbschaft (für die Vermögensentwicklung)" : "Kaufpreis (für Rendite und Abschreibung)", href: edit("erwerb") });
+    if (!p.purchaseDate) out.push({ text: "Erwerbsdatum (für die Vermögensentwicklung)", href: edit("erwerb") });
+    if (free && !p.predecessorCost) out.push({ text: "Anschaffungskosten des Rechtsvorgängers (für die fortgeführte Abschreibung)", href: edit("erwerb") });
+    if (p.loans.some((l) => !l.startDate)) out.push({ text: "Auszahlungsdatum der Darlehen (für den Tilgungsverlauf)", href: edit("finanzierung") });
+    if (!p.yearBuilt) out.push({ text: "Baujahr (bestimmt den Abschreibungssatz)", href: edit("allgemein") });
+    if (p.valuations.length === 0)
+      out.push({
+        text:
+          free && p.purchasePrice > 0 && p.purchasePrice === p.propertyTaxValue
+            ? "Aktueller Marktwert (bisher nur Grundsteuerwert als Untergrenze)"
+            : "Aktueller Marktwert (Schätzung)",
+        href: detail("f=wertentwicklung"),
+      });
+  }
   if (p.units.some((u) => !u.area)) out.push({ text: "Wohnfläche aller Einheiten (Umlageschlüssel)", href: edit("wohnungen") });
   // Hausgeld kommt aus dem erfassten Wirtschaftsplan; die Handangabe ist nur der Ersatz ohne Plan
   const hasPlan = plans.some((x) => x.propertyId === p.id && x.monthlyHausgeld !== null);
-  if (p.type === "etw" && !p.hausgeldMonthly && !hasPlan) out.push({ text: "Hausgeld: Wirtschaftsplan der WEG erfassen", href: detail("f=weg-unterlagen") });
+  if (portfolio && p.type === "etw" && !p.hausgeldMonthly && !hasPlan) out.push({ text: "Hausgeld: Wirtschaftsplan der WEG erfassen", href: detail("f=weg-unterlagen") });
   const today = new Date().toISOString().slice(0, 10);
   // Ausgezogene Mieter der letzten zwei Jahre: für die Abrechnung wird die neue Anschrift gebraucht
   const twoYearsAgo = `${Number(today.slice(0, 4)) - 2}${today.slice(4)}`;

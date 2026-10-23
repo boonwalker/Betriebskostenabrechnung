@@ -15,6 +15,7 @@ import SettingsPage from "./pages/Settings";
 import Documents from "./pages/Documents";
 import { UploadButtons } from "./components/UploadButtons";
 import { aiAccess } from "./lib/aiAccess";
+import { portfolioOn } from "./lib/model";
 
 function useHashRoute() {
   const [route, setRoute] = useState(() => parseHash());
@@ -33,12 +34,12 @@ function useHashRoute() {
   return route;
 }
 
-const NAV = [
-  ["", "Portfolio"],
+const NAV = (portfolio: boolean) => [
+  ["", portfolio ? "Portfolio" : "Objekte"],
   ["mieter", "Mieter"],
   ["abrechnungen", "Abrechnungen"],
   ["einstellungen", "Einstellungen"],
-] as const;
+];
 
 export default function App() {
   const [data, update, replace, sync] = useAppData();
@@ -46,6 +47,7 @@ export default function App() {
   const [section = "", id, sub] = parts;
   const [menuOpen, setMenuOpen] = useState(false);
   const access = aiAccess(data.settings);
+  const portfolio = portfolioOn(data.settings);
 
   // Belegeingang: verarbeitet im Hintergrund weiter, auch wenn die Seite gewechselt wird
   const upload = (files: File[]) => {
@@ -76,7 +78,7 @@ export default function App() {
   else if (section === "abrechnungen") page = <Statements data={data} update={update} />;
   else if (section === "einstellungen") page = <SettingsPage data={data} update={update} replace={replace} />;
   else if (section === "belege") page = <Documents data={data} update={update} onUpload={upload} />;
-  else page = <Dashboard data={data} replace={replace} />;
+  else page = <Dashboard data={data} update={update} replace={replace} />;
 
   return (
     <>
@@ -87,7 +89,7 @@ export default function App() {
             {processing > 0 && <span className="brand-badge" title="Belege werden verarbeitet">{processing}</span>}
           </button>
           <nav className="nav">
-            {NAV.map(([path, label]) => (
+            {NAV(portfolio).map(([path, label]) => (
               <a key={path} href={`#/${path}`} className={section === path || (path === "" && (section === "objekte" || section === "weg")) ? "active" : ""}>
                 {label}
               </a>
@@ -118,7 +120,7 @@ export default function App() {
               <span aria-hidden>🗂️</span> Belegablage
               {(data.documents?.length ?? 0) > 0 && <span className="main-menu-count">{data.documents!.length}</span>}
             </a>
-            <a href="#/"><span aria-hidden>🏠</span> Portfolio</a>
+            <a href="#/"><span aria-hidden>🏠</span> {portfolio ? "Portfolio" : "Objekte"}</a>
             <a href="#/mieter"><span aria-hidden>👥</span> Mieter</a>
             <a href="#/abrechnungen"><span aria-hidden>🧾</span> Abrechnungen</a>
             <a href="#/einstellungen"><span aria-hidden>⚙️</span> Einstellungen</a>

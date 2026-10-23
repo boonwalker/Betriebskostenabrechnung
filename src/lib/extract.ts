@@ -258,6 +258,86 @@ export async function classifyDocuments(pages: File[], access: AiAccess, propert
   return ClassificationSchema.parse(json);
 }
 
+/* ---------- Mietvertrag ---------- */
+
+const LeaseSchema = z.object({
+  tenantNames: z.array(z.string()),
+  unitName: z.string(),
+  unitArea: z.number().nullable(),
+  isAmendment: z.boolean(),
+  startDate: z.string(),
+  endDate: z.string(),
+  coldRent: z.number().nullable(),
+  surcharge: z.number().nullable(),
+  prepaymentOperating: z.number().nullable(),
+  prepaymentHeating: z.number().nullable(),
+  persons: z.number().int().nullable(),
+  deposit: z.number().nullable(),
+  reference: z.string(),
+  agreedCategories: z.array(z.number().int().min(1).max(16)),
+  otherCosts: z.array(z.string()),
+  allocationRule: z.enum(["weg", "consumption_mea", "unknown"]),
+  propertyTaxIndividual: z.boolean(),
+  paymentTerm: z.enum(["30days", "endOfNextMonth", "unknown"]),
+  notes: z.string(),
+});
+
+export type LeaseExtraction = z.infer<typeof LeaseSchema>;
+
+const LEASE_SYSTEM = `Du liest einen deutschen Wohnraummietvertrag (oder einen Nachtrag dazu) für einen privaten Vermieter aus.
+Erfasse nur, was im Dokument steht; nicht Erkennbares als null bzw. leer. Beträge in Euro als Zahl, Datumsangaben als JJJJ-MM-TT.
+- tenantNames: alle Mieter (Vor- und Nachname), nicht den Vermieter
+- unitName: Bezeichnung der Wohnung laut Vertrag (z. B. „WE 09“, „Wohnung 2. OG links“), unitArea: Wohnfläche in m²
+- isAmendment: true bei Nachtrag/Mieterhöhung; startDate ist dann das Datum, ab dem die neuen Beträge gelten, sonst der Mietbeginn
+- endDate: nur bei befristetem Vertrag, sonst leer
+- coldRent: Nettokaltmiete je Monat für die Wohnung; surcharge: Zuschläge je Monat, die Miete und keine Betriebskosten sind (Stellplatz, Garage, Möblierung)
+- prepaymentOperating: Vorauszahlung Betriebskosten je Monat; prepaymentHeating: Vorauszahlung Heiz-/Warmwasserkosten je Monat.
+  Ist nur eine gemeinsame Vorauszahlung vereinbart, steht sie vollständig in prepaymentOperating und prepaymentHeating ist 0. Bei einer Pauschale (keine Abrechnung) beide null und in notes vermerken.
+- persons: Zahl der einziehenden Personen, wenn angegeben; deposit: Kaution in Euro
+- agreedCategories: Nummern der vereinbarten Betriebskostenarten nach § 2 Nr. 1–16 BetrKV; bei Verweis auf „alle Betriebskosten nach § 2 BetrKV“ alle 1–16
+- otherCosts: namentlich vereinbarte sonstige Betriebskosten (§ 2 Nr. 17 BetrKV)
+- allocationRule: "consumption_mea", wenn nach Verbrauch bzw. Miteigentumsanteilen umgelegt wird; "weg", wenn der Schlüssel der WEG gilt; sonst "unknown"
+- propertyTaxIndividual: true, wenn die Grundsteuer nach dem Einzelbescheid für die Wohnung umgelegt wird
+- paymentTerm: Fälligkeit von Nachzahlung/Guthaben – "endOfNextMonth" (bis Ende des Folgemonats) oder "30days"; sonst "unknown"
+- reference: Fundstelle, z. B. „Mietvertrag vom 10.07.2025, § 3 und § 6“
+Unklarheiten kurz in notes.`;
+
+const nullableNum = { type: ["number", "null"] } as const;
+const LEASE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "tenantNames", "unitName", "unitArea", "isAmendment", "startDate", "endDate", "coldRent", "surcharge", "prepaymentOperating", "prepaymentHeating",
+    "persons", "deposit", "reference", "agreedCategories", "otherCosts", "allocationRule", "propertyTaxIndividual", "paymentTerm", "notes",
+  ],
+  properties: {
+    tenantNames: { type: "array", items: { type: "string" } },
+    unitName: { type: "string" },
+    unitArea: nullableNum,
+    isAmendment: { type: "boolean" },
+    startDate: { type: "string" },
+    endDate: { type: "string" },
+    coldRent: nullableNum,
+    surcharge: nullableNum,
+    prepaymentOperating: nullableNum,
+    prepaymentHeating: nullableNum,
+    persons: { type: ["integer", "null"] },
+    deposit: nullableNum,
+    reference: { type: "string" },
+    agreedCategories: { type: "array", items: { type: "integer" } },
+    otherCosts: { type: "array", items: { type: "string" } },
+    allocationRule: { type: "string", enum: ["weg", "consumption_mea", "unknown"] },
+    propertyTaxIndividual: { type: "boolean" },
+    paymentTerm: { type: "string", enum: ["30days", "endOfNextMonth", "unknown"] },
+    notes: { type: "string" },
+  },
+} as const;
+
+export async function extractLease(files: File[], access: AiAccess): Promise<LeaseExtraction> {
+  const json = await askClaude(files, access, LEASE_SYSTEM, LEASE_SCHEMA, "Bitte lies diesen Mietvertrag aus.");
+  return LeaseSchema.parse(json);
+}
+
 /* ---------- WEG-Jahresabrechnung und Wirtschaftsplan ---------- */
 
 const nullableNumber = { type: ["number", "null"] } as const;

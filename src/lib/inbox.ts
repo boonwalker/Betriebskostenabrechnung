@@ -7,8 +7,9 @@ import type { AiAccess } from "./aiAccess";
 import { autoAttach, heatingSourcePages } from "./attachments";
 import { COST_CATEGORIES } from "./betrkv";
 import { getBlob } from "./blobs";
-import { ensureStatement, uid } from "./model";
-import type { AppData, CostItem, DocPage, DocumentKind, StoredDocument } from "./types";
+import { ensureStatement, newRentPeriod, uid } from "./model";
+import type { LeaseExtraction } from "./extract";
+import type { AppData, CostItem, DocPage, DocumentKind, LeaseAgreement, Property, RentPeriod, StoredDocument, Tenant, Unit } from "./types";
 import { annualFromExtraction, planFromExtraction } from "./wegImport";
 
 export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
@@ -60,7 +61,7 @@ export async function processUpload(files: File[], access: AiAccess, snapshot: A
     pages = await filesToPages(files);
     patchDoc(update, batchId, { pages, result: "Wird erkannt …" });
 
-    const { classifyDocuments, extractInvoice, extractWegDocument } = await import("./extract");
+    const { classifyDocuments, extractInvoice, extractWegDocument, extractLease } = await import("./extract");
     const properties = snapshot.properties.map((p) => ({ id: p.id, name: p.name, address: p.address, units: p.units.map((u) => u.name) }));
     const cls = await classifyDocuments(await pageFiles(pages), access, properties);
 
@@ -88,7 +89,7 @@ export async function processUpload(files: File[], access: AiAccess, snapshot: A
 
     for (const [i, doc] of stored.entries()) {
       try {
-        const outcome = await route(doc, docs[i].c.unitName, access, current, tracked, { extractInvoice, extractWegDocument }, docs[i].c.tenantName ?? "");
+        const outcome = await route(doc, docs[i].c.unitName, access, current, tracked, { extractInvoice, extractWegDocument, extractLease }, docs[i].c.tenantName ?? "");
         patchDoc(update, doc.id, { status: "done", ...outcome });
       } catch (e) {
         patchDoc(update, doc.id, { status: "error", error: (e as Error).message, result: "Abgelegt, aber nicht ausgewertet." });
@@ -99,7 +100,7 @@ export async function processUpload(files: File[], access: AiAccess, snapshot: A
   }
 }
 
-type Extractors = Pick<typeof import("./extract"), "extractInvoice" | "extractWegDocument">;
+type Extractors = Pick<typeof import("./extract"), "extractInvoice" | "extractWegDocument" | "extractLease">;
 
 /** Ein erkanntes Dokument an die passende Stelle bringen; Rückgabe: was geschehen ist */
 async function route(
@@ -108,15 +109,16 @@ async function route(
   access: AiAccess,
   snapshot: AppData,
   update: Update,
-  { extractInvoice, extractWegDocument }: Extractors,
+  { extractInvoice, extractWegDocument, extractLease }: Extractors,
   tenantName = "",
 ): Promise<Partial<StoredDocument>> {
   const property = snapshot.properties.find((p) => p.id === doc.propertyId);
   if (doc.kind === "other") return { result: "Abgelegt." };
   if (!property) return { result: "Abgelegt – kein passendes Objekt gefunden. Bitte unten zuordnen." };
-  if (doc.kind === "lease") return routeLease(doc, property, snapshot, unitName, tenantName);
+
   const year = doc.year;
   const files = await pageFiles(doc.pages);
+  if (doc.kind === "lease") return routeLease(doc, property, snapshot, update, await extractLease(files, access), unitName, tenantName);
 
   /** Abrechnung des Jahres anlegen, falls noch keine da ist (und in dem Jahr vermietet war); Rückgabe: Zusatz für die Meldung */
   const ensure = (y: number): string => {
@@ -213,27 +215,113 @@ async function route(
   return { year: y, result: `${items.length} Position(en) in die Abrechnung ${y} übernommen – bitte prüfen.${extra}`, link: `#/abrechnungen/${st.id}?f=kosten` };
 }
 
-/** Mietvertrag: dem passenden Mieter zuordnen (über den Namen, sonst über Wohnung und Mietbeginn) und ablegen */
-function routeLease(doc: StoredDocument, property: AppData["properties"][number], snapshot: AppData, unitName: string, tenantName: string): Partial<StoredDocument> {
+/**
+ * Mietvertrag: dem passenden Mieter zuordnen (über den Namen, sonst über Wohnung und Mietbeginn). Gibt es ihn noch nicht,
+ * wird er angelegt – samt Wohnung bzw. Stellplatz im Objekt, falls die fehlt. Bei bestehenden Mietern werden nur leere
+ * Angaben ergänzt; ein Nachtrag wird zu einem neuen Mietstand.
+ */
+function routeLease(
+  doc: StoredDocument,
+  property: Property,
+  snapshot: AppData,
+  update: Update,
+  x: LeaseExtraction,
+  unitHint: string,
+  nameHint: string,
+): Partial<StoredDocument> {
   const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const compact = (s: string) => norm(s).replace(/[\s.-]/g, "");
+  const tenantName = x.tenantNames.filter(Boolean).join(" und ") || nameHint;
   const tenants = snapshot.tenants.filter((t) => t.propertyId === property.id);
   const names = norm(tenantName);
-  // Nachname bzw. letzter Namensteil genügt, damit „Luca Schmitz“ auch „Schmitz, Luca“ findet
+  // ein übereinstimmender Namensteil genügt, damit „Luca Schmitz“ auch „Schmitz, Luca“ findet
+  const filler = new Set(["und", "von", "van", "der", "den", "die", "dem", "geb"]);
   const byName = names
-    ? tenants.find((t) => norm(t.name).split(" ").some((part) => part.length > 2 && names.includes(part)))
+    ? tenants.find((t) => norm(t.name).split(/[\s,.]+/).some((part) => part.length > 2 && !filler.has(part) && names.split(/[\s,.]+/).includes(part)))
     : undefined;
-  const unit = property.units.find((u) => norm(u.name).replace(/ /g, "") === norm(unitName).replace(/ /g, ""));
+  const unitLabel = x.unitName || unitHint;
+  let unit = unitLabel ? property.units.find((u) => compact(u.name) === compact(unitLabel)) : undefined;
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(x.startDate) ? x.startDate : null;
   const inUnit = tenants.filter((t) => !unit || t.unitId === unit.id);
-  const byStart = doc.year ? inUnit.find((t) => t.moveIn.startsWith(String(doc.year))) : undefined;
-  const tenant = byName ?? byStart ?? (inUnit.length === 1 ? inUnit[0] : undefined);
-  if (!tenant)
+  const byStart = start ? inUnit.find((t) => t.moveIn === start) : doc.year ? inUnit.find((t) => t.moveIn.startsWith(String(doc.year))) : undefined;
+  const existing = byName ?? byStart;
+
+  const period = (validFrom: string): RentPeriod => ({
+    ...newRentPeriod(validFrom),
+    coldRent: x.coldRent ?? 0,
+    surcharge: x.surcharge || undefined,
+    prepaymentOperating: x.prepaymentOperating ?? 0,
+    prepaymentHeating: x.prepaymentHeating ?? 0,
+  });
+  const lease: LeaseAgreement | null =
+    x.agreedCategories.length || x.otherCosts.length
+      ? {
+          reference: x.reference || doc.title,
+          agreedCategories: [...new Set(x.agreedCategories)].sort((a, b) => a - b),
+          otherCosts: x.otherCosts,
+          allocationRule: x.allocationRule === "weg" ? "weg" : "consumption_mea",
+          propertyTaxIndividual: x.propertyTaxIndividual,
+          paymentTerm: x.paymentTerm === "30days" ? "30days" : "endOfNextMonth",
+        }
+      : null;
+
+  if (existing) {
+    const done: string[] = [];
+    const patch: Partial<Tenant> = {};
+    if (x.isAmendment && start && !existing.rentHistory.some((r) => r.validFrom === start)) {
+      patch.rentHistory = [...existing.rentHistory, period(start)].sort((a, b) => a.validFrom.localeCompare(b.validFrom));
+      done.push(`neuer Mietstand ab ${start.split("-").reverse().join(".")}`);
+    } else if (!x.isAmendment && existing.rentHistory.every((r) => !r.coldRent && !r.prepaymentOperating && !r.prepaymentHeating) && x.coldRent) {
+      patch.rentHistory = [period(existing.rentHistory[0]?.validFrom ?? existing.moveIn)];
+      done.push("Miete und Vorauszahlungen");
+    }
+    if (!existing.lease && lease) {
+      patch.lease = lease;
+      done.push("Betriebskostenvereinbarung");
+    }
+    if (!existing.deposit && x.deposit) {
+      patch.deposit = x.deposit;
+      done.push("Kaution");
+    }
+    if (done.length) update((d) => ({ ...d, tenants: d.tenants.map((t) => (t.id === existing.id ? { ...t, ...patch } : t)) }));
     return {
-      result: `Als Mietvertrag${tenantName ? ` (${tenantName})` : ""} abgelegt – kein passender Mieter gefunden. Lege ihn unter „Mieter“ an.`,
-      link: "#/mieter",
+      result: `Mietvertrag von ${existing.name}${done.length ? ` – ergänzt: ${done.join(", ")}` : " – bereits erfasste Angaben bleiben unverändert"}. Bitte im Mieterprofil prüfen.`,
+      link: `#/objekte/${property.id}?t=${existing.id}`,
+      year: Number((start ?? existing.moveIn).slice(0, 4)),
     };
+  }
+
+  // Neuer Mieter – Wohnung bzw. Stellplatz anlegen, wenn das Objekt sie noch nicht kennt
+  let newUnit: Unit | null = null;
+  if (!unit && unitLabel) newUnit = { id: uid(), name: unitLabel, area: x.unitArea ?? 0 };
+  else if (!unit) unit = property.units.length === 1 ? property.units[0] : undefined;
+  if (!unit && !newUnit) newUnit = { id: uid(), name: `Wohnung ${property.units.length + 1}`, area: x.unitArea ?? 0 };
+  const unitId = (unit ?? newUnit)!.id;
+  const moveIn = start ?? (doc.year ? `${doc.year}-01-01` : new Date().toISOString().slice(0, 8) + "01");
+  const tenant: Tenant = {
+    id: uid(),
+    name: tenantName || "Mieter laut Mietvertrag",
+    mailingAddress: "",
+    propertyId: property.id,
+    unitId,
+    moveIn,
+    moveOut: /^\d{4}-\d{2}-\d{2}$/.test(x.endDate) ? x.endDate : null,
+    persons: x.persons ?? 1,
+    deposit: x.deposit ?? 0,
+    rentHistory: [period(moveIn)],
+    lease,
+  };
+  update((d) => ({
+    ...d,
+    properties: newUnit ? d.properties.map((p) => (p.id === property.id ? { ...p, units: [...p.units, newUnit!] } : p)) : d.properties,
+    tenants: [...d.tenants, tenant],
+  }));
   return {
-    result: `Als Mietvertrag von ${tenant.name} abgelegt – Miete, Vorauszahlungen und vereinbarte Betriebskosten bitte im Mieterprofil prüfen.`,
+    result:
+      `Mieter ${tenant.name} angelegt${newUnit ? `, Einheit „${newUnit.name}“ im Objekt ergänzt` : ""}` +
+      ` – Miete, Vorauszahlungen und vereinbarte Betriebskosten aus dem Vertrag übernommen. Bitte im Mieterprofil prüfen${newUnit && !newUnit.area ? " und die Wohnfläche ergänzen" : ""}.`,
     link: `#/objekte/${property.id}?t=${tenant.id}`,
+    year: Number(moveIn.slice(0, 4)),
   };
 }
 

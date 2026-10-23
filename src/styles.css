@@ -219,7 +219,8 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 .letter-total td { font-weight: 700; font-size: 11pt; border-top: 1.5px solid var(--l-head); border-bottom: 1.5px solid var(--l-head); }
 .letter-notes p { font-size: 9pt; color: var(--l-ink); }
 .letter-small { font-size: 8.5pt; color: var(--l-muted); }
-.letter-sign { margin-top: 8mm !important; }
+/* zwei Leerzeilen mehr vor Grußformel und Anlagen */
+.letter-sign { margin-top: calc(8mm + 30pt) !important; }
 .letter-foot { display: flex; justify-content: space-between; gap: 4mm; border-top: 1px solid var(--l-line); margin-top: 10mm; padding-top: 2mm; font-size: 7.5pt; color: var(--l-muted); }
 .print-toolbar { margin-bottom: 16px; }
 @media (max-width: 640px) {
@@ -250,7 +251,11 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
   .letter-summary { margin: 2mm 0 1mm; }
   .letter table th, .letter table td { padding: 1.4mm 2mm; font-size: 9pt; }
   .letter-notes p { font-size: 8.5pt; }
-  .letter-sign { margin-top: 5mm !important; }
+  .letter-sign { margin-top: calc(5mm + 28pt) !important; }
+  .letter-attachments { margin-top: calc(6mm + 28pt) !important; }
+  /* PDF: ohne Zusatzabstand, wenn er den Schluss sonst allein auf eine neue Seite schöbe */
+  .letter.closing-compact .letter-sign { margin-top: 5mm !important; }
+  .letter.closing-compact .letter-attachments { margin-top: 6mm !important; }
   /* Fußzeile nur am Bildschirm – im Druck stünde sie sonst allein auf einer Folgeseite */
   .letter-foot { display: none; }
   .letter h2 { break-after: avoid; }
@@ -688,7 +693,7 @@ table.meters input.carried { font-style: italic; color: var(--muted); }
 .zoom-bar { margin-bottom: 8px; gap: 6px; }
 .zoom-bar .zoom-value { min-width: 3.5em; text-align: center; font-variant-numeric: tabular-nums; }
 .btn.disabled { opacity: 0.6; pointer-events: none; }
-.letter-attachments { margin-top: 6mm !important; font-size: 9pt; }
+.letter-attachments { margin-top: calc(6mm + 30pt) !important; font-size: 9pt; }
 .letter-attachments strong { display: block; color: var(--l-head); }
 .letter-attachments span { display: block; }
 .attachment-sheet { background: #fff; max-width: 210mm; margin: 0 auto 24px; padding: 10mm 20mm 12mm; border: 1px solid var(--border); }

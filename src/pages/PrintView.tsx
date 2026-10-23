@@ -539,8 +539,7 @@ function Letter({
           {w("können Sie", "kannst du")} bis zum Ablauf des zwölften Monats nach Zugang dieser Abrechnung mitteilen (§ 556 Abs. 3 BGB).
         </p>
         <p className="letter-sign">
-          {w("Mit freundlichen Grüßen", "Viele Grüße")}
-          <br />
+          {w("Freundliche Grüße", "Viele Grüße")}
           <br />
           {landlord.name}
         </p>

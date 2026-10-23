@@ -70,27 +70,37 @@ export async function lettersToPdf(letters: { el: HTMLElement; attachments: PdfA
         clone.style.width = `${PAGE_W_PX}px`;
         clone.style.maxWidth = `${PAGE_W_PX}px`;
         clone.querySelectorAll(".letter-foot").forEach((n) => n.remove());
-        const top = clone.getBoundingClientRect().top;
         const inClosing = (n: Element) => !n.classList.contains("letter-closing") && n.closest(".letter-closing");
-        breaks = [...clone.querySelectorAll(BREAKABLE)]
-          .filter((n) => !inClosing(n))
-          .map((n) => n.getBoundingClientRect().bottom - top)
-          .sort((a, b) => a - b);
+        const measure = () => {
+          const top = clone.getBoundingClientRect().top;
+          breaks = [...clone.querySelectorAll(BREAKABLE)]
+            .filter((n) => !inClosing(n))
+            .map((n) => n.getBoundingClientRect().bottom - top)
+            .sort((a, b) => a - b);
+          return top;
+        };
+        // Zusätzlicher Abstand vor Grußformel und Anlagen nur, wenn er den Schluss nicht allein auf eine neue Seite schiebt
+        const closing = clone.querySelector(".letter-closing");
+        const before = closing?.previousElementSibling;
+        const closingOnNewPage = () => {
+          const top = measure();
+          const prevBottom = before ? before.getBoundingClientRect().bottom - top : 0;
+          const closingTop = closing!.getBoundingClientRect().top - top;
+          return pageEnds(breaks, clone.getBoundingClientRect().height).some((e) => e >= prevBottom - 1 && e <= closingTop + 1);
+        };
+        if (closing && closingOnNewPage()) {
+          clone.classList.add("closing-compact");
+          if (closingOnNewPage()) clone.classList.remove("closing-compact");
+        }
+        measure();
       },
     });
 
     const scale = canvas.width / PAGE_W_PX;
     const total = canvas.height / scale;
+    const top = TOP_MM * PX_PER_MM;
     let y = 0;
-    while (y < total - 1) {
-      const top = TOP_MM * PX_PER_MM;
-      const room = A4_H_MM * PX_PER_MM - top - BOTTOM_MM * PX_PER_MM;
-      let end = Math.min(total, y + room);
-      if (end < total) {
-        // letzte erlaubte Umbruchstelle innerhalb der Seite; ohne passende Stelle hart schneiden
-        const candidates = breaks.filter((b) => b > y + 40 && b <= end);
-        if (candidates.length) end = candidates[candidates.length - 1];
-      }
+    for (const end of pageEnds(breaks, total)) {
       const slice = document.createElement("canvas");
       slice.width = canvas.width;
       slice.height = Math.ceil((end - y) * scale);
@@ -124,6 +134,23 @@ export async function lettersToPdf(letters: { el: HTMLElement; attachments: PdfA
     }
   }
   return pdf.output("blob");
+}
+
+/** Seitenenden (in CSS-Pixeln): jeweils die letzte erlaubte Umbruchstelle innerhalb der Seite, ohne passende Stelle hart geschnitten */
+function pageEnds(breaks: number[], total: number): number[] {
+  const room = (A4_H_MM - TOP_MM - BOTTOM_MM) * PX_PER_MM;
+  const ends: number[] = [];
+  let y = 0;
+  while (y < total - 1) {
+    let end = Math.min(total, y + room);
+    if (end < total) {
+      const candidates = breaks.filter((b) => b > y + 40 && b <= end);
+      if (candidates.length) end = candidates[candidates.length - 1];
+    }
+    ends.push(end);
+    y = end;
+  }
+  return ends;
 }
 
 /** Fußzeile wie in der Vorschau: Linie, links Abrechnung und Einheit, rechts die Anschrift; ab zwei Seiten mit Seitenzahl */

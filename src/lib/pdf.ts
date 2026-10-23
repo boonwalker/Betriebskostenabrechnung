@@ -4,6 +4,9 @@
  * Die Bibliotheken werden erst beim Klick geladen.
  */
 
+import { renderPage } from "./attachments";
+import type { AttachmentPage } from "./types";
+
 const A4_W_MM = 210;
 const A4_H_MM = 297;
 /** Breite, in der die Seite gerendert wird: 210 mm bei 96 dpi */
@@ -16,12 +19,19 @@ const BOTTOM_MM = 12;
 /** Elemente, nach denen umbrochen werden darf (Unterkante); Überschriften nicht, damit sie bei ihrem Abschnitt bleiben */
 const BREAKABLE = "p, tr, .letter-head, .letter-title, .letter-summary, .letter-notes > *, .letter-closing, table";
 
-export async function lettersToPdf(letters: HTMLElement[]): Promise<Blob> {
+/** Eine Anlagenseite, die hinter einem Anschreiben folgt (mit den Schwärzungen für dessen Empfänger) */
+export interface PdfAttachmentPage {
+  page: AttachmentPage;
+  label: string;
+  tenantId: string | null;
+}
+
+export async function lettersToPdf(letters: { el: HTMLElement; attachments: PdfAttachmentPage[] }[]): Promise<Blob> {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
   const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
   let first = true;
 
-  for (const el of letters) {
+  for (const { el, attachments } of letters) {
     let breaks: number[] = [];
     const canvas = await html2canvas(el, {
       scale: 2,
@@ -84,6 +94,25 @@ export async function lettersToPdf(letters: HTMLElement[]): Promise<Blob> {
       first = false;
       pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", 0, top / PX_PER_MM, A4_W_MM, (end - y) / PX_PER_MM);
       y = end;
+    }
+
+    // Anlagen: je Seite ein Blatt, Bild innerhalb der Ränder eingepasst, Bezeichnung darüber
+    const counts = new Map<string, number>();
+    for (const a of attachments) counts.set(a.label, (counts.get(a.label) ?? 0) + 1);
+    const seen = new Map<string, number>();
+    for (const a of attachments) {
+      const n = (seen.get(a.label) ?? 0) + 1;
+      seen.set(a.label, n);
+      const canvas = await renderPage(a.page, a.tenantId);
+      const boxX = 20, boxY = 22, boxW = A4_W_MM - 40, boxH = A4_H_MM - boxY - 12;
+      const f = Math.min(boxW / canvas.width, boxH / canvas.height);
+      const w = canvas.width * f, h = canvas.height * f;
+      pdf.addPage();
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(91, 107, 120);
+      pdf.text(`Anlage: ${a.label}${(counts.get(a.label) ?? 1) > 1 ? ` · Seite ${n} von ${counts.get(a.label)}` : ""}`, boxX, 17);
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.85), "JPEG", boxX + (boxW - w) / 2, boxY, w, h);
     }
   }
   return pdf.output("blob");

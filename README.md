@@ -4,6 +4,8 @@ Web-App für private Vermieter: Mietobjekte wie ein Depot im Blick behalten, Mie
 
 ## Funktionen
 
+- **Anlagen zum Mieterschreiben:** Heizkostenabrechnung (aus den hochgeladenen WEG-Unterlagen wählbar) und Grundsteuer-/Abgabenbescheid als Fotos oder PDF; Seiten einzeln beifügen und schwärzen – für alle oder nur im Schreiben an einen bestimmten Mieter. Die Seiten werden im Ausdruck und im PDF hinter jedes Anschreiben gehängt. Gespeichert werden sie in der Claude-Vorschau im privaten Dateispeicher des Artifacts, sonst in IndexedDB des Geräts (nicht in der Sicherungsdatei).
+
 - **Portfolio-Startseite** mit einer Kachel je Objekt: Vermögenswert (Marktwert − Restschuld + Cashflow seit Erwerb) mit monatlichem Verlauf, Zuwachs gegenüber dem Einstand, Mietrendite, monatlicher Cashflow und Vermietungsstand. Oben steht der Vermögenswert über alle Objekte.
 - **Assistent für neue Objekte**: fragt Art, Erwerb (Kauf, Schenkung oder Erbschaft), Darlehen mit Konditionen und Auszahlung, Wohnungen, laufende Kosten und den aktuellen Wert ab. Bei Schenkung/Erbschaft wird die Abschreibung des Rechtsvorgängers fortgeführt (§ 11d EStDV).
 - **Objektdetailseite** mit Wertentwicklung (Bewertungen erfassen), Einheiten und Mietern, Wirtschaftlichkeitsrechnung, steuerlicher Schätzung (Anlage V mit AfA nach Baujahr), Finanzierung und Abrechnungen. Fehlende Angaben werden als Checkliste angezeigt.

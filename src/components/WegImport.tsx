@@ -43,6 +43,8 @@ export default function WegImport({
     setError(null);
     try {
       const { extractWegDocument } = await import("../lib/extract");
+      // Seiten parallel zur Auslese speichern – daraus lassen sich später Anlagen fürs Mieterschreiben wählen
+      const pages = kind === "annual" ? import("../lib/pages").then(({ filesToPages }) => filesToPages(files)).catch(() => []) : Promise.resolve([]);
       const x = await extractWegDocument(files, access!, unitName, kind);
       if (x.documentKind !== "other" && x.documentKind !== kind) {
         setError(
@@ -52,7 +54,7 @@ export default function WegImport({
       }
       if (x.notes) setNotes(x.notes);
       const ctx = { propertyId: property.id, unitId, documents: files.map((f) => f.name), fallbackYear: year };
-      onCreate(kind === "annual" ? annualFromExtraction(x, ctx) : planFromExtraction(x, ctx));
+      onCreate(kind === "annual" ? { ...annualFromExtraction(x, ctx), sourcePages: await pages } : planFromExtraction(x, ctx));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

@@ -649,3 +649,38 @@ table.meters input.carried { font-style: italic; color: var(--muted); }
 
 .backup-reminder { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 16px; padding: 12px 14px; border-radius: var(--radius); background: var(--warn-soft); color: var(--text); text-decoration: none; font-size: 0.92rem; border: 1px solid #f0dca0; }
 .backup-reminder:hover { border-color: var(--warn); }
+
+/* Anlagen zum Mieterschreiben */
+.page-image { position: relative; width: 100%; background: #fff; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.page-image img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-select: none; }
+.redaction { position: absolute; background: #000; border: 0; padding: 0; border-radius: 0; }
+.redaction.scoped { background: #1f3347; outline: 2px dashed #f0b429; outline-offset: -2px; }
+.redaction.draft { background: rgba(0, 0, 0, 0.55); outline: 1px dashed #fff; }
+.attachment-group { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+.attachment-group .row { gap: 10px; }
+.attachment-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-top: 10px; }
+.attachment-thumb { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); padding: 0; text-align: left; font: inherit; color: inherit; }
+.attachment-thumb.excluded { opacity: 0.45; }
+.attachment-thumb .thumb-open { padding: 0; border: 0; border-radius: 0; display: block; width: 100%; background: var(--bg); }
+.attachment-thumb .thumb-bar { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-top: 1px solid var(--border); }
+.attachment-thumb .thumb-redact { border-top: 1px solid var(--border); border-radius: 0; justify-content: center; }
+.attachment-thumb.pick { cursor: pointer; }
+.attachment-thumb.pick.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.attachment-thumb.pick:disabled { opacity: 0.5; cursor: default; }
+.chip { border-radius: 99px; padding: 4px 10px; font-size: 0.85rem; }
+.chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.redaction-canvas { position: relative; touch-action: none; border: 1px solid var(--border); cursor: crosshair; user-select: none; -webkit-user-select: none; }
+.btn.disabled { opacity: 0.6; pointer-events: none; }
+.letter-attachments { margin-top: 6mm !important; font-size: 9pt; }
+.letter-attachments strong { display: block; color: var(--l-head); }
+.letter-attachments span { display: block; }
+.attachment-sheet { background: #fff; max-width: 210mm; margin: 0 auto 24px; padding: 10mm 20mm 12mm; border: 1px solid var(--border); }
+.attachment-caption { font-size: 8pt; color: #5b6b78; margin-bottom: 3mm; }
+@media print {
+  .attachment-sheet { border: none; margin: 0; padding: 0; max-width: none; break-before: page; break-inside: avoid; }
+  .attachment-sheet .page-image img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .redaction { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+@media (max-width: 640px) {
+  .attachment-sheet { padding: 5mm; }
+}

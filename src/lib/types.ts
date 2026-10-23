@@ -360,6 +360,8 @@ export interface WegAnnualStatement {
   positions: LedgerPosition[];
   heating: HeatingBill | null;
   documents: string[];
+  /** Seiten der hochgeladenen Unterlagen – daraus lassen sich Anlagen fürs Mieterschreiben wählen */
+  sourcePages?: DocPage[];
   createdAt: string;
 }
 
@@ -403,5 +405,44 @@ export interface AppData {
   statements: Statement[];
   wegAnnuals: WegAnnualStatement[];
   economicPlans: EconomicPlan[];
+  /** Belege, die dem Mieterschreiben beigefügt werden (je Objekt und Jahr) */
+  attachments?: Attachment[];
   settings: Settings;
+}
+
+/** Eine gespeicherte Belegseite als Bild; die Bilddatei liegt im Seitenspeicher (siehe blobs.ts) */
+export interface DocPage {
+  id: string;
+  blobId: string;
+  width: number;
+  height: number;
+  /** Name der hochgeladenen Datei (bei PDFs mit Seitenzahl) */
+  source: string;
+}
+
+/** Geschwärzte Fläche, relativ zur Seite (0–1); tenantId = nur im Schreiben an diesen Mieter, null = für alle */
+export interface Redaction {
+  id: string;
+  tenantId: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export type AttachmentKind = "heating" | "propertyTax";
+
+export interface AttachmentPage extends DocPage {
+  /** dem Mieterschreiben beifügen */
+  include: boolean;
+  redactions: Redaction[];
+}
+
+/** Anlage zum Mieterschreiben: Heizkostenabrechnung oder Grundsteuer-/Abgabenbescheid eines Jahres */
+export interface Attachment {
+  id: string;
+  propertyId: string;
+  year: number;
+  kind: AttachmentKind;
+  pages: AttachmentPage[];
 }

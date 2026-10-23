@@ -1,4 +1,5 @@
 import { focusElement } from "../lib/nav";
+import { releaseUnusedBlobs } from "../lib/attachments";
 import PositionsTable, { newPosition } from "../components/PositionsTable";
 import { Kpi, NumberInput, type PageProps } from "../components/ui";
 import { applyRules } from "../lib/classify";
@@ -46,9 +47,12 @@ export default function WegEditor({ data, update, kind, id }: PageProps & { kind
 
   const remove = () => {
     if (!confirm("Dieses Dokument mit allen erfassten Positionen löschen?")) return;
-    update((d) =>
-      kind === "annual" ? { ...d, wegAnnuals: d.wegAnnuals.filter((x) => x.id !== id) } : { ...d, economicPlans: d.economicPlans.filter((x) => x.id !== id) },
-    );
+    update((d) => {
+      const after = kind === "annual" ? { ...d, wegAnnuals: d.wegAnnuals.filter((x) => x.id !== id) } : { ...d, economicPlans: d.economicPlans.filter((x) => x.id !== id) };
+      // Gespeicherte Seitenbilder freigeben, sofern sie nicht als Anlage weiterverwendet werden
+      releaseUnusedBlobs(d, after);
+      return after;
+    });
     window.location.hash = `#/objekte/${doc.propertyId}`;
   };
 

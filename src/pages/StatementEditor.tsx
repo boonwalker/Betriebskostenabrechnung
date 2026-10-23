@@ -5,6 +5,7 @@ import ReceiptImport from "../components/ReceiptImport";
 import { COST_CATEGORIES, isHeatingCategory, KEY_LABELS } from "../lib/betrkv";
 import { co2Stage } from "../lib/co2";
 import { buildSegments, calculateStatement } from "../lib/calc";
+import { AttachmentsCard } from "../components/Attachments";
 import { aiAccess } from "../lib/aiAccess";
 import { meterDates, METER_LABELS, segmentConsumption } from "../lib/meters";
 import { formatDate, todayISO } from "../lib/dates";
@@ -486,6 +487,14 @@ export default function StatementEditor({ data, update, statementId }: PageProps
       )}
 
       </fieldset>
+
+      <AttachmentsCard
+        data={data}
+        update={update}
+        property={property}
+        year={year}
+        tenants={result.tenants.map((r) => r.tenant).filter((t, i, all) => all.findIndex((x) => x.id === t.id) === i)}
+      />
 
       {importing && (
         <ReceiptImport

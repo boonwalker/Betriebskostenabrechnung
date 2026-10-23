@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { includedAttachments, PageImage } from "../components/Attachments";
+import { attachmentLabel, redactionsFor } from "../lib/attachments";
 import { KEY_LABELS } from "../lib/betrkv";
 import { releasedTenant } from "../lib/release";
 import { calculateStatement, type Co2Result, type DistributionKey, type ItemShare, type TenantResult } from "../lib/calc";
@@ -6,7 +8,7 @@ import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
 import { rentAt } from "../lib/model";
 import { landlordFor } from "../lib/release";
-import type { AppData, Property, Statement } from "../lib/types";
+import type { AppData, Attachment, Property, Statement } from "../lib/types";
 
 const BASIS_UNIT: Record<DistributionKey, string> = {
   time: "Tage",
@@ -33,6 +35,7 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [suggestAdjustment, setSuggestAdjustment] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [pdfMessage, setPdfMessage] = useState<string | null>(null);
 
   if (!statement || !property) return <div className="card empty">Abrechnung nicht gefunden.</div>;
@@ -59,6 +62,8 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
   const anyDraft = letters.some((l) => l.draft && (!selected || selected.has(l.r.tenant.id)));
   const isSelected = (r: TenantResult) => !selected || selected.has(r.tenant.id);
   const landlordMissing = !data.settings.landlord.name || !data.settings.landlord.address;
+  const availableAttachments = includedAttachments(data, property.id, Number(statement.periodStart.slice(0, 4)));
+  const chosenAttachments = availableAttachments.filter((a) => !skipped.has(a.id));
 
   const makePdf = async () => {
     const nodes = [...document.querySelectorAll<HTMLElement>(".letter")];
@@ -76,7 +81,11 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
           .replace(/[^A-Za-z0-9.]+/g, "-")
           .replace(/^-+|-+$/g, "");
       const filename = `${safe(`Betriebskostenabrechnung ${statement.periodStart.slice(0, 4)} ${who}${anyDraft ? " Entwurf" : ""}`)}.pdf`;
-      const outcome = await deliverPdf(await lettersToPdf(nodes), filename);
+      const items = nodes.map((el) => ({
+        el,
+        attachments: chosenAttachments.flatMap((a) => a.pages.filter((p) => p.include).map((page) => ({ page, label: attachmentLabel(a), tenantId: el.dataset.tenant ?? null }))),
+      }));
+      const outcome = await deliverPdf(await lettersToPdf(items), filename);
       if (outcome === "downloaded") setPdfMessage(`„${filename}“ wurde heruntergeladen.`);
     } catch (e) {
       setPdfMessage(`Das PDF konnte nicht erstellt werden: ${(e as Error).message}`);
@@ -127,6 +136,25 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
             </label>
           ))}
         </div>
+        {availableAttachments.length > 0 ? (
+          <div className="row small" style={{ marginTop: 8 }}>
+            <span className="muted">Anlagen:</span>
+            {availableAttachments.map((a) => (
+              <label key={a.id} className="row">
+                <input
+                  type="checkbox"
+                  checked={!skipped.has(a.id)}
+                  onChange={(e) => setSkipped((s) => { const n = new Set(s); if (e.target.checked) n.delete(a.id); else n.add(a.id); return n; })}
+                />
+                {attachmentLabel(a)} ({a.pages.filter((p) => p.include).length} S.)
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="small muted" style={{ marginTop: 8 }}>
+            Anlagen wie Heizkostenabrechnung oder Grundsteuerbescheid fügst du in der <a href={`#/abrechnungen/${statement.id}?f=anlagen`}>Abrechnung</a> hinzu.
+          </p>
+        )}
         <label className="row small" style={{ marginTop: 8 }}>
           <input type="checkbox" checked={suggestAdjustment} onChange={(e) => setSuggestAdjustment(e.target.checked)} />
           Anpassung der monatlichen Vorauszahlung (§ 560 Abs. 4 BGB) aufnehmen
@@ -147,8 +175,10 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
             suggestAdjustment={suggestAdjustment}
             draft={l.draft}
             releasedAt={l.releasedAt}
+            attachments={chosenAttachments}
           />
-        ))}
+        ))
+        .flatMap((letter, i) => [letter, <AttachmentPages key={`anl-${i}`} attachments={chosenAttachments} tenantId={String(letter.props.r.tenant.id)} />])}
     </>
   );
 }
@@ -179,6 +209,7 @@ function Letter({
   suggestAdjustment,
   draft,
   releasedAt,
+  attachments,
 }: {
   data: AppData;
   property: Property;
@@ -189,6 +220,7 @@ function Letter({
   suggestAdjustment: boolean;
   draft: boolean;
   releasedAt: string | null;
+  attachments: Attachment[];
 }) {
   const landlord = landlordFor(r.tenant, data);
   const rule = r.tenant.lease?.allocationRule ?? "weg";
@@ -305,7 +337,7 @@ function Letter({
       : "innerhalb von 30 Tagen nach Erhalt dieser Abrechnung";
 
   return (
-    <div className={`letter ${draft ? "is-draft" : ""}`}>
+    <div className={`letter ${draft ? "is-draft" : ""}`} data-tenant={r.tenant.id}>
       {draft && <div className="watermark">ENTWURF</div>}
       <div className="letter-band" />
       {/* Briefkopf: Absender oben rechts, Empfänger links tiefer im Anschriftfeld */}
@@ -512,6 +544,14 @@ function Letter({
           <br />
           {landlord.name}
         </p>
+        {attachments.length > 0 && (
+          <p className="letter-attachments">
+            <strong>Anlage{attachments.length === 1 ? "" : "n"}</strong>
+            {attachments.map((a) => (
+              <span key={a.id}>{attachmentLabel(a)}</span>
+            ))}
+          </p>
+        )}
       </div>
       <div className="letter-foot">
         <span>
@@ -521,5 +561,25 @@ function Letter({
         <span>{property.address || property.name}</span>
       </div>
     </div>
+  );
+}
+
+/** Beigefügte Seiten hinter einem Anschreiben – je Seite ein Blatt, mit den Schwärzungen für diesen Mieter */
+function AttachmentPages({ attachments, tenantId }: { attachments: Attachment[]; tenantId: string }) {
+  return (
+    <>
+      {attachments.flatMap((a) => {
+        const pages = a.pages.filter((p) => p.include);
+        return pages.map((p, i) => (
+          <div key={p.id} className="attachment-sheet">
+            <div className="attachment-caption">
+              Anlage: {attachmentLabel(a)}
+              {pages.length > 1 ? ` · Seite ${i + 1} von ${pages.length}` : ""}
+            </div>
+            <PageImage page={p} redactions={redactionsFor(p, tenantId)} maxHeight="250mm" />
+          </div>
+        ));
+      })}
+    </>
   );
 }

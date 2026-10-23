@@ -175,8 +175,9 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 .letter-head { display: grid; grid-template-columns: 1fr auto; gap: 8mm; align-items: start; }
 .letter-sender { grid-column: 2; grid-row: 1; margin-top: 8mm; text-align: right; font-size: 9pt; line-height: 1.4; white-space: pre-line; }
 .letter-sender strong { font-size: 10pt; color: var(--l-head); }
-.letter-recipient { grid-column: 1; grid-row: 1; margin-top: 66mm; white-space: pre-line; line-height: 1.4; }
+.letter-recipient { grid-column: 1; grid-row: 1; margin-top: 60mm; white-space: pre-line; line-height: 1.4; }
 .letter-recipient strong { color: var(--l-head); font-weight: 600; }
+.letter-return { font-size: 7.5pt; color: var(--l-muted); white-space: nowrap; border-bottom: 1px solid var(--l-line); padding-bottom: 1mm; margin-bottom: 3mm; max-width: 85mm; overflow: hidden; text-overflow: ellipsis; }
 .letter-date { margin-top: 5mm; white-space: nowrap; }
 .letter-muted { color: var(--l-muted); }
 .letter-title { margin: 12mm 0 5mm; }
@@ -233,7 +234,7 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
   /* Seitenrand oben 15 mm + Band 5 mm + 52 mm = Empfänger bei rund 7 cm; links 2,5 cm, rechts 2 cm */
   .letter-band { margin: 0; height: 5mm; }
   .letter-sender { margin-top: 6mm; }
-  .letter-recipient { margin-top: 52mm; }
+  .letter-recipient { margin-top: 46mm; }
   .letter-title { margin: 9mm 0 3mm; }
   .letter-title h1 { font-size: 16pt; }
   .letter p { margin-bottom: 2mm; }

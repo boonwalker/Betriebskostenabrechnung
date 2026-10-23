@@ -46,6 +46,37 @@ export function newStatement(propertyId: string, periodStart: ISODate, periodEnd
   };
 }
 
+/** Kostenpositionen des Vorjahres als Vorlage (ohne Beträge); Positionen aus einer WEG-Jahresabrechnung kommen jedes Jahr neu */
+export function carryOverCosts(previous: Statement): Statement["costs"] {
+  return previous.costs
+    .filter((c) => !c.sourceAnnualId)
+    .map((c) => ({
+      ...c,
+      id: uid(),
+      amount: 0,
+      source: undefined,
+      consumption: c.key === "consumption" || c.key === "heating" ? {} : c.consumption,
+      co2Cost: undefined,
+      co2Kg: undefined,
+      laborCost: undefined,
+    }));
+}
+
+/**
+ * Abrechnung eines Jahres anlegen, falls es sie noch nicht gibt – nur wenn in dem Jahr jemand gemietet hat
+ * und das Jahr schon begonnen hat. Rückgabe: neuer Datenstand und die angelegte Abrechnung (oder null).
+ */
+export function ensureStatement(d: AppData, propertyId: string, year: number, today = new Date()): { data: AppData; created: Statement | null } {
+  const start = `${year}-01-01`;
+  const end = `${year}-12-31`;
+  const exists = d.statements.some((s) => s.propertyId === propertyId && s.periodStart.startsWith(String(year)));
+  const rented = d.tenants.some((t) => t.propertyId === propertyId && t.moveIn <= end && (!t.moveOut || t.moveOut >= start));
+  if (exists || !rented || year > today.getFullYear()) return { data: d, created: null };
+  const previous = d.statements.filter((s) => s.propertyId === propertyId && s.periodStart < start).sort((a, b) => b.periodStart.localeCompare(a.periodStart))[0];
+  const created = { ...newStatement(propertyId, start, end), costs: previous ? carryOverCosts(previous) : [] };
+  return { data: { ...d, statements: [...d.statements, created] }, created };
+}
+
 export function newRentPeriod(validFrom: ISODate, base?: Partial<RentPeriod>): RentPeriod {
   return { coldRent: 0, prepaymentOperating: 0, prepaymentHeating: 0, ...base, id: uid(), validFrom };
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { we09Property } from "./fixtures/we09";
+import { we09Property, we09Tenant } from "./fixtures/we09";
 import { emptyData, newStatement } from "./model";
 import type { AppData, DocPage } from "./types";
 
@@ -66,5 +66,26 @@ describe("Belegeingang", () => {
     expect(docs.map((d) => d.kind).sort()).toEqual(["invoice", "municipal", "other", "weg_annual"]);
     expect(docs.every((d) => d.status === "done")).toBe(true);
     expect(docs.find((d) => d.kind === "other")!.result).toBe("Abgelegt.");
+  });
+
+  it("legt die Abrechnung des Jahres an, wenn es noch keine gibt – genau einmal", async () => {
+    data = { ...data, statements: [], tenants: [{ ...we09Tenant(), moveIn: "2024-01-01", moveOut: null }] };
+    const { processUpload } = await import("./inbox");
+    const files = [1, 2, 3, 4, 5].map((n) => new File(["x"], `foto${n}.jpg`, { type: "image/jpeg" }));
+    await processUpload(files, { kind: "key", apiKey: "k" }, data, update);
+
+    const years = data.statements.map((s) => s.periodStart.slice(0, 4)).sort();
+    expect(years).toEqual(["2025", "2026"]);
+    // die Rechnung landet in der eben angelegten Abrechnung 2025
+    expect(data.statements.find((s) => s.periodStart.startsWith("2025"))!.costs.map((c) => c.amount)).toContain(35);
+    expect(data.documents!.find((d) => d.kind === "weg_annual")!.result).toContain("Betriebskostenabrechnung 2025 angelegt");
+    expect(data.documents!.find((d) => d.kind === "invoice")!.result).not.toContain("angelegt");
+  });
+
+  it("legt ohne Mieter im Jahr keine Abrechnung an", async () => {
+    data = { ...data, statements: [], tenants: [] };
+    const { processUpload } = await import("./inbox");
+    await processUpload([new File(["x"], "a.jpg", { type: "image/jpeg" })], { kind: "key", apiKey: "k" }, data, update);
+    expect(data.statements).toEqual([]);
   });
 });

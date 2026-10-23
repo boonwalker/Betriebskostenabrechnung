@@ -224,7 +224,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
           <h2 style={{ margin: 0 }}>Kostenpositionen</h2>
           <span className="spacer" />
           {annuals.length > 0 && (
-            <button onClick={takeOverWeg} title="Geprüfte, umlagefähige Positionen der WEG-Jahresabrechnung übernehmen">Aus WEG-Jahresabrechnung {year} übernehmen</button>
+            <button className="wrap" onClick={takeOverWeg} title="Geprüfte, umlagefähige Positionen der WEG-Jahresabrechnung übernehmen">Aus WEG-Jahresabrechnung {year} übernehmen</button>
           )}
           <button onClick={() => setImporting(true)}>📄 Belege hochladen</button>
           <button className="primary" onClick={addCost}>+ Position</button>

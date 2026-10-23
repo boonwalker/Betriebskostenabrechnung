@@ -7,7 +7,7 @@ import { calculateStatement } from "../lib/calc";
 import { addMonths, formatDate, todayISO } from "../lib/dates";
 import { isCurrentTenant, propertyMetrics } from "../lib/finance";
 import { formatEUR, formatEUR0, formatNum, formatPct, formatSignedEUR0 } from "../lib/format";
-import { missingInfo, PROPERTY_TYPE_LABELS, rentAt, uid, warmRent } from "../lib/model";
+import { ensureStatement, missingInfo, PROPERTY_TYPE_LABELS, rentAt, uid, warmRent } from "../lib/model";
 import type { EconomicPlan, Property, Tenant, WegAnnualStatement } from "../lib/types";
 import { wealthSeries, type WealthSeries } from "../lib/wealth";
 import { accountLedger } from "../lib/account";
@@ -502,8 +502,8 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
           onCreate={(doc) => {
             update((d) =>
               doc.kind === "annual"
-                ? // Heizkostenabrechnung gleich als Anlage fürs Mieterschreiben übernehmen
-                  autoAttach({ ...d, wegAnnuals: [...d.wegAnnuals, doc] }, doc.propertyId, doc.year, "heating", heatingSourcePages(doc))
+                ? // Abrechnung des Jahres anlegen, falls noch keine da ist, und die Heizkostenabrechnung gleich als Anlage übernehmen
+                  autoAttach(ensureStatement({ ...d, wegAnnuals: [...d.wegAnnuals, doc] }, doc.propertyId, doc.year).data, doc.propertyId, doc.year, "heating", heatingSourcePages(doc))
                 : { ...d, economicPlans: [...d.economicPlans, doc] },
             );
             setImporting(false);

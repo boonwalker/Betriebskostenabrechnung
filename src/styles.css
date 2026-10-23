@@ -94,6 +94,7 @@ button, .btn {
   gap: 6px;
   white-space: nowrap;
 }
+button.wrap { white-space: normal; text-align: left; max-width: 100%; }
 button:hover, .btn:hover { border-color: #b9c2cf; }
 button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.primary:hover { filter: brightness(1.08); }
@@ -669,7 +670,10 @@ table.meters input.carried { font-style: italic; color: var(--muted); }
 .attachment-thumb.pick:disabled { opacity: 0.5; cursor: default; }
 .chip { border-radius: 99px; padding: 4px 10px; font-size: 0.85rem; }
 .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.redaction-canvas { position: relative; touch-action: none; border: 1px solid var(--border); cursor: crosshair; user-select: none; -webkit-user-select: none; }
+.redaction-viewport { overflow: auto; max-height: 68vh; border: 1px solid var(--border); background: var(--tint); touch-action: none; overscroll-behavior: contain; }
+.redaction-canvas { position: relative; touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; flex: none; }
+.zoom-bar { margin-bottom: 8px; gap: 6px; }
+.zoom-bar .zoom-value { min-width: 3.5em; text-align: center; font-variant-numeric: tabular-nums; }
 .btn.disabled { opacity: 0.6; pointer-events: none; }
 .letter-attachments { margin-top: 6mm !important; font-size: 9pt; }
 .letter-attachments strong { display: block; color: var(--l-head); }

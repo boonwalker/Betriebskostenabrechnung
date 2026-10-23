@@ -4,6 +4,7 @@ import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR } from "../lib/format";
 import { uid } from "../lib/store";
+import { carryOverCosts } from "../lib/model";
 import type { AppData, Statement } from "../lib/types";
 
 export default function Statements({ data, update }: PageProps) {
@@ -152,22 +153,7 @@ function NewStatement({ data, onClose, onCreate }: { data: AppData; onClose: () 
       propertyId,
       periodStart: `${year}-01-01`,
       periodEnd: `${year}-12-31`,
-      costs:
-        copy && previous
-          ? previous.costs
-              // Positionen aus einer WEG-Jahresabrechnung kommen jedes Jahr neu aus der Abrechnung des Jahres
-              .filter((c) => !c.sourceAnnualId)
-              .map((c) => ({
-                ...c,
-                id: uid(),
-                amount: 0,
-                source: undefined,
-                consumption: c.key === "consumption" || c.key === "heating" ? {} : c.consumption,
-                co2Cost: undefined,
-                co2Kg: undefined,
-                laborCost: undefined,
-              }))
-          : [],
+      costs: copy && previous ? carryOverCosts(previous) : [],
       prepaymentOverrides: {},
       prepaymentsConfirmed: {},
       status: "draft",

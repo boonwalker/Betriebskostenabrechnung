@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ATTACHMENT_KINDS, ATTACHMENT_LABELS, findAttachment, redactionsFor, releaseUnusedBlobs } from "../lib/attachments";
 import { getBlob } from "../lib/blobs";
 import { uid } from "../lib/model";
@@ -198,14 +198,75 @@ function PagePicker({ pages, already, onClose, onPick }: { pages: DocPage[]; alr
   );
 }
 
-/** Rechtecke über eine Seite ziehen – für alle Schreiben oder nur für das Schreiben an einen Mieter */
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 6;
+const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+
+/**
+ * Rechtecke über eine Seite ziehen – für alle Schreiben oder nur für das Schreiben an einen Mieter.
+ * Ein Finger schwärzt, zwei Finger zoomen und verschieben; am Rechner per Knöpfen oder Strg + Mausrad.
+ */
 function RedactionEditor({ page, tenants, onClose, onChange }: { page: AttachmentPage; tenants: Tenant[]; onClose: () => void; onChange: (r: Redaction[]) => void }) {
   const [scope, setScope] = useState<string | null>(null);
   const [draft, setDraft] = useState<Redaction | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const viewport = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const start = useRef<{ x: number; y: number } | null>(null);
+  const start = useRef<{ x: number; y: number; id: number } | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist: number; zoom: number; px: number; py: number } | null>(null);
+  // nach einer Zwei-Finger-Geste nicht mit dem verbleibenden Finger weiterzeichnen
+  const blocked = useRef(false);
+  const pendingScroll = useRef<{ left: number; top: number } | null>(null);
 
-  const point = (e: ReactPointerEvent) => {
+  // Scrollposition erst setzen, wenn die neue Zoomstufe gerendert ist
+  useLayoutEffect(() => {
+    const vp = viewport.current;
+    if (vp && pendingScroll.current) {
+      vp.scrollLeft = pendingScroll.current.left;
+      vp.scrollTop = pendingScroll.current.top;
+      pendingScroll.current = null;
+    }
+  }, [zoom]);
+
+  /** Auf eine Zoomstufe gehen, sodass der Seitenpunkt unter (clientX, clientY) dort bleibt bzw. dorthin wandert */
+  const zoomAt = (next: number, from: number, contentX: number, contentY: number, clientX: number, clientY: number) => {
+    const vp = viewport.current;
+    if (!vp) return;
+    const z = clampZoom(next);
+    const r = vp.getBoundingClientRect();
+    const scroll = { left: (contentX * z) / from - (clientX - r.left), top: (contentY * z) / from - (clientY - r.top) };
+    pendingScroll.current = scroll;
+    if (z === zoom) {
+      vp.scrollLeft = scroll.left;
+      vp.scrollTop = scroll.top;
+      pendingScroll.current = null;
+    } else setZoom(z);
+  };
+
+  // Knöpfe: um die Mitte des sichtbaren Ausschnitts zoomen
+  const zoomBy = (factor: number) => {
+    const vp = viewport.current;
+    if (!vp) return;
+    const r = vp.getBoundingClientRect();
+    zoomAt(zoom * factor, zoom, vp.scrollLeft + r.width / 2, vp.scrollTop + r.height / 2, r.left + r.width / 2, r.top + r.height / 2);
+  };
+
+  // Strg + Mausrad bzw. Trackpad-Geste am Rechner (muss „passive: false“ sein, um das Browser-Zoomen zu verhindern)
+  useEffect(() => {
+    const vp = viewport.current;
+    if (!vp) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const r = vp.getBoundingClientRect();
+      zoomAt(zoom * Math.exp(-e.deltaY / 200), zoom, vp.scrollLeft + e.clientX - r.left, vp.scrollTop + e.clientY - r.top, e.clientX, e.clientY);
+    };
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    return () => vp.removeEventListener("wheel", onWheel);
+  });
+
+  const point = (e: { clientX: number; clientY: number }) => {
     const r = box.current!.getBoundingClientRect();
     return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
   };
@@ -218,12 +279,61 @@ function RedactionEditor({ page, tenants, onClose, onChange }: { page: Attachmen
     h: Math.abs(a.y - b.y),
   });
 
+  const twoFingers = () => {
+    const [a, b] = [...pointers.current.values()];
+    return { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+  };
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).classList.contains("redaction") && pointers.current.size === 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      // zweiter Finger: Zeichnen abbrechen, Zoomen beginnen
+      start.current = null;
+      setDraft(null);
+      blocked.current = true;
+      const vp = viewport.current!;
+      const r = vp.getBoundingClientRect();
+      const { dist, cx, cy } = twoFingers();
+      pinch.current = { dist, zoom, px: vp.scrollLeft + cx - r.left, py: vp.scrollTop + cy - r.top };
+    } else if (pointers.current.size === 1 && !blocked.current) {
+      const p = point(e);
+      start.current = { ...p, id: e.pointerId };
+      setDraft(rectFrom(p, p));
+    }
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch.current && pointers.current.size >= 2) {
+      const { dist, cx, cy } = twoFingers();
+      const p = pinch.current;
+      zoomAt(p.zoom * (dist / p.dist), p.zoom, p.px, p.py, cx, cy);
+    } else if (start.current?.id === e.pointerId) setDraft(rectFrom(start.current, point(e)));
+  };
+
+  const onPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 0) blocked.current = false;
+    if (start.current?.id !== e.pointerId) return;
+    const r = rectFrom(start.current, point(e));
+    start.current = null;
+    setDraft(null);
+    if (e.type === "pointerup" && r.w > 0.005 && r.h > 0.003) onChange([...page.redactions, r]);
+  };
+
   const shown = redactionsFor(page, scope);
   const tenantName = (id: string | null) => (id === null ? "alle" : tenants.find((t) => t.id === id)?.name ?? "?");
 
   return (
     <Modal title="Schwärzen" onClose={onClose}>
-      <p className="small muted">Ziehe mit dem Finger oder der Maus ein Rechteck über die Stelle. Tippe auf eine schwarze Fläche, um sie wieder zu entfernen.</p>
+      <p className="small muted">
+        Ziehe mit einem Finger oder der Maus ein Rechteck über die Stelle. Mit zwei Fingern zoomst und verschiebst du (am Rechner: Strg + Mausrad). Tippe
+        auf eine schwarze Fläche, um sie wieder zu entfernen.
+      </p>
       <div className="row small" style={{ marginBottom: 10 }}>
         <span className="muted">Gilt für:</span>
         <button className={`chip ${scope === null ? "active" : ""}`} onClick={() => setScope(null)}>alle Schreiben</button>
@@ -233,36 +343,35 @@ function RedactionEditor({ page, tenants, onClose, onChange }: { page: Attachmen
           </button>
         ))}
       </div>
-      <div
-        ref={box}
-        className="redaction-canvas"
-        onPointerDown={(e) => {
-          if ((e.target as HTMLElement).classList.contains("redaction")) return;
-          e.currentTarget.setPointerCapture(e.pointerId);
-          start.current = point(e);
-          setDraft(rectFrom(start.current, start.current));
-        }}
-        onPointerMove={(e) => start.current && setDraft(rectFrom(start.current, point(e)))}
-        onPointerUp={(e) => {
-          if (!start.current) return;
-          const r = rectFrom(start.current, point(e));
-          start.current = null;
-          setDraft(null);
-          if (r.w > 0.01 && r.h > 0.005) onChange([...page.redactions, r]);
-        }}
-      >
-        <PageImage page={page} />
-        {shown.map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            className={`redaction ${r.tenantId ? "scoped" : ""}`}
-            title={`Schwärzung für ${tenantName(r.tenantId)} – antippen zum Entfernen`}
-            style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` }}
-            onClick={() => onChange(page.redactions.filter((x) => x.id !== r.id))}
-          />
-        ))}
-        {draft && <span className="redaction draft" style={{ left: `${draft.x * 100}%`, top: `${draft.y * 100}%`, width: `${draft.w * 100}%`, height: `${draft.h * 100}%` }} />}
+      <div className="row small zoom-bar">
+        <button className="small" onClick={() => zoomBy(1 / 1.5)} disabled={zoom <= MIN_ZOOM} aria-label="Verkleinern">−</button>
+        <span className="zoom-value">{Math.round(zoom * 100)} %</span>
+        <button className="small" onClick={() => zoomBy(1.5)} disabled={zoom >= MAX_ZOOM} aria-label="Vergrößern">+</button>
+        {zoom > 1 && <button className="ghost small" onClick={() => setZoom(1)}>Ganze Seite</button>}
+      </div>
+      <div ref={viewport} className="redaction-viewport">
+        <div
+          ref={box}
+          className="redaction-canvas"
+          style={{ width: `${zoom * 100}%` }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerEnd}
+          onPointerCancel={onPointerEnd}
+        >
+          <PageImage page={page} />
+          {shown.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className={`redaction ${r.tenantId ? "scoped" : ""}`}
+              title={`Schwärzung für ${tenantName(r.tenantId)} – antippen zum Entfernen`}
+              style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` }}
+              onClick={() => onChange(page.redactions.filter((x) => x.id !== r.id))}
+            />
+          ))}
+          {draft && <span className="redaction draft" style={{ left: `${draft.x * 100}%`, top: `${draft.y * 100}%`, width: `${draft.w * 100}%`, height: `${draft.h * 100}%` }} />}
+        </div>
       </div>
       <p className="small muted" style={{ marginTop: 8 }}>
         {page.redactions.length === 0

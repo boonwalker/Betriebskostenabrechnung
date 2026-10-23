@@ -54,7 +54,9 @@ export default function WegImport({
       }
       if (x.notes) setNotes(x.notes);
       const ctx = { propertyId: property.id, unitId, documents: files.map((f) => f.name), fallbackYear: year };
-      onCreate(kind === "annual" ? { ...annualFromExtraction(x, ctx), sourcePages: await pages } : planFromExtraction(x, ctx));
+      // Seiten der Heizkostenabrechnung merken – sie werden automatisch Anlage des Mieterschreibens
+      const heatingPages = x.heating ? (x.heating.pages.length ? x.heating.pages : x.heating.page ? [x.heating.page] : []) : [];
+      onCreate(kind === "annual" ? { ...annualFromExtraction(x, ctx), sourcePages: await pages, heatingPages } : planFromExtraction(x, ctx));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

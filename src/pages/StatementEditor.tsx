@@ -6,6 +6,7 @@ import { COST_CATEGORIES, isHeatingCategory, KEY_LABELS } from "../lib/betrkv";
 import { co2Stage } from "../lib/co2";
 import { buildSegments, calculateStatement } from "../lib/calc";
 import { AttachmentsCard } from "../components/Attachments";
+import { autoAttach } from "../lib/attachments";
 import { aiAccess } from "../lib/aiAccess";
 import { meterDates, METER_LABELS, segmentConsumption } from "../lib/meters";
 import { formatDate, todayISO } from "../lib/dates";
@@ -502,8 +503,14 @@ export default function StatementEditor({ data, update, statementId }: PageProps
           statement={statement}
           property={property}
           onClose={() => setImporting(false)}
-          onAdd={(items) => {
+          onAdd={(items, notices) => {
             set({ costs: [...statement.costs, ...items] });
+            // Grundsteuer-/Abgabenbescheid gleich als Anlage fürs Mieterschreiben übernehmen
+            if (notices.length)
+              void import("../lib/pages")
+                .then(({ filesToPages }) => filesToPages(notices))
+                .then((pages) => update((d) => autoAttach(d, property.id, year, "propertyTax", pages)))
+                .catch(() => undefined);
           }}
         />
       )}

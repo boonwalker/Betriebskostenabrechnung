@@ -362,6 +362,8 @@ export interface WegAnnualStatement {
   documents: string[];
   /** Seiten der hochgeladenen Unterlagen – daraus lassen sich Anlagen fürs Mieterschreiben wählen */
   sourcePages?: DocPage[];
+  /** Nummern (1-basiert) der Seiten in sourcePages, die zur Heizkostenabrechnung gehören – laut Auslese */
+  heatingPages?: number[];
   createdAt: string;
 }
 

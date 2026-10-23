@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { autoAttach, heatingSourcePages } from "../lib/attachments";
 import { go, parseHash } from "../lib/nav";
 import ValueChart from "../components/ValueChart";
 import { Balance, Delta, Kpi, NumberInput, type PageProps } from "../components/ui";
@@ -499,7 +500,12 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
           property={p}
           onClose={() => setImporting(false)}
           onCreate={(doc) => {
-            update((d) => (doc.kind === "annual" ? { ...d, wegAnnuals: [...d.wegAnnuals, doc] } : { ...d, economicPlans: [...d.economicPlans, doc] }));
+            update((d) =>
+              doc.kind === "annual"
+                ? // Heizkostenabrechnung gleich als Anlage fürs Mieterschreiben übernehmen
+                  autoAttach({ ...d, wegAnnuals: [...d.wegAnnuals, doc] }, doc.propertyId, doc.year, "heating", heatingSourcePages(doc))
+                : { ...d, economicPlans: [...d.economicPlans, doc] },
+            );
             setImporting(false);
             window.location.hash = `#/weg/${doc.kind === "annual" ? "jahresabrechnung" : "wirtschaftsplan"}/${doc.id}`;
           }}

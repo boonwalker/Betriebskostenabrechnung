@@ -29,7 +29,8 @@ export default function ReceiptImport({
   statement: Statement;
   property: Property;
   onClose: () => void;
-  onAdd: (items: CostItem[]) => void;
+  /** notices: hochgeladene Bescheide der Gemeinde – werden als Anlage fürs Mieterschreiben übernommen */
+  onAdd: (items: CostItem[], notices: File[]) => void;
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [over, setOver] = useState(false);
@@ -85,6 +86,7 @@ export default function ReceiptImport({
         consumption: item.key === "consumption" || item.key === "heating" ? {} : undefined,
         directUnitId: item.key === "direct" ? property.units[0]?.id : undefined,
       })),
+      jobs.filter((j) => j.status === "done" && j.extraction?.isMunicipalNotice).map((j) => j.file),
     );
     onClose();
   };

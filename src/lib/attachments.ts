@@ -1,5 +1,6 @@
 import { deleteBlob, getBlob } from "./blobs";
-import type { AppData, Attachment, AttachmentKind, AttachmentPage, Redaction } from "./types";
+import { uid } from "./model";
+import type { AppData, Attachment, AttachmentKind, AttachmentPage, DocPage, Redaction, WegAnnualStatement } from "./types";
 
 export const ATTACHMENT_LABELS: Record<AttachmentKind, string> = {
   heating: "Heizkostenabrechnung",
@@ -40,4 +41,22 @@ export function releaseUnusedBlobs(before: AppData, after: AppData) {
     new Set([...(d.attachments ?? []).flatMap((a) => a.pages.map((p) => p.blobId)), ...d.wegAnnuals.flatMap((w) => (w.sourcePages ?? []).map((p) => p.blobId))]);
   const keep = used(after);
   for (const id of used(before)) if (!keep.has(id)) void deleteBlob(id);
+}
+
+/** Seiten automatisch als Anlage übernehmen; bereits vorhandene Seiten (gleiches Bild) werden nicht doppelt angehängt */
+export function autoAttach(d: AppData, propertyId: string, year: number, kind: AttachmentKind, pages: DocPage[]): AppData {
+  if (!pages.length) return d;
+  const list = d.attachments ?? [];
+  const current = list.find((a) => a.propertyId === propertyId && a.year === year && a.kind === kind);
+  const known = new Set(current?.pages.map((p) => p.blobId));
+  const added: AttachmentPage[] = pages.filter((p) => !known.has(p.blobId)).map((p) => ({ ...p, id: uid(), include: true, redactions: [] }));
+  if (!added.length) return d;
+  const next: Attachment = current ? { ...current, pages: [...current.pages, ...added] } : { id: uid(), propertyId, year, kind, pages: added };
+  return { ...d, attachments: current ? list.map((a) => (a === current ? next : a)) : [...list, next] };
+}
+
+/** Seiten der Heizkostenabrechnung aus hochgeladenen WEG-Unterlagen (laut Auslese) */
+export function heatingSourcePages(annual: WegAnnualStatement): DocPage[] {
+  const pages = annual.sourcePages ?? [];
+  return (annual.heatingPages ?? []).map((n) => pages[n - 1]).filter((p): p is DocPage => !!p);
 }

@@ -82,7 +82,8 @@ export function AttachmentsCard({ data, update, property, year, tenants }: PageP
     <div className="card" id="anlagen">
       <h2>Anlagen für das Mieterschreiben</h2>
       <p className="hint">
-        Diese Seiten werden jedem Mieterschreiben angehängt – im Ausdruck und im PDF. Schwärze, was der jeweilige Mieter nicht sehen soll (z. B. Name und Verbrauch
+        Diese Seiten werden jedem Mieterschreiben angehängt – im Ausdruck und im PDF. Die Heizkostenabrechnung aus hochgeladenen WEG-Unterlagen und ein über
+        „Belege hochladen“ erkannter Bescheid der Gemeinde werden automatisch übernommen. Schwärze, was der jeweilige Mieter nicht sehen soll (z. B. Name und Verbrauch
         des Vor- oder Nachmieters). Die Originale bleiben unverändert gespeichert.
       </p>
       {error && <div className="alert danger small">{error}</div>}

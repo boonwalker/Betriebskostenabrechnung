@@ -29,6 +29,7 @@ const ExtractionSchema = z.object({
     }),
   ),
   notes: z.string(),
+  isMunicipalNotice: z.boolean(),
 });
 
 export type Extraction = z.infer<typeof ExtractionSchema>;
@@ -36,7 +37,7 @@ export type Extraction = z.infer<typeof ExtractionSchema>;
 const JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["vendor", "invoiceDate", "servicePeriodStart", "servicePeriodEnd", "totalAmount", "items", "notes"],
+  required: ["vendor", "invoiceDate", "servicePeriodStart", "servicePeriodEnd", "totalAmount", "items", "notes", "isMunicipalNotice"],
   properties: {
     vendor: { type: "string", description: "Rechnungssteller bzw. Behörde" },
     invoiceDate: { type: "string", description: "Rechnungs-/Bescheiddatum als YYYY-MM-DD, leer wenn unbekannt" },
@@ -85,6 +86,10 @@ const JSON_SCHEMA = {
       },
     },
     notes: { type: "string", description: "Hinweise für den Vermieter auf Deutsch, z. B. abweichender Leistungszeitraum" },
+    isMunicipalNotice: {
+      type: "boolean",
+      description: "true, wenn das Dokument ein Bescheid der Gemeinde/Stadt über Grundsteuer und/oder Grundbesitzabgaben (z. B. Müll, Straßenreinigung) ist",
+    },
   },
 } as const;
 
@@ -223,6 +228,7 @@ const WegSchema = z.object({
       co2Cost: z.number().nullable(),
       co2Kg: z.number().nullable(),
       page: z.number().int().nullable(),
+      pages: z.array(z.number().int()),
     })
     .nullable(),
   notes: z.string(),
@@ -317,6 +323,7 @@ const WEG_JSON_SCHEMA = {
             "co2Cost",
             "co2Kg",
             "page",
+            "pages",
           ],
           properties: {
             heatSource: { type: "string", description: "z. B. Gas, Öl, Fernwärme, Wärmepumpe" },
@@ -348,6 +355,11 @@ const WEG_JSON_SCHEMA = {
             co2Cost: nullableNumber,
             co2Kg: { ...nullableNumber, description: "CO2-Ausstoß der Liegenschaft in kg" },
             page: { type: ["integer", "null"] },
+            pages: {
+              type: "array",
+              items: { type: "integer" },
+              description: "alle Seiten der Heiz- und Warmwasserkostenabrechnung (1-basiert, über alle Dateien fortlaufend) – nicht die Einzelabrechnung der WEG",
+            },
           },
         },
       ],

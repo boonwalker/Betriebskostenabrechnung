@@ -279,7 +279,7 @@ function Letter({
     <div className={`letter ${draft ? "is-draft" : ""}`}>
       {draft && <div className="watermark">ENTWURF</div>}
       <div className="letter-band" />
-      {/* Briefkopf: Absender oben rechts mit Datum, Empfänger links tiefer im Anschriftfeld */}
+      {/* Briefkopf: Absender oben rechts, Empfänger links tiefer im Anschriftfeld */}
       <div className="letter-head">
         <div className="letter-recipient">
           {/* Rücksendeangabe für Fensterumschläge */}
@@ -291,8 +291,9 @@ function Letter({
           <strong>{landlord.name}</strong>
           {landlord.address && <div>{landlord.address}</div>}
           {landlord.iban && <div className="letter-muted">IBAN {landlord.iban}</div>}
-          <div className="letter-date">{placeDate(landlord.address, releasedAt?.slice(0, 10) ?? todayISO())}</div>
         </div>
+        {/* Ort und Datum rechtsbündig, eine Zeile unter der letzten Empfängerzeile */}
+        <div className="letter-date">{placeDate(landlord.address, releasedAt?.slice(0, 10) ?? todayISO())}</div>
       </div>
 
       <div className="letter-title">

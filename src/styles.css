@@ -178,7 +178,7 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 .letter-recipient { grid-column: 1; grid-row: 1; margin-top: 60mm; white-space: pre-line; line-height: 1.4; }
 .letter-recipient strong { color: var(--l-head); font-weight: 600; }
 .letter-return { font-size: 7.5pt; color: var(--l-muted); white-space: nowrap; padding-left: 3mm; margin-bottom: 3mm; max-width: 85mm; overflow: hidden; text-overflow: ellipsis; }
-.letter-date { margin-top: 5mm; white-space: nowrap; }
+.letter-date { grid-column: 1 / -1; grid-row: 2; text-align: right; white-space: nowrap; margin-top: calc(1.4em - 8mm); }
 .letter-muted { color: var(--l-muted); }
 .letter-title { margin: 12mm 0 5mm; }
 .letter-title h1 { font-size: 18pt; margin: 0; color: var(--l-head); letter-spacing: -0.01em; }
@@ -222,6 +222,7 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
   .letter-head { grid-template-columns: 1fr; gap: 0; }
   .letter-sender { grid-column: 1; grid-row: 1; text-align: left; margin-top: 6mm; }
   .letter-recipient { grid-column: 1; grid-row: 2; margin-top: 8mm; }
+  .letter-date { grid-row: 3; margin-top: 1.4em; }
   .letter-summary { grid-template-columns: 1fr; }
   .letter table th, .letter table td { padding: 1.5mm; }
 }

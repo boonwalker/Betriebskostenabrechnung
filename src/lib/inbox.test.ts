@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { we09Property, we09Tenant } from "./fixtures/we09";
+import { we09PreviousTenant, we09Property, we09Tenant } from "./fixtures/we09";
 import { emptyData, newStatement } from "./model";
 import type { AppData, DocPage } from "./types";
 
@@ -17,6 +17,7 @@ vi.mock("./extract", () => ({
       { kind: "municipal", pages: [3], title: "Grundbesitzabgabenbescheid 2026", year: 2026, propertyId: "we09-p", unitName: "" },
       { kind: "invoice", pages: [4], title: "Rechnung Schornsteinfeger 2025", year: 2025, propertyId: "we09-p", unitName: "" },
       { kind: "other", pages: [5], title: "Schreiben der Hausverwaltung", year: 2025, propertyId: "unknown", unitName: "" },
+      { kind: "lease", pages: [6], title: "Mietvertrag WE 09", year: 2025, propertyId: "we09-p", unitName: "WE 09", tenantName: "Max Mieter" },
     ],
     notes: "",
   }),
@@ -87,5 +88,16 @@ describe("Belegeingang", () => {
     const { processUpload } = await import("./inbox");
     await processUpload([new File(["x"], "a.jpg", { type: "image/jpeg" })], { kind: "key", apiKey: "k" }, data, update);
     expect(data.statements).toEqual([]);
+  });
+
+  it("ordnet einen Mietvertrag dem passenden Mieter zu", async () => {
+    data = { ...data, tenants: [we09PreviousTenant(), we09Tenant()] };
+    const { processUpload } = await import("./inbox");
+    const files = [1, 2, 3, 4, 5, 6].map((n) => new File(["x"], `foto${n}.jpg`, { type: "image/jpeg" }));
+    await processUpload(files, { kind: "key", apiKey: "k" }, data, update);
+    const lease = data.documents!.find((d) => d.kind === "lease")!;
+    expect(lease.status).toBe("done");
+    expect(lease.result).toContain("Mietvertrag von Mieter WE 09");
+    expect(lease.link).toBe("#/objekte/we09-p?t=we09-t");
   });
 });

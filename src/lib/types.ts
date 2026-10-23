@@ -414,7 +414,7 @@ export interface AppData {
   settings: Settings;
 }
 
-export type DocumentKind = "weg_annual" | "weg_plan" | "heating" | "municipal" | "invoice" | "other";
+export type DocumentKind = "weg_annual" | "weg_plan" | "heating" | "municipal" | "invoice" | "lease" | "other";
 
 /** Ein Dokument der Belegablage – erkannt, zugeordnet und abgelegt */
 export interface StoredDocument {

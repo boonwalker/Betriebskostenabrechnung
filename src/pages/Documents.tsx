@@ -43,7 +43,7 @@ export default function Documents({ data, update, onUpload }: PageProps & { onUp
       <div className="card inbox-card">
         <h2 style={{ marginTop: 0 }}>Belegeingang</h2>
         <p className="small" style={{ marginTop: 0 }}>
-          Fotografiere oder lade hoch, was gerade anfällt – WEG-Abrechnung, Wirtschaftsplan, Heizkostenabrechnung, Grundsteuerbescheid oder Rechnungen, gern
+          Fotografiere oder lade hoch, was gerade anfällt – Mietvertrag, WEG-Abrechnung, Wirtschaftsplan, Heizkostenabrechnung, Grundsteuerbescheid oder Rechnungen, gern
           mehrere gemischt. ImmoFriend erkennt die Dokumente, trägt sie an der richtigen Stelle ein und legt sie hier ab.
         </p>
         {access ? (

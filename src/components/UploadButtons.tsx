@@ -9,7 +9,7 @@ export function UploadButtons({ onFiles, disabled, compact }: { onFiles: (files:
   return (
     <div className={`upload-buttons ${compact ? "compact" : ""}`}>
       <label className={`btn primary upload-btn ${disabled ? "disabled" : ""}`}>
-        <span aria-hidden>📷</span> Beleg fotografieren
+        <span aria-hidden>📷</span> Unterlagen fotografieren
         <input type="file" accept="image/*" capture="environment" hidden disabled={disabled} onChange={pick} />
       </label>
       <label className={`btn upload-btn ${disabled ? "disabled" : ""}`}>

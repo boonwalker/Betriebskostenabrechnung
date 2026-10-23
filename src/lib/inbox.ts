@@ -17,6 +17,7 @@ export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
   heating: "Heizkostenabrechnung",
   municipal: "Abgabenbescheid",
   invoice: "Rechnung",
+  lease: "Mietvertrag",
   other: "Sonstiges",
 };
 
@@ -69,7 +70,7 @@ export async function processUpload(files: File[], access: AiAccess, snapshot: A
       .map((c) => ({ c, pages: c.pages.filter((n) => n >= 1 && n <= pages.length && !used.has(n) && (used.add(n), true)).map((n) => pages[n - 1]) }))
       .filter((x) => x.pages.length);
     const rest = pages.filter((_, i) => !used.has(i + 1));
-    if (rest.length) docs.push({ c: { kind: "other", pages: [], title: "Nicht zugeordnete Seiten", year: null, propertyId: "unknown", unitName: "" }, pages: rest });
+    if (rest.length) docs.push({ c: { kind: "other", pages: [], title: "Nicht zugeordnete Seiten", year: null, propertyId: "unknown", unitName: "", tenantName: "" }, pages: rest });
 
     const single = snapshot.properties.length === 1 ? snapshot.properties[0].id : null;
     const stored: StoredDocument[] = docs.map(({ c, pages: ps }) => ({
@@ -87,7 +88,7 @@ export async function processUpload(files: File[], access: AiAccess, snapshot: A
 
     for (const [i, doc] of stored.entries()) {
       try {
-        const outcome = await route(doc, docs[i].c.unitName, access, current, tracked, { extractInvoice, extractWegDocument });
+        const outcome = await route(doc, docs[i].c.unitName, access, current, tracked, { extractInvoice, extractWegDocument }, docs[i].c.tenantName ?? "");
         patchDoc(update, doc.id, { status: "done", ...outcome });
       } catch (e) {
         patchDoc(update, doc.id, { status: "error", error: (e as Error).message, result: "Abgelegt, aber nicht ausgewertet." });
@@ -108,10 +109,12 @@ async function route(
   snapshot: AppData,
   update: Update,
   { extractInvoice, extractWegDocument }: Extractors,
+  tenantName = "",
 ): Promise<Partial<StoredDocument>> {
   const property = snapshot.properties.find((p) => p.id === doc.propertyId);
   if (doc.kind === "other") return { result: "Abgelegt." };
   if (!property) return { result: "Abgelegt – kein passendes Objekt gefunden. Bitte unten zuordnen." };
+  if (doc.kind === "lease") return routeLease(doc, property, snapshot, unitName, tenantName);
   const year = doc.year;
   const files = await pageFiles(doc.pages);
 
@@ -208,6 +211,30 @@ async function route(
   if (!items.length) return { year: y, result: "Abgelegt – keine umlagefähigen Kosten erkannt." };
   update((d) => ({ ...d, statements: d.statements.map((s) => (s.id === st.id ? { ...s, costs: [...s.costs, ...items] } : s)) }));
   return { year: y, result: `${items.length} Position(en) in die Abrechnung ${y} übernommen – bitte prüfen.${extra}`, link: `#/abrechnungen/${st.id}?f=kosten` };
+}
+
+/** Mietvertrag: dem passenden Mieter zuordnen (über den Namen, sonst über Wohnung und Mietbeginn) und ablegen */
+function routeLease(doc: StoredDocument, property: AppData["properties"][number], snapshot: AppData, unitName: string, tenantName: string): Partial<StoredDocument> {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const tenants = snapshot.tenants.filter((t) => t.propertyId === property.id);
+  const names = norm(tenantName);
+  // Nachname bzw. letzter Namensteil genügt, damit „Luca Schmitz“ auch „Schmitz, Luca“ findet
+  const byName = names
+    ? tenants.find((t) => norm(t.name).split(" ").some((part) => part.length > 2 && names.includes(part)))
+    : undefined;
+  const unit = property.units.find((u) => norm(u.name).replace(/ /g, "") === norm(unitName).replace(/ /g, ""));
+  const inUnit = tenants.filter((t) => !unit || t.unitId === unit.id);
+  const byStart = doc.year ? inUnit.find((t) => t.moveIn.startsWith(String(doc.year))) : undefined;
+  const tenant = byName ?? byStart ?? (inUnit.length === 1 ? inUnit[0] : undefined);
+  if (!tenant)
+    return {
+      result: `Als Mietvertrag${tenantName ? ` (${tenantName})` : ""} abgelegt – kein passender Mieter gefunden. Lege ihn unter „Mieter“ an.`,
+      link: "#/mieter",
+    };
+  return {
+    result: `Als Mietvertrag von ${tenant.name} abgelegt – Miete, Vorauszahlungen und vereinbarte Betriebskosten bitte im Mieterprofil prüfen.`,
+    link: `#/objekte/${property.id}?t=${tenant.id}`,
+  };
 }
 
 function statementLink(d: AppData, propertyId: string, year: number): string | undefined {

@@ -35,10 +35,6 @@ export default function Home({ data, replace, onUpload }: PageProps & { replace:
 
       <div className="card home-upload">
         <h2>Belege erfassen</h2>
-        <p className="small muted">
-          WEG-Abrechnung, Wirtschaftsplan, Heizkostenabrechnung, Grundsteuerbescheid oder Rechnungen – gern mehrere gemischt. ImmoFriend erkennt die Dokumente, trägt sie
-          an der richtigen Stelle ein und legt sie in der Belegablage ab.
-        </p>
         {access ? (
           <UploadButtons onFiles={onUpload} />
         ) : (
@@ -47,6 +43,10 @@ export default function Home({ data, replace, onUpload }: PageProps & { replace:
             <a href="#/einstellungen?f=belegerkennung">Einstellungen</a> ein.
           </div>
         )}
+        <p className="small muted home-upload-hint">
+          Mietvertrag, WEG-Abrechnung, Wirtschaftsplan, Heizkostenabrechnung, Grundsteuerbescheid oder Rechnungen – gern mehrere gemischt. ImmoFriend erkennt die
+          Dokumente, trägt sie an der richtigen Stelle ein und legt sie in der Belegablage ab.
+        </p>
         {recent.length > 0 && (
           <div className="home-recent">
             {recent.map((doc) => (

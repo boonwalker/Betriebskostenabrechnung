@@ -191,7 +191,7 @@ export async function extractInvoice(file: File | File[], access: AiAccess, bill
 
 /* ---------- Belegeingang: gemischten Stapel in Dokumente aufteilen und einordnen ---------- */
 
-const DOC_KINDS = ["weg_annual", "weg_plan", "heating", "municipal", "invoice", "other"] as const;
+const DOC_KINDS = ["weg_annual", "weg_plan", "heating", "municipal", "invoice", "lease", "other"] as const;
 
 const ClassificationSchema = z.object({
   documents: z.array(
@@ -202,6 +202,7 @@ const ClassificationSchema = z.object({
       year: z.number().int().nullable(),
       propertyId: z.string(),
       unitName: z.string(),
+      tenantName: z.string(),
     }),
   ),
   notes: z.string(),
@@ -216,10 +217,12 @@ Teile sie in Dokumente auf (zusammengehörige Seiten in Reihenfolge) und ordne j
 - heating: eigenständige Heiz- und Warmwasserkostenabrechnung (z. B. vom Messdienst), ohne WEG-Einzelabrechnung
 - municipal: Bescheid der Stadt/Gemeinde über Grundsteuer und/oder Grundbesitzabgaben (Müll, Straßenreinigung, Abwasser)
 - invoice: Rechnung oder Beitragsbescheid zu Betriebskosten (z. B. Versicherung, Schornsteinfeger, Hausmeister, Wasser, Strom Allgemein)
-- other: alles andere (z. B. Mietvertrag, Kontoauszug, Schriftverkehr)
-year = das Jahr, auf das sich das Dokument bezieht (Abrechnungs- bzw. Veranlagungsjahr), nicht das Ausstellungsdatum.
+- lease: Mietvertrag über eine Wohnung oder einen Stellplatz, auch Nachträge und Mieterhöhungsvereinbarungen
+- other: alles andere (z. B. Kontoauszug, Schriftverkehr)
+year = das Jahr, auf das sich das Dokument bezieht (Abrechnungs- bzw. Veranlagungsjahr), nicht das Ausstellungsdatum; beim Mietvertrag das Jahr des Mietbeginns.
 propertyId = die id des passenden Objekts aus der Liste (über Anschrift, Wohnungsbezeichnung oder Name); "unknown", wenn unklar.
 unitName = Wohnungsbezeichnung laut Dokument (z. B. WE 09), sonst leer.
+tenantName = beim Mietvertrag der Name des Mieters (bei mehreren alle, durch „ und “ verbunden), sonst leer.
 title = kurze, sprechende Bezeichnung auf Deutsch, z. B. „Grundbesitzabgabenbescheid 2025 Stadt Heinsberg“.
 Jede Seite gehört zu genau einem Dokument. Erfinde nichts; Unklarheiten in notes.`;
 
@@ -233,7 +236,7 @@ const CLASSIFY_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "pages", "title", "year", "propertyId", "unitName"],
+        required: ["kind", "pages", "title", "year", "propertyId", "unitName", "tenantName"],
         properties: {
           kind: { type: "string", enum: [...DOC_KINDS] },
           pages: { type: "array", items: { type: "integer" }, description: "Seitennummern (1-basiert) dieses Dokuments" },
@@ -241,6 +244,7 @@ const CLASSIFY_SCHEMA = {
           year: { type: ["integer", "null"] },
           propertyId: { type: "string" },
           unitName: { type: "string" },
+          tenantName: { type: "string" },
         },
       },
     },

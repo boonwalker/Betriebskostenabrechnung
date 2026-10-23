@@ -47,19 +47,17 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
       <div className="card stack" id="vermieter">
         <h2>Vermieter</h2>
         <p className="muted small">Erscheint als Absender und Bankverbindung auf den Abrechnungen.</p>
-        <div className="grid">
-          <label className="field">
-            Name
-            <input value={landlord.name} onChange={(e) => setLandlord({ name: e.target.value })} />
-          </label>
-          <label className="field">
-            IBAN
-            <input value={landlord.iban} onChange={(e) => setLandlord({ iban: e.target.value })} />
-          </label>
-        </div>
+        <label className="field">
+          Name
+          <input value={landlord.name} onChange={(e) => setLandlord({ name: e.target.value })} />
+        </label>
         <label className="field">
           Anschrift
           <textarea rows={2} value={landlord.address} onChange={(e) => setLandlord({ address: e.target.value })} />
+        </label>
+        <label className="field">
+          IBAN
+          <input value={landlord.iban} onChange={(e) => setLandlord({ iban: e.target.value })} />
         </label>
       </div>
 

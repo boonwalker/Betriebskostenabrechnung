@@ -19,11 +19,11 @@ const BASIS_UNIT: Record<DistributionKey, string> = {
   direct: "",
 };
 
-/** „Ort, 23. Oktober 2026“ – der Ort aus der letzten Zeile der Absenderanschrift (ohne Postleitzahl) */
+/** „Ort, TT.MM.JJJJ“ – der Ort aus der letzten Zeile der Absenderanschrift (ohne Postleitzahl) */
 function placeDate(address: string, iso: string): string {
   const lastLine = address.trim().split(/\n|,/).map((l) => l.trim()).filter(Boolean).pop() ?? "";
   const place = lastLine.replace(/^\d{4,5}\s+/, "");
-  const date = new Date(`${iso}T12:00:00`).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" });
+  const date = formatDate(iso);
   return place && place !== lastLine ? `${place}, ${date}` : date;
 }
 

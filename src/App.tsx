@@ -55,6 +55,9 @@ export default function App() {
   const processing = (data.documents ?? []).filter((d) => d.status === "processing").length;
 
 
+  // Startseite: über das Logo, und ohne Daten auch statt des leeren Portfolios
+  const empty = data.properties.length === 0 && data.tenants.length === 0 && data.statements.length === 0;
+  const showHome = section === "start" || (section === "" && empty);
   let page;
   if (section === "objekte" && id === "neu") page = <PropertyWizard key="neu" data={data} update={update} />;
   else if (section === "objekte" && id && sub === "bearbeiten") page = <PropertyEditor key={id} data={data} update={update} propertyId={id} />;
@@ -67,7 +70,7 @@ export default function App() {
   else if (section === "abrechnungen") page = <Statements data={data} update={update} />;
   else if (section === "einstellungen") page = <SettingsPage data={data} update={update} replace={replace} />;
   else if (section === "belege") page = <Documents data={data} update={update} onUpload={upload} />;
-  else if (section === "start" || (section === "" && data.properties.length === 0 && data.tenants.length === 0 && data.statements.length === 0))
+  else if (showHome)
     page = <Home data={data} update={update} replace={replace} onUpload={upload} />;
   else page = <Dashboard data={data} />;
 
@@ -75,13 +78,13 @@ export default function App() {
     <>
       <header className="app-header">
         <div className="app-header-inner">
-          <a className={`brand ${section === "start" ? "active" : ""}`} href="#/start" aria-label="Startseite">
+          <a className={`brand ${showHome ? "active" : ""}`} href="#/start" aria-label="Startseite">
             <Logo />
             {processing > 0 && <span className="brand-badge" title="Belege werden verarbeitet">{processing}</span>}
           </a>
           <nav className="nav">
             {NAV.map(([path, label]) => (
-              <a key={path} href={`#/${path}`} className={section === path || (path === "" && (section === "objekte" || section === "weg")) ? "active" : ""}>
+              <a key={path} href={`#/${path}`} className={(section === path && !showHome) || (path === "" && (section === "objekte" || section === "weg")) ? "active" : ""}>
                 {label}
               </a>
             ))}

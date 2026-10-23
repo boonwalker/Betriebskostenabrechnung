@@ -409,7 +409,29 @@ export interface AppData {
   economicPlans: EconomicPlan[];
   /** Belege, die dem Mieterschreiben beigefügt werden (je Objekt und Jahr) */
   attachments?: Attachment[];
+  /** Belegablage: alle über den Belegeingang hochgeladenen Dokumente */
+  documents?: StoredDocument[];
   settings: Settings;
+}
+
+export type DocumentKind = "weg_annual" | "weg_plan" | "heating" | "municipal" | "invoice" | "other";
+
+/** Ein Dokument der Belegablage – erkannt, zugeordnet und abgelegt */
+export interface StoredDocument {
+  id: string;
+  createdAt: string;
+  kind: DocumentKind;
+  /** kurze Bezeichnung, z. B. „Grundbesitzabgabenbescheid Stadt Heinsberg“ */
+  title: string;
+  year: number | null;
+  propertyId: string | null;
+  pages: DocPage[];
+  status: "processing" | "done" | "error";
+  /** was damit geschehen ist, z. B. „WEG-Jahresabrechnung 2025 angelegt“ */
+  result?: string;
+  /** Sprungziel zur Stelle, an der das Dokument verwendet wird */
+  link?: string;
+  error?: string;
 }
 
 /** Eine gespeicherte Belegseite als Bild; die Bilddatei liegt im Seitenspeicher (siehe blobs.ts) */

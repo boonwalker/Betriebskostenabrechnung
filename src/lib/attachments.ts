@@ -35,10 +35,14 @@ export async function renderPage(page: AttachmentPage, tenantId: string | null):
   return canvas;
 }
 
-/** Seitenbilder löschen, die nirgends mehr verwendet werden (auch nicht in WEG-Unterlagen) */
+/** Seitenbilder löschen, die nirgends mehr verwendet werden (weder Anlage noch WEG-Unterlage noch Belegablage) */
 export function releaseUnusedBlobs(before: AppData, after: AppData) {
   const used = (d: AppData) =>
-    new Set([...(d.attachments ?? []).flatMap((a) => a.pages.map((p) => p.blobId)), ...d.wegAnnuals.flatMap((w) => (w.sourcePages ?? []).map((p) => p.blobId))]);
+    new Set([
+      ...(d.attachments ?? []).flatMap((a) => a.pages.map((p) => p.blobId)),
+      ...d.wegAnnuals.flatMap((w) => (w.sourcePages ?? []).map((p) => p.blobId)),
+      ...(d.documents ?? []).flatMap((doc) => doc.pages.map((p) => p.blobId)),
+    ]);
   const keep = used(after);
   for (const id of used(before)) if (!keep.has(id)) void deleteBlob(id);
 }

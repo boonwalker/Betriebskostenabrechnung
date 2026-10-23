@@ -128,7 +128,14 @@ function toBlock(file: File, data: string): BetaContentBlockParam {
 }
 
 /** Sendet Dokumente mit strukturierter Ausgabe an Claude und gibt das JSON zurück */
-async function askClaude(files: File[], access: AiAccess, system: string, schema: Record<string, unknown>, instruction: string): Promise<unknown> {
+async function askClaude(
+  files: File[],
+  access: AiAccess,
+  system: string,
+  schema: Record<string, unknown>,
+  instruction: string,
+  effort: "low" | "medium" | "high" = "high",
+): Promise<unknown> {
   for (const f of files) if (!isSupportedFile(f)) throw new Error(`„${f.name}“: Bitte PDF-Dateien oder Bilder (JPG, PNG, WebP, GIF) hochladen.`);
   const blocks: BetaContentBlockParam[] = [];
   for (const [i, f] of files.entries()) {
@@ -155,7 +162,7 @@ async function askClaude(files: File[], access: AiAccess, system: string, schema
         max_tokens: 64000,
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
-        output_config: { effort: "high", format: { type: "json_schema", schema } },
+        output_config: { effort, format: { type: "json_schema", schema } },
         system,
         messages: [{ role: "user", content: [...blocks, { type: "text", text: instruction }] }],
       })
@@ -176,9 +183,75 @@ async function askClaude(files: File[], access: AiAccess, system: string, schema
   return JSON.parse(text);
 }
 
-export async function extractInvoice(file: File, access: AiAccess, billingPeriod: string): Promise<Extraction> {
-  const json = await askClaude([file], access, SYSTEM, JSON_SCHEMA, `Abrechnungszeitraum: ${billingPeriod}. Bitte erfasse diesen Beleg.`);
+export async function extractInvoice(file: File | File[], access: AiAccess, billingPeriod: string): Promise<Extraction> {
+  const files = Array.isArray(file) ? file : [file];
+  const json = await askClaude(files, access, SYSTEM, JSON_SCHEMA, `Abrechnungszeitraum: ${billingPeriod}. Bitte erfasse diesen Beleg${files.length > 1 ? " (mehrere Seiten eines Dokuments)" : ""}.`);
   return ExtractionSchema.parse(json);
+}
+
+/* ---------- Belegeingang: gemischten Stapel in Dokumente aufteilen und einordnen ---------- */
+
+const DOC_KINDS = ["weg_annual", "weg_plan", "heating", "municipal", "invoice", "other"] as const;
+
+const ClassificationSchema = z.object({
+  documents: z.array(
+    z.object({
+      kind: z.enum(DOC_KINDS),
+      pages: z.array(z.number().int()),
+      title: z.string(),
+      year: z.number().int().nullable(),
+      propertyId: z.string(),
+      unitName: z.string(),
+    }),
+  ),
+  notes: z.string(),
+});
+
+export type Classification = z.infer<typeof ClassificationSchema>;
+
+const CLASSIFY_SYSTEM = `Du sortierst Unterlagen eines privaten Vermieters in Deutschland. Du bekommst fotografierte oder gescannte Seiten, nummeriert ab 1.
+Teile sie in Dokumente auf (zusammengehörige Seiten in Reihenfolge) und ordne jedes Dokument ein:
+- weg_annual: Jahresabrechnung bzw. Einzelabrechnung der Wohnungseigentümergemeinschaft (Hausgeldabrechnung) – samt beiliegender Heiz- und Warmwasserkostenabrechnung, wenn sie im selben Stapel direkt dazugehört
+- weg_plan: Wirtschaftsplan der WEG
+- heating: eigenständige Heiz- und Warmwasserkostenabrechnung (z. B. vom Messdienst), ohne WEG-Einzelabrechnung
+- municipal: Bescheid der Stadt/Gemeinde über Grundsteuer und/oder Grundbesitzabgaben (Müll, Straßenreinigung, Abwasser)
+- invoice: Rechnung oder Beitragsbescheid zu Betriebskosten (z. B. Versicherung, Schornsteinfeger, Hausmeister, Wasser, Strom Allgemein)
+- other: alles andere (z. B. Mietvertrag, Kontoauszug, Schriftverkehr)
+year = das Jahr, auf das sich das Dokument bezieht (Abrechnungs- bzw. Veranlagungsjahr), nicht das Ausstellungsdatum.
+propertyId = die id des passenden Objekts aus der Liste (über Anschrift, Wohnungsbezeichnung oder Name); "unknown", wenn unklar.
+unitName = Wohnungsbezeichnung laut Dokument (z. B. WE 09), sonst leer.
+title = kurze, sprechende Bezeichnung auf Deutsch, z. B. „Grundbesitzabgabenbescheid 2025 Stadt Heinsberg“.
+Jede Seite gehört zu genau einem Dokument. Erfinde nichts; Unklarheiten in notes.`;
+
+const CLASSIFY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["documents", "notes"],
+  properties: {
+    documents: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "pages", "title", "year", "propertyId", "unitName"],
+        properties: {
+          kind: { type: "string", enum: [...DOC_KINDS] },
+          pages: { type: "array", items: { type: "integer" }, description: "Seitennummern (1-basiert) dieses Dokuments" },
+          title: { type: "string" },
+          year: { type: ["integer", "null"] },
+          propertyId: { type: "string" },
+          unitName: { type: "string" },
+        },
+      },
+    },
+    notes: { type: "string" },
+  },
+} as const;
+
+export async function classifyDocuments(pages: File[], access: AiAccess, properties: { id: string; name: string; address: string; units: string[] }[]): Promise<Classification> {
+  const list = properties.map((p) => `- id ${p.id}: ${p.name}, ${p.address || "ohne Anschrift"}, Wohnungen: ${p.units.join(", ") || "–"}`).join("\n");
+  const json = await askClaude(pages, access, CLASSIFY_SYSTEM, CLASSIFY_SCHEMA, `Objekte des Vermieters:\n${list}\n\nBitte teile die ${pages.length} Seiten in Dokumente auf und ordne sie ein.`, "medium");
+  return ClassificationSchema.parse(json);
 }
 
 /* ---------- WEG-Jahresabrechnung und Wirtschaftsplan ---------- */

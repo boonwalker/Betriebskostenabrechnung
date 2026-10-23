@@ -1,0 +1,205 @@
+/**
+ * Belegeingang: beliebige Fotos und PDFs hochladen; die App erkennt die Dokumente darin, ordnet sie zu
+ * (WEG-Jahresabrechnung, Wirtschaftsplan, Heizkostenabrechnung, Abgabenbescheid, Rechnung, Sonstiges)
+ * und legt sie in der Belegablage ab.
+ */
+import type { AiAccess } from "./aiAccess";
+import { autoAttach, heatingSourcePages } from "./attachments";
+import { COST_CATEGORIES } from "./betrkv";
+import { getBlob } from "./blobs";
+import { uid } from "./model";
+import type { AppData, CostItem, DocPage, DocumentKind, StoredDocument } from "./types";
+import { annualFromExtraction, planFromExtraction } from "./wegImport";
+
+export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
+  weg_annual: "WEG-Jahresabrechnung",
+  weg_plan: "Wirtschaftsplan",
+  heating: "Heizkostenabrechnung",
+  municipal: "Abgabenbescheid",
+  invoice: "Rechnung",
+  other: "Sonstiges",
+};
+
+type Update = (fn: (d: AppData) => AppData) => void;
+
+const patchDoc = (update: Update, id: string, patch: Partial<StoredDocument>) =>
+  update((d) => ({ ...d, documents: (d.documents ?? []).map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+
+async function pageFiles(pages: DocPage[]): Promise<File[]> {
+  return Promise.all(
+    pages.map(async (p, i) => {
+      const blob = await getBlob(p.blobId);
+      if (!blob) throw new Error("Seitenbild nicht gefunden.");
+      return new File([blob], `Seite ${i + 1}.jpg`, { type: "image/jpeg" });
+    }),
+  );
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Einen Upload verarbeiten. `snapshot` ist der Datenstand beim Hochladen (für Objektliste und Prüfungen);
+ * alle Änderungen laufen über `update`, damit parallele Eingaben nicht verloren gehen.
+ */
+export async function processUpload(files: File[], access: AiAccess, snapshot: AppData, update: Update): Promise<void> {
+  const batchId = uid();
+  const now = new Date().toISOString();
+  const placeholder: StoredDocument = { id: batchId, createdAt: now, kind: "other", title: files.map((f) => f.name).join(", "), year: null, propertyId: null, pages: [], status: "processing", result: "Seiten werden gespeichert …" };
+  update((d) => ({ ...d, documents: [placeholder, ...(d.documents ?? [])] }));
+
+  let pages: DocPage[] = [];
+  try {
+    const { filesToPages } = await import("./pages");
+    pages = await filesToPages(files);
+    patchDoc(update, batchId, { pages, result: "Wird erkannt …" });
+
+    const { classifyDocuments, extractInvoice, extractWegDocument } = await import("./extract");
+    const properties = snapshot.properties.map((p) => ({ id: p.id, name: p.name, address: p.address, units: p.units.map((u) => u.name) }));
+    const cls = await classifyDocuments(await pageFiles(pages), access, properties);
+
+    // Seiten auf die erkannten Dokumente verteilen; was die Erkennung nicht zuordnet, bleibt als „Sonstiges“
+    const used = new Set<number>();
+    const docs = cls.documents
+      .map((c) => ({ c, pages: c.pages.filter((n) => n >= 1 && n <= pages.length && !used.has(n) && (used.add(n), true)).map((n) => pages[n - 1]) }))
+      .filter((x) => x.pages.length);
+    const rest = pages.filter((_, i) => !used.has(i + 1));
+    if (rest.length) docs.push({ c: { kind: "other", pages: [], title: "Nicht zugeordnete Seiten", year: null, propertyId: "unknown", unitName: "" }, pages: rest });
+
+    const single = snapshot.properties.length === 1 ? snapshot.properties[0].id : null;
+    const stored: StoredDocument[] = docs.map(({ c, pages: ps }) => ({
+      id: uid(),
+      createdAt: now,
+      kind: c.kind,
+      title: c.title || DOCUMENT_KIND_LABELS[c.kind],
+      year: c.year,
+      propertyId: snapshot.properties.some((p) => p.id === c.propertyId) ? c.propertyId : single,
+      pages: ps,
+      status: "processing",
+      result: "Wird zugeordnet …",
+    }));
+    update((d) => ({ ...d, documents: [...stored, ...(d.documents ?? []).filter((x) => x.id !== batchId)] }));
+
+    for (const [i, doc] of stored.entries()) {
+      try {
+        const outcome = await route(doc, docs[i].c.unitName, access, snapshot, update, { extractInvoice, extractWegDocument });
+        patchDoc(update, doc.id, { status: "done", ...outcome });
+      } catch (e) {
+        patchDoc(update, doc.id, { status: "error", error: (e as Error).message, result: "Abgelegt, aber nicht ausgewertet." });
+      }
+    }
+  } catch (e) {
+    patchDoc(update, batchId, { status: "error", error: (e as Error).message, result: pages.length ? "Abgelegt, aber nicht erkannt." : "Konnte nicht gespeichert werden." });
+  }
+}
+
+type Extractors = Pick<typeof import("./extract"), "extractInvoice" | "extractWegDocument">;
+
+/** Ein erkanntes Dokument an die passende Stelle bringen; Rückgabe: was geschehen ist */
+async function route(
+  doc: StoredDocument,
+  unitName: string,
+  access: AiAccess,
+  snapshot: AppData,
+  update: Update,
+  { extractInvoice, extractWegDocument }: Extractors,
+): Promise<Partial<StoredDocument>> {
+  const property = snapshot.properties.find((p) => p.id === doc.propertyId);
+  if (doc.kind === "other") return { result: "Abgelegt." };
+  if (!property) return { result: "Abgelegt – kein passendes Objekt gefunden. Bitte unten zuordnen." };
+  const year = doc.year;
+  const files = await pageFiles(doc.pages);
+
+  if (doc.kind === "weg_annual" || doc.kind === "weg_plan") {
+    const kind = doc.kind === "weg_annual" ? "annual" : "plan";
+    const unit = property.units.find((u) => u.name.replace(/\s/g, "").toLowerCase() === unitName.replace(/\s/g, "").toLowerCase()) ?? property.units[0];
+    const x = await extractWegDocument(files, access, unit?.name ?? "", kind);
+    const ctx = { propertyId: property.id, unitId: unit?.id ?? "", documents: [doc.title], fallbackYear: year ?? new Date().getFullYear() - 1 };
+    if (kind === "annual") {
+      const annual = { ...annualFromExtraction(x, ctx), sourcePages: doc.pages, heatingPages: x.heating ? (x.heating.pages.length ? x.heating.pages : x.heating.page ? [x.heating.page] : []) : [] };
+      const same = (w: { propertyId: string; unitId: string; year: number }) => w.propertyId === property.id && w.unitId === annual.unitId && w.year === annual.year;
+      if (snapshot.wegAnnuals.some(same)) return { year: annual.year, result: `Für ${annual.year} gibt es schon eine WEG-Jahresabrechnung – nur abgelegt.` };
+      update((d) => (d.wegAnnuals.some(same) ? d : autoAttach({ ...d, wegAnnuals: [...d.wegAnnuals, annual] }, property.id, annual.year, "heating", heatingSourcePages(annual))));
+      return { year: annual.year, result: `WEG-Jahresabrechnung ${annual.year} angelegt${annual.heatingPages?.length ? ", Heizkostenabrechnung als Anlage übernommen" : ""} – bitte Positionen prüfen.`, link: `#/weg/jahresabrechnung/${annual.id}` };
+    }
+    const plan = planFromExtraction(x, ctx);
+    const same = (w: { propertyId: string; unitId: string; year: number }) => w.propertyId === property.id && w.unitId === plan.unitId && w.year === plan.year;
+    if (snapshot.economicPlans.some(same)) return { year: plan.year, result: `Für ${plan.year} gibt es schon einen Wirtschaftsplan – nur abgelegt.` };
+    update((d) => (d.economicPlans.some(same) ? d : { ...d, economicPlans: [...d.economicPlans, plan] }));
+    return { year: plan.year, result: `Wirtschaftsplan ${plan.year} angelegt – bitte prüfen.`, link: `#/weg/wirtschaftsplan/${plan.id}` };
+  }
+
+  if (doc.kind === "heating") {
+    if (!year) return { result: "Abgelegt – das Jahr der Heizkostenabrechnung war nicht erkennbar." };
+    update((d) => autoAttach(d, property.id, year, "heating", doc.pages));
+    return { result: `Als Anlage „Heizkostenabrechnung ${year}“ übernommen.`, link: statementLink(snapshot, property.id, year) };
+  }
+
+  // Abgabenbescheid und Rechnungen: Beträge auslesen
+  const period = year ? `01.01.${year} bis 31.12.${year}` : "unbekannt";
+  const x = await extractInvoice(files, access, period);
+  const y = year ?? (Number(x.servicePeriodStart.slice(0, 4)) || null);
+  if (!y) return { result: "Abgelegt – das Jahr war nicht erkennbar." };
+
+  if (doc.kind === "municipal") {
+    const tax = round2(x.items.filter((it) => it.category === 1).reduce((a, it) => a + it.allocableAmount + it.nonAllocableAmount, 0));
+    const waste = round2(x.items.filter((it) => it.category === 8).reduce((a, it) => a + it.allocableAmount + it.nonAllocableAmount, 0));
+    const known = (property.municipalBills ?? []).find((b) => b.year === y);
+    const note = known && ((known.propertyTax ?? 0) !== tax || (known.wasteFee ?? 0) !== waste) ? ` Abweichung zum erfassten Bescheid ${y} – bitte prüfen.` : "";
+    update((d) => {
+      const after = autoAttach(d, property.id, y, "propertyTax", doc.pages);
+      return {
+        ...after,
+        properties: after.properties.map((p) => {
+          if (p.id !== property.id) return p;
+          const bills = p.municipalBills ?? [];
+          const existing = bills.find((b) => b.year === y);
+          if (existing) return p;
+          return { ...p, municipalBills: [...bills, { id: uid(), year: y, propertyTax: tax || null, wasteFee: waste || null, note: doc.title }] };
+        }),
+      };
+    });
+    return {
+      year: y,
+      result: `Bescheid ${y}: Grundsteuer ${tax.toFixed(2).replace(".", ",")} €, Müll ${waste.toFixed(2).replace(".", ",")} €${known ? "" : " beim Objekt erfasst"}, als Anlage übernommen.${note}`,
+      link: `#/objekte/${property.id}/bearbeiten?f=grundsteuer`,
+    };
+  }
+
+  // Rechnung: Positionen in die Abrechnung des Jahres, sofern es eine offene gibt
+  const items: CostItem[] = x.items
+    .filter((it) => it.allocableAmount !== 0)
+    .map((it) => ({
+      id: uid(),
+      category: it.category,
+      label: it.description || COST_CATEGORIES.find((c) => c.no === it.category)?.label || "",
+      amount: it.allocableAmount,
+      key: it.recommendedKey,
+      note: it.reasoning,
+      ...(it.laborKind !== "none" && it.laborCost > 0 ? { laborCost: it.laborCost, laborKind: it.laborKind } : {}),
+      ...(it.co2Cost > 0 ? { co2Cost: it.co2Cost, co2Kg: it.co2Kg || undefined } : {}),
+      ...(it.recommendedKey === "direct" ? { directUnitId: property.units[0]?.id } : {}),
+      source: doc.title,
+    }));
+  const st = snapshot.statements.find((s) => s.propertyId === property.id && s.periodStart.startsWith(String(y)) && s.status !== "released");
+  if (!st) return { year: y, result: `Abgelegt – für ${y} gibt es noch keine offene Abrechnung. Umlagefähig laut Beleg: ${items.length} Position(en).` };
+  if (!items.length) return { year: y, result: "Abgelegt – keine umlagefähigen Kosten erkannt." };
+  update((d) => ({ ...d, statements: d.statements.map((s) => (s.id === st.id ? { ...s, costs: [...s.costs, ...items] } : s)) }));
+  return { year: y, result: `${items.length} Position(en) in die Abrechnung ${y} übernommen – bitte prüfen.`, link: `#/abrechnungen/${st.id}?f=kosten` };
+}
+
+function statementLink(d: AppData, propertyId: string, year: number): string | undefined {
+  const st = d.statements.find((s) => s.propertyId === propertyId && s.periodStart.startsWith(String(year)));
+  return st ? `#/abrechnungen/${st.id}?f=anlagen` : undefined;
+}
+
+/** Ein abgelegtes Dokument erneut zuordnen, z. B. nachdem von Hand ein Objekt gewählt wurde */
+export async function rerouteDocument(doc: StoredDocument, access: AiAccess, snapshot: AppData, update: Update): Promise<void> {
+  patchDoc(update, doc.id, { ...doc, status: "processing", result: "Wird zugeordnet …", error: undefined });
+  try {
+    const ex = await import("./extract");
+    const outcome = await route(doc, "", access, snapshot, update, ex);
+    patchDoc(update, doc.id, { status: "done", ...outcome });
+  } catch (e) {
+    patchDoc(update, doc.id, { status: "error", error: (e as Error).message, result: "Abgelegt, aber nicht ausgewertet." });
+  }
+}

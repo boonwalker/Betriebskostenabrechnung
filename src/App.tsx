@@ -12,6 +12,9 @@ import Statements from "./pages/Statements";
 import StatementEditor from "./pages/StatementEditor";
 import PrintView from "./pages/PrintView";
 import SettingsPage from "./pages/Settings";
+import Documents from "./pages/Documents";
+import { UploadButtons } from "./components/UploadButtons";
+import { aiAccess } from "./lib/aiAccess";
 
 function useHashRoute() {
   const [route, setRoute] = useState(() => parseHash());
@@ -41,6 +44,25 @@ export default function App() {
   const [data, update, replace, sync] = useAppData();
   const { parts } = useHashRoute();
   const [section = "", id, sub] = parts;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const access = aiAccess(data.settings);
+
+  // Belegeingang: verarbeitet im Hintergrund weiter, auch wenn die Seite gewechselt wird
+  const upload = (files: File[]) => {
+    if (!access) return;
+    setMenuOpen(false);
+    void import("./lib/inbox").then(({ processUpload }) => processUpload(files, access, data, update));
+    if (section !== "belege") window.location.hash = "#/belege";
+  };
+  const processing = (data.documents ?? []).filter((d) => d.status === "processing").length;
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+  useEffect(() => setMenuOpen(false), [section, id, sub]);
 
   let page;
   if (section === "objekte" && id === "neu") page = <PropertyWizard key="neu" data={data} update={update} />;
@@ -53,13 +75,17 @@ export default function App() {
   else if (section === "abrechnungen" && id) page = <StatementEditor data={data} update={update} statementId={id} />;
   else if (section === "abrechnungen") page = <Statements data={data} update={update} />;
   else if (section === "einstellungen") page = <SettingsPage data={data} update={update} replace={replace} />;
+  else if (section === "belege") page = <Documents data={data} update={update} onUpload={upload} />;
   else page = <Dashboard data={data} replace={replace} />;
 
   return (
     <>
       <header className="app-header">
         <div className="app-header-inner">
-          <a className="brand" href="#/" aria-label="ImmoFriend – Startseite"><Logo /></a>
+          <button type="button" className="brand" aria-label="Hauptmenü" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
+            <Logo />
+            {processing > 0 && <span className="brand-badge" title="Belege werden verarbeitet">{processing}</span>}
+          </button>
           <nav className="nav">
             {NAV.map(([path, label]) => (
               <a key={path} href={`#/${path}`} className={section === path || (path === "" && (section === "objekte" || section === "weg")) ? "active" : ""}>
@@ -77,6 +103,28 @@ export default function App() {
           )}
         </div>
       </header>
+      {menuOpen && (
+        <div className="main-menu-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setMenuOpen(false)}>
+          <nav className="main-menu" aria-label="Hauptmenü">
+            <div className="main-menu-section">
+              <div className="main-menu-label">Belege erfassen</div>
+              {access ? (
+                <UploadButtons onFiles={upload} />
+              ) : (
+                <a className="main-menu-hint" href="#/einstellungen?f=belegerkennung">Für die Belegerkennung zuerst Einladungscode oder API-Schlüssel eintragen →</a>
+              )}
+            </div>
+            <a href="#/belege" className={section === "belege" ? "active" : ""}>
+              <span aria-hidden>🗂️</span> Belegablage
+              {(data.documents?.length ?? 0) > 0 && <span className="main-menu-count">{data.documents!.length}</span>}
+            </a>
+            <a href="#/"><span aria-hidden>🏠</span> Portfolio</a>
+            <a href="#/mieter"><span aria-hidden>👥</span> Mieter</a>
+            <a href="#/abrechnungen"><span aria-hidden>🧾</span> Abrechnungen</a>
+            <a href="#/einstellungen"><span aria-hidden>⚙️</span> Einstellungen</a>
+          </nav>
+        </div>
+      )}
       <main>{page}</main>
     </>
   );

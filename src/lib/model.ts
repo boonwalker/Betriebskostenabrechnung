@@ -67,6 +67,7 @@ export function emptyData(): AppData {
     wegAnnuals: [],
     economicPlans: [],
     attachments: [],
+    documents: [],
     settings: { landlord: { name: "", address: "", iban: "" }, anthropicApiKey: "", marginalTaxRate: 35 },
   };
 }
@@ -104,6 +105,7 @@ export function migrate(raw: any): AppData {
     wegAnnuals: raw.wegAnnuals ?? [],
     economicPlans: raw.economicPlans ?? [],
     attachments: raw.attachments ?? [],
+    documents: raw.documents ?? [],
   };
 }
 

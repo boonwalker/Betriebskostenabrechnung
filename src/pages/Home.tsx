@@ -7,11 +7,10 @@ import { DOCUMENT_KIND_LABELS } from "../lib/inbox";
 import type { AppData } from "../lib/types";
 
 /** Startseite unter dem Logo: Begrüßung, Belege erfassen und was zuletzt erkannt wurde */
-export default function Home({ data, update, replace, onUpload }: PageProps & { replace: (d: AppData) => void; onUpload: (files: File[]) => void }) {
+export default function Home({ data, replace, onUpload }: PageProps & { replace: (d: AppData) => void; onUpload: (files: File[]) => void }) {
   const access = aiAccess(data.settings);
   const empty = data.properties.length === 0 && data.tenants.length === 0 && data.statements.length === 0;
   const recent = [...(data.documents ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
-  const usePortfolio = (portfolio: boolean) => update((d) => ({ ...d, settings: { ...d.settings, portfolio } }));
 
   return (
     <div className="welcome">
@@ -23,23 +22,14 @@ export default function Home({ data, update, replace, onUpload }: PageProps & { 
           fertigem Anschreiben.
         </p>
         {empty && (
-          <>
-            <p className="small" style={{ marginBottom: 8 }}>
-              Wofür möchtest du ImmoFriend nutzen? Ohne Portfolio entfallen Kaufpreis, Finanzierung und Wertentwicklung – umstellen kannst du das jederzeit in den
-              Einstellungen.
-            </p>
-            <div className="welcome-actions">
-              <a className="btn primary" href="#/objekte/neu" onClick={() => usePortfolio(true)}>
-                Portfolio und Abrechnung
-              </a>
-              <a className="btn" href="#/objekte/neu" onClick={() => usePortfolio(false)}>
-                Nur Betriebskostenabrechnung
-              </a>
-              <button onClick={() => replace({ ...demoData(), settings: { ...demoData().settings, inviteCode: data.settings.inviteCode } })}>
-                Mit Beispieldaten ausprobieren
-              </button>
-            </div>
-          </>
+          <div className="welcome-actions">
+            <a className="btn primary" href="#/objekte/neu">
+              Erstes Objekt anlegen
+            </a>
+            <button onClick={() => replace({ ...demoData(), settings: { ...demoData().settings, inviteCode: data.settings.inviteCode } })}>
+              Mit Beispieldaten ausprobieren
+            </button>
+          </div>
         )}
       </div>
 

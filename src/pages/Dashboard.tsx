@@ -1,17 +1,16 @@
 import ValueChart from "../components/ValueChart";
-import { Delta, Kpi, type PageProps } from "../components/ui";
+import { Delta, Kpi } from "../components/ui";
 import { calculateStatement } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
 import { portfolioMetrics, propertyMetrics, type PropertyMetrics } from "../lib/finance";
 import { wealthSeries, type WealthSeries } from "../lib/wealth";
 import { formatEUR0, formatPct, formatSignedEUR0 } from "../lib/format";
-import { missingInfo, portfolioOn, PROPERTY_TYPE_LABELS } from "../lib/model";
+import { missingInfo, PROPERTY_TYPE_LABELS, wealthMissing } from "../lib/model";
 import type { AppData, Property } from "../lib/types";
 import { backupDue } from "../lib/backup";
 
-export default function Dashboard({ data }: Pick<PageProps, "data">) {
+export default function Dashboard({ data }: { data: AppData }) {
   const today = todayISO();
-  const showPortfolio = portfolioOn(data.settings);
   const lastYear = String(new Date().getFullYear() - 1);
   const metrics = data.properties.map((p) => ({
     p,
@@ -31,9 +30,12 @@ export default function Dashboard({ data }: Pick<PageProps, "data">) {
     data.properties.reduce((a, p) => a + p.purchasePrice, 0),
   );
 
+  // Objekte, bei denen Angaben für Vermögen und Rendite fehlen (z. B. beim Anlegen übersprungen)
+  const incomplete = data.properties.map((p) => ({ p, items: wealthMissing(p) })).filter((x) => x.items.length > 0);
+
   const steps = [
     { done: !!data.settings.landlord.name, label: <>Deine Vermieterdaten in den <a href="#/einstellungen">Einstellungen</a> hinterlegen</> },
-    { done: data.properties.length > 0, label: <>Ein <a href="#/objekte/neu">Objekt</a> mit Wohnungen{showPortfolio ? ", Kaufdaten und Finanzierung" : ""} anlegen</> },
+    { done: data.properties.length > 0, label: <>Ein <a href="#/objekte/neu">Objekt</a> mit Wohnungen, Kaufdaten und Finanzierung anlegen</> },
     { done: data.tenants.length > 0, label: <><a href="#/mieter">Mieter</a> mit Kaltmiete, Vorauszahlungen und Personenzahl erfassen</> },
     { done: data.statements.length > 0, label: <>Eine <a href="#/abrechnungen">Abrechnung</a> anlegen und die Belege des Jahres hochladen</> },
   ];
@@ -52,11 +54,11 @@ export default function Dashboard({ data }: Pick<PageProps, "data">) {
         </a>
       )}
       <div className="page-head">
-        <h1>{showPortfolio ? "Mein Immobilien-Portfolio" : "Meine Objekte"}</h1>
+        <h1>Mein Immobilien-Portfolio</h1>
         <a className="btn primary" href="#/objekte/neu">+ Objekt hinzufügen</a>
       </div>
 
-      {showPortfolio && data.properties.length > 0 && (
+      {data.properties.length > 0 && (
         <div className="card portfolio-head">
           <div>
             <div className="muted small">Vermögenswert (Marktwert − Restschuld + Cashflow seit Erwerb)</div>
@@ -78,18 +80,28 @@ export default function Dashboard({ data }: Pick<PageProps, "data">) {
         </div>
       )}
 
+      {incomplete.length > 0 && (
+        <div className="alert info portfolio-missing">
+          <strong>Damit das Portfolio rechnen kann, fehlen noch:</strong>
+          {incomplete.map(({ p, items }) => (
+            <div key={p.id} className="portfolio-missing-object">
+              <span className="small">{p.name}</span>
+              <ul className="checklist missing-list">
+                {items.map((x) => (
+                  <li key={x.text}>
+                    <a href={x.href}>{x.text} →</a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          <span className="small">Für die Betriebskostenabrechnung brauchst du diese Angaben nicht.</span>
+        </div>
+      )}
+
       <div className="tiles">
         {metrics.map(({ p, m, w }) => (
-          <PropertyTile
-            key={p.id}
-            p={p}
-            m={m}
-            w={showPortfolio ? w : undefined}
-            data={data}
-            missing={missingInfo(p, data.tenants, data.economicPlans, showPortfolio).length}
-            needsStatement={openStatement(p)}
-            lastYear={lastYear}
-          />
+          <PropertyTile key={p.id} p={p} m={m} w={w} missing={missingInfo(p, data.tenants, data.economicPlans).length} needsStatement={openStatement(p)} lastYear={lastYear} />
         ))}
         <a className="tile tile-add" href="#/objekte/neu">
           <span className="tile-add-plus">+</span>
@@ -151,13 +163,10 @@ function PropertyTile({
   missing,
   needsStatement,
   lastYear,
-  data,
 }: {
   p: Property;
   m: PropertyMetrics;
-  /** undefined = ohne Portfolio: nur Vermietung und Abrechnungen */
-  w: WealthSeries | null | undefined;
-  data: AppData;
+  w: WealthSeries | null;
   missing: number;
   needsStatement: boolean;
   lastYear: string;
@@ -173,47 +182,41 @@ function PropertyTile({
         <span className="badge neutral">{PROPERTY_TYPE_LABELS[p.type]}</span>
       </div>
 
-      {w === undefined ? (
-        <SimpleTileBody p={p} m={m} data={data} />
+      <div className="muted small" style={{ marginTop: 12 }}>Vermögenswert</div>
+      <div className="tile-value" style={{ marginTop: 0 }}>{formatEUR0(w?.current.wealth ?? m.netWorth)}</div>
+      {w ? (
+        <Delta value={w.gain} pct={w.baseline > 0 ? w.gain / w.baseline : null} />
       ) : (
-        <>
-          <div className="muted small" style={{ marginTop: 12 }}>Vermögenswert</div>
-          <div className="tile-value" style={{ marginTop: 0 }}>{formatEUR0(w?.current.wealth ?? m.netWorth)}</div>
-          {w ? (
-            <Delta value={w.gain} pct={w.baseline > 0 ? w.gain / w.baseline : null} />
-          ) : (
-            <div className="muted small">Erwerbsdatum und -wert fehlen</div>
-          )}
-          <div className="muted small">
-            Marktwert {formatEUR0(m.marketValue)}
-            {m.loanBalance > 0 && ` · Restschuld ${formatEUR0(m.loanBalance)}`}
-            {w && ` · Cashflow ${formatSignedEUR0(w.current.cumulative)}`}
-            {w && w.current.withdrawn > 0 && ` · entnommen ${formatEUR0(w.current.withdrawn)}`}
-          </div>
-          <div className="tile-chart">
-            {w && w.points.length >= 2 ? (
-              <ValueChart compact points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />
-            ) : (
-              <div className="muted small">Der Verlauf erscheint ab dem zweiten Monat nach Erwerb.</div>
-            )}
-          </div>
-
-          <div className="tile-stats">
-            <div>
-              <span className="muted small">Mietrendite</span>
-              <strong>{formatPct(m.grossYield)}</strong>
-            </div>
-            <div>
-              <span className="muted small">Cashflow / Monat</span>
-              <strong>{formatSignedEUR0(m.cashflowAfterTax / 12)}</strong>
-            </div>
-            <div>
-              <span className="muted small">Vermietet</span>
-              <strong>{m.unitsLet} / {m.unitsTotal}</strong>
-            </div>
-          </div>
-        </>
+        <div className="muted small">Erwerbsdatum und -wert fehlen</div>
       )}
+      <div className="muted small">
+        Marktwert {formatEUR0(m.marketValue)}
+        {m.loanBalance > 0 && ` · Restschuld ${formatEUR0(m.loanBalance)}`}
+        {w && ` · Cashflow ${formatSignedEUR0(w.current.cumulative)}`}
+        {w && w.current.withdrawn > 0 && ` · entnommen ${formatEUR0(w.current.withdrawn)}`}
+      </div>
+      <div className="tile-chart">
+        {w && w.points.length >= 2 ? (
+          <ValueChart compact points={w.points.map((x) => ({ date: x.date, value: x.wealth }))} label={`Vermögensentwicklung ${p.name}`} />
+        ) : (
+          <div className="muted small">Der Verlauf erscheint ab dem zweiten Monat nach Erwerb.</div>
+        )}
+      </div>
+
+      <div className="tile-stats">
+        <div>
+          <span className="muted small">Mietrendite</span>
+          <strong>{formatPct(m.grossYield)}</strong>
+        </div>
+        <div>
+          <span className="muted small">Cashflow / Monat</span>
+          <strong>{formatSignedEUR0(m.cashflowAfterTax / 12)}</strong>
+        </div>
+        <div>
+          <span className="muted small">Vermietet</span>
+          <strong>{m.unitsLet} / {m.unitsTotal}</strong>
+        </div>
+      </div>
 
       {(needsStatement || missing > 0) && (
         <div className="row" style={{ marginTop: 10, gap: 6 }}>
@@ -222,28 +225,5 @@ function PropertyTile({
         </div>
       )}
     </a>
-  );
-}
-
-/** Kachelinhalt ohne Portfolio: Mieter und Stand der Abrechnungen */
-function SimpleTileBody({ p, m, data }: { p: Property; m: PropertyMetrics; data: AppData }) {
-  const today = todayISO();
-  const tenants = data.tenants.filter((t) => t.propertyId === p.id && (!t.moveOut || t.moveOut >= today));
-  const last = data.statements.filter((s) => s.propertyId === p.id).sort((a, b) => b.periodStart.localeCompare(a.periodStart))[0];
-  return (
-    <>
-      <div className="muted small" style={{ marginTop: 12 }}>Mieter</div>
-      <div className="tile-tenants">{tenants.length ? tenants.map((t) => t.name).join(", ") : <span className="muted">noch keine</span>}</div>
-      <div className="tile-stats two">
-        <div>
-          <span className="muted small">Vermietet</span>
-          <strong>{m.unitsLet} / {m.unitsTotal}</strong>
-        </div>
-        <div>
-          <span className="muted small">Letzte Abrechnung</span>
-          <strong>{last ? `${last.periodStart.slice(0, 4)} · ${last.status === "released" ? "freigegeben" : "Entwurf"}` : "–"}</strong>
-        </div>
-      </div>
-    </>
   );
 }

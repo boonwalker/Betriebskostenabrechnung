@@ -4,7 +4,6 @@ import { PROXY_URL } from "../lib/aiAccess";
 import { markBackup } from "../lib/backup";
 import { demoData } from "../lib/demo";
 import { we09Annual2024, we09Plan2025, we09PreviousTenant, we09Property, we09Tenant } from "../lib/fixtures/we09";
-import { portfolioOn } from "../lib/model";
 import { emptyData, exportData, parseBackup } from "../lib/store";
 import type { AppData, Landlord } from "../lib/types";
 
@@ -38,8 +37,6 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
   };
 
   const hasData = data.properties.length > 0 || data.tenants.length > 0;
-  const portfolio = portfolioOn(data.settings);
-  const setPortfolio = (on: boolean) => update((d) => ({ ...d, settings: { ...d.settings, portfolio: on } }));
 
   return (
     <>
@@ -65,37 +62,20 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
         </label>
       </div>
 
-      <div className="card stack" id="umfang">
-        <h2>Funktionsumfang</h2>
-        <div className="choice-row">
-          <button type="button" className={`choice ${portfolio ? "selected" : ""}`} onClick={() => setPortfolio(true)}>
-            <strong>Portfolio und Abrechnung</strong>
-            <span className="small muted">Vermögensentwicklung, Rendite, Finanzierung und Steuer – plus Betriebskostenabrechnung.</span>
-          </button>
-          <button type="button" className={`choice ${!portfolio ? "selected" : ""}`} onClick={() => setPortfolio(false)}>
-            <strong>Nur Betriebskostenabrechnung</strong>
-            <span className="small muted">Objekte, Mieter, WEG-Unterlagen und Abrechnungen – ohne Kaufpreis, Darlehen und Marktwert.</span>
-          </button>
-        </div>
-        <p className="muted small" style={{ margin: 0 }}>Beim Umschalten geht nichts verloren: Bereits erfasste Kauf- und Finanzierungsdaten bleiben gespeichert und erscheinen wieder, wenn du das Portfolio einschaltest.</p>
+      <div className="card stack">
+        <h2>Steuern</h2>
+        <label className="field" style={{ maxWidth: 320 }}>
+          Persönlicher Grenzsteuersatz (%)
+          <NumberInput
+            value={data.settings.marginalTaxRate}
+            onChange={(v) => update((d) => ({ ...d, settings: { ...d.settings, marginalTaxRate: Math.min(50, Math.max(0, v)) } }))}
+          />
+        </label>
+        <p className="muted small">
+          Für die Rendite nach Steuern: Steuersatz auf den letzten verdienten Euro, inklusive Solidaritätszuschlag und Kirchensteuer (meist 30–47 %). Steht
+          sinngemäß in deinem letzten Steuerbescheid oder lässt sich mit dem Rechner des BMF ermitteln.
+        </p>
       </div>
-
-      {portfolio && (
-        <div className="card stack">
-          <h2>Steuern</h2>
-          <label className="field" style={{ maxWidth: 320 }}>
-            Persönlicher Grenzsteuersatz (%)
-            <NumberInput
-              value={data.settings.marginalTaxRate}
-              onChange={(v) => update((d) => ({ ...d, settings: { ...d.settings, marginalTaxRate: Math.min(50, Math.max(0, v)) } }))}
-            />
-          </label>
-          <p className="muted small">
-            Für die Rendite nach Steuern: Steuersatz auf den letzten verdienten Euro, inklusive Solidaritätszuschlag und Kirchensteuer (meist 30–47 %). Steht
-            sinngemäß in deinem letzten Steuerbescheid oder lässt sich mit dem Rechner des BMF ermitteln.
-          </p>
-        </div>
-      )}
 
       <div className="card stack" id="belegerkennung">
         <h2>Belege automatisch auslesen</h2>

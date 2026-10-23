@@ -15,7 +15,6 @@ import SettingsPage from "./pages/Settings";
 import Documents from "./pages/Documents";
 import Home from "./pages/Home";
 import { aiAccess } from "./lib/aiAccess";
-import { portfolioOn } from "./lib/model";
 
 function useHashRoute() {
   const [route, setRoute] = useState(() => parseHash());
@@ -34,8 +33,8 @@ function useHashRoute() {
   return route;
 }
 
-const NAV = (portfolio: boolean) => [
-  ["", portfolio ? "Portfolio" : "Objekte"],
+const NAV = [
+  ["", "Portfolio"],
   ["mieter", "Mieter"],
   ["abrechnungen", "Abrechnungen"],
 ];
@@ -45,7 +44,6 @@ export default function App() {
   const { parts } = useHashRoute();
   const [section = "", id, sub] = parts;
   const access = aiAccess(data.settings);
-  const portfolio = portfolioOn(data.settings);
 
   // Belegeingang: verarbeitet im Hintergrund weiter, auch wenn die Seite gewechselt wird
   const upload = (files: File[]) => {
@@ -81,7 +79,7 @@ export default function App() {
             {processing > 0 && <span className="brand-badge" title="Belege werden verarbeitet">{processing}</span>}
           </a>
           <nav className="nav">
-            {NAV(portfolio).map(([path, label]) => (
+            {NAV.map(([path, label]) => (
               <a key={path} href={`#/${path}`} className={section === path || (path === "" && (section === "objekte" || section === "weg")) ? "active" : ""}>
                 {label}
               </a>

@@ -3,7 +3,7 @@ import { NumberInput, type PageProps } from "../components/ui";
 import { todayISO } from "../lib/dates";
 import { depreciationRate } from "../lib/finance";
 import { formatEUR, formatPct } from "../lib/format";
-import { newProperty, portfolioOn, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
+import { newProperty, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
 import type { Loan, Property, PropertyType } from "../lib/types";
 import { AcquisitionFields, Field } from "./PropertyEditor";
 
@@ -22,13 +22,12 @@ const BASIC_STEPS: StepKey[] = ["objekt", "wohnungen"];
 
 /**
  * Geführte Anlage eines neuen Objekts: fragt nacheinander alles ab, was für Vermögensentwicklung,
- * Rendite, Abschreibung und Betriebskostenabrechnung gebraucht wird. Die Vermögensangaben lassen sich überspringen;
- * ohne Portfolio fragt der Assistent nur Objekt und Wohnungen ab.
+ * Rendite, Abschreibung und Betriebskostenabrechnung gebraucht wird. Die Vermögensangaben lassen sich einzeln
+ * oder alle auf einmal überspringen – dann fragt der Assistent nur noch die Wohnungen ab.
  */
-export default function PropertyWizard({ data, update }: PageProps) {
-  const portfolio = portfolioOn(data.settings);
-  // nur Objekt und Wohnungen abfragen (ohne Portfolio oder nach „alle Vermögensangaben überspringen“)
-  const [basic, setBasic] = useState(!portfolio);
+export default function PropertyWizard({ update }: PageProps) {
+  // nach „alles überspringen“ nur noch Objekt und Wohnungen
+  const [basic, setBasic] = useState(false);
   const steps = basic ? BASIC_STEPS : ALL_STEPS;
   const [p, setP] = useState<Property>(() => ({ ...newProperty(), acquisitionType: "purchase" }));
   const [step, setStep] = useState(0);
@@ -83,7 +82,7 @@ export default function PropertyWizard({ data, update }: PageProps) {
     <>
       <div className="page-head">
         <div>
-          <a href="#/" className="small">← {portfolio ? "Portfolio" : "Objekte"}</a>
+          <a href="#/" className="small">← Portfolio</a>
           <h1>Neues Objekt</h1>
         </div>
       </div>

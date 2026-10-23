@@ -3,7 +3,7 @@ import { NumberInput, type PageProps } from "../components/ui";
 import { currentPlan, depreciationRate } from "../lib/finance";
 import { estimatePropertyTax, impliedRate, municipalCharges, propertyTaxStart } from "../lib/propertyTax";
 import { formatEUR, formatNum, formatPct } from "../lib/format";
-import { newProperty, portfolioOn, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
+import { newProperty, PROPERTY_TYPE_LABELS, uid } from "../lib/model";
 import type { AcquisitionType, Loan, MunicipalBill, Property, PropertyType, Unit, Withdrawal } from "../lib/types";
 import { formatDate, todayISO } from "../lib/dates";
 
@@ -19,8 +19,6 @@ export function Field({ label, hint, children, wide }: { label: string; hint?: s
 
 export default function PropertyEditor({ data, update, propertyId }: PageProps & { propertyId: string | null }) {
   const existing = propertyId ? data.properties.find((p) => p.id === propertyId) : undefined;
-  // ohne Portfolio: Erwerb, Mietkonto, Finanzierung und eigene Kosten ausblenden (bleiben gespeichert)
-  const portfolio = portfolioOn(data.settings);
   const [p, setP] = useState<Property>(() => (existing ? structuredClone(existing) : newProperty()));
   const plan = currentPlan(
     data.economicPlans.filter((x) => x.propertyId === p.id && x.monthlyHausgeld !== null),
@@ -161,25 +159,21 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         <button onClick={() => set({ units: [...p.units, { id: uid(), name: `Wohnung ${p.units.length + 1}`, area: 0 }] })}>+ Einheit</button>
       </div>
 
-      {portfolio && (
-        <>
-          <div id="erwerb" className="card">
-            <h2>Erwerb</h2>
-            <p className="hint">Grundlage für Vermögensentwicklung, Rendite und Abschreibung.</p>
-            <AcquisitionFields p={p} set={set} />
-            <div className="grid" style={{ marginTop: 12 }}>
-              <Field label="Anteil Grund und Boden (%)" hint="Nicht abschreibbar. Steht im Kaufvertrag oder lässt sich mit der Arbeitshilfe des BMF ermitteln.">
-                <NumberInput value={p.landShare} onChange={(landShare) => set({ landShare: Math.min(100, Math.max(0, landShare)) })} />
-              </Field>
-            </div>
-            {invested > 0 && (
-              <p className="small" style={{ marginTop: 12 }}>
-                Einstand gesamt: <strong>{formatEUR(invested)}</strong> · davon abschreibbar (Gebäude): {formatEUR(invested * (1 - p.landShare / 100))}
-              </p>
-            )}
-          </div>
-        </>
-      )}
+      <div id="erwerb" className="card">
+        <h2>Erwerb</h2>
+        <p className="hint">Grundlage für Vermögensentwicklung, Rendite und Abschreibung.</p>
+        <AcquisitionFields p={p} set={set} />
+        <div className="grid" style={{ marginTop: 12 }}>
+          <Field label="Anteil Grund und Boden (%)" hint="Nicht abschreibbar. Steht im Kaufvertrag oder lässt sich mit der Arbeitshilfe des BMF ermitteln.">
+            <NumberInput value={p.landShare} onChange={(landShare) => set({ landShare: Math.min(100, Math.max(0, landShare)) })} />
+          </Field>
+        </div>
+        {invested > 0 && (
+          <p className="small" style={{ marginTop: 12 }}>
+            Einstand gesamt: <strong>{formatEUR(invested)}</strong> · davon abschreibbar (Gebäude): {formatEUR(invested * (1 - p.landShare / 100))}
+          </p>
+        )}
+      </div>
 
       <div id="grundsteuer" className="card">
         <h2>Grundsteuer</h2>
@@ -306,156 +300,152 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
         })()}
       </div>
 
-      {portfolio && (
-        <>
-          <div id="mietkonto" className="card">
-            <h2>Mietkonto und Entnahmen</h2>
-            <div className="grid" style={{ marginBottom: 12 }}>
-              <Field label="Anfangsbestand (€)" hint="Kontostand am Startdatum, z. B. 0 € bei neuem Konto">
-                <NumberInput value={p.accountOpeningBalance ?? 0} onChange={(v) => set({ accountOpeningBalance: v || null })} />
-              </Field>
-              <Field label="am" hint="leer: Erwerbsdatum">
-                <input type="date" value={p.accountOpeningDate ?? ""} onChange={(e) => set({ accountOpeningDate: e.target.value || null })} />
-              </Field>
-            </div>
-            <p className="hint">
-              Regelmäßige Überweisungen vom Mietkonto auf dein privates Konto. Sie mindern den Vermögenswert des Objekts (das Geld liegt danach privat) und haben steuerlich keine
-              Bedeutung.
-            </p>
-            {(p.withdrawals ?? []).length > 0 && (
-              <div className="table-wrap">
-                <table className="compact">
-                  <thead>
-                    <tr>
-                      <th>ab (erste Entnahme)</th>
-                      <th>bis</th>
-                      <th className="num">pro Monat (€)</th>
-                      <th>Notiz</th>
-                      <th />
+      <div id="mietkonto" className="card">
+        <h2>Mietkonto und Entnahmen</h2>
+        <div className="grid" style={{ marginBottom: 12 }}>
+          <Field label="Anfangsbestand (€)" hint="Kontostand am Startdatum, z. B. 0 € bei neuem Konto">
+            <NumberInput value={p.accountOpeningBalance ?? 0} onChange={(v) => set({ accountOpeningBalance: v || null })} />
+          </Field>
+          <Field label="am" hint="leer: Erwerbsdatum">
+            <input type="date" value={p.accountOpeningDate ?? ""} onChange={(e) => set({ accountOpeningDate: e.target.value || null })} />
+          </Field>
+        </div>
+        <p className="hint">
+          Regelmäßige Überweisungen vom Mietkonto auf dein privates Konto. Sie mindern den Vermögenswert des Objekts (das Geld liegt danach privat) und haben steuerlich keine
+          Bedeutung.
+        </p>
+        {(p.withdrawals ?? []).length > 0 && (
+          <div className="table-wrap">
+            <table className="compact">
+              <thead>
+                <tr>
+                  <th>ab (erste Entnahme)</th>
+                  <th>bis</th>
+                  <th className="num">pro Monat (€)</th>
+                  <th>Notiz</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {(p.withdrawals ?? []).map((w) => {
+                  const setW = (patch: Partial<Withdrawal>) => set({ withdrawals: (p.withdrawals ?? []).map((x) => (x.id === w.id ? { ...x, ...patch } : x)) });
+                  return (
+                    <tr key={w.id}>
+                      <td>
+                        <input type="date" aria-label="erste Entnahme" value={w.from} onChange={(e) => setW({ from: e.target.value })} />
+                      </td>
+                      <td>
+                        <input type="date" aria-label="letzte Entnahme" value={w.to ?? ""} onChange={(e) => setW({ to: e.target.value || null })} />
+                      </td>
+                      <td className="num">
+                        <NumberInput ariaLabel="Betrag pro Monat" value={w.monthly} onChange={(monthly) => setW({ monthly })} />
+                      </td>
+                      <td>
+                        <input aria-label="Notiz" value={w.note} onChange={(e) => setW({ note: e.target.value })} />
+                      </td>
+                      <td>
+                        <button className="ghost" onClick={() => set({ withdrawals: (p.withdrawals ?? []).filter((x) => x.id !== w.id) })}>
+                          Entfernen
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {(p.withdrawals ?? []).map((w) => {
-                      const setW = (patch: Partial<Withdrawal>) => set({ withdrawals: (p.withdrawals ?? []).map((x) => (x.id === w.id ? { ...x, ...patch } : x)) });
-                      return (
-                        <tr key={w.id}>
-                          <td>
-                            <input type="date" aria-label="erste Entnahme" value={w.from} onChange={(e) => setW({ from: e.target.value })} />
-                          </td>
-                          <td>
-                            <input type="date" aria-label="letzte Entnahme" value={w.to ?? ""} onChange={(e) => setW({ to: e.target.value || null })} />
-                          </td>
-                          <td className="num">
-                            <NumberInput ariaLabel="Betrag pro Monat" value={w.monthly} onChange={(monthly) => setW({ monthly })} />
-                          </td>
-                          <td>
-                            <input aria-label="Notiz" value={w.note} onChange={(e) => setW({ note: e.target.value })} />
-                          </td>
-                          <td>
-                            <button className="ghost" onClick={() => set({ withdrawals: (p.withdrawals ?? []).filter((x) => x.id !== w.id) })}>
-                              Entfernen
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <button
-              style={{ marginTop: 8 }}
-              onClick={() => set({ withdrawals: [...(p.withdrawals ?? []), { id: uid(), from: todayISO(), to: null, monthly: 0, note: "" }] })}
-            >
-              + Entnahme
-            </button>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        )}
+        <button
+          style={{ marginTop: 8 }}
+          onClick={() => set({ withdrawals: [...(p.withdrawals ?? []), { id: uid(), from: todayISO(), to: null, monthly: 0, note: "" }] })}
+        >
+          + Entnahme
+        </button>
+      </div>
 
-          <div id="finanzierung" className="card">
-            <h2>Finanzierung</h2>
-            <p className="hint">Restschuld und Rate stehen im letzten Kontoauszug des Darlehens. Die Zinsen sind Werbungskosten, die Tilgung nicht.</p>
-            {p.loans.length > 0 && (
-              <div className="table-wrap">
-                <table className="compact">
-                  <thead>
-                    <tr>
-                      <th>Bank</th>
-                      <th className="num">Darlehen (€)</th>
-                      <th className="num">Restschuld (€)</th>
-                      <th className="num">Zins (% p. a.)</th>
-                      <th className="num">Rate / Monat (€)</th>
-                      <th>Zinsbindung bis</th>
-                      <th>Auszahlung</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {p.loans.map((l) => (
-                      <tr key={l.id}>
-                        <td style={{ minWidth: 130 }}><input value={l.lender} onChange={(e) => setLoan(l.id, { lender: e.target.value })} aria-label="Bank" /></td>
-                        <td style={{ minWidth: 110 }}><NumberInput value={l.principal} onChange={(principal) => setLoan(l.id, { principal })} ariaLabel="Darlehensbetrag" /></td>
-                        <td style={{ minWidth: 110 }}><NumberInput value={l.balance} onChange={(balance) => setLoan(l.id, { balance })} ariaLabel="Restschuld" /></td>
-                        <td style={{ minWidth: 80 }}><NumberInput value={l.interestRate} onChange={(interestRate) => setLoan(l.id, { interestRate })} ariaLabel="Zinssatz" /></td>
-                        <td style={{ minWidth: 100 }}><NumberInput value={l.monthlyPayment} onChange={(monthlyPayment) => setLoan(l.id, { monthlyPayment })} ariaLabel="Monatsrate" /></td>
-                        <td><input type="date" value={l.fixedUntil ?? ""} onChange={(e) => setLoan(l.id, { fixedUntil: e.target.value || null })} aria-label="Zinsbindung bis" /></td>
-                        <td><input type="date" value={l.startDate ?? ""} onChange={(e) => setLoan(l.id, { startDate: e.target.value || null })} aria-label="Auszahlung bzw. Übernahme" /></td>
-                        <td><button className="ghost" onClick={() => set({ loans: p.loans.filter((x) => x.id !== l.id) })} aria-label="Darlehen entfernen">✕</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <button
-              onClick={() =>
-                set({ loans: [...p.loans, { id: uid(), lender: "", principal: 0, balance: 0, interestRate: 0, monthlyPayment: 0, fixedUntil: null, startDate: p.purchaseDate }] })
-              }
-            >
-              + Darlehen
-            </button>
+      <div id="finanzierung" className="card">
+        <h2>Finanzierung</h2>
+        <p className="hint">Restschuld und Rate stehen im letzten Kontoauszug des Darlehens. Die Zinsen sind Werbungskosten, die Tilgung nicht.</p>
+        {p.loans.length > 0 && (
+          <div className="table-wrap">
+            <table className="compact">
+              <thead>
+                <tr>
+                  <th>Bank</th>
+                  <th className="num">Darlehen (€)</th>
+                  <th className="num">Restschuld (€)</th>
+                  <th className="num">Zins (% p. a.)</th>
+                  <th className="num">Rate / Monat (€)</th>
+                  <th>Zinsbindung bis</th>
+                  <th>Auszahlung</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {p.loans.map((l) => (
+                  <tr key={l.id}>
+                    <td style={{ minWidth: 130 }}><input value={l.lender} onChange={(e) => setLoan(l.id, { lender: e.target.value })} aria-label="Bank" /></td>
+                    <td style={{ minWidth: 110 }}><NumberInput value={l.principal} onChange={(principal) => setLoan(l.id, { principal })} ariaLabel="Darlehensbetrag" /></td>
+                    <td style={{ minWidth: 110 }}><NumberInput value={l.balance} onChange={(balance) => setLoan(l.id, { balance })} ariaLabel="Restschuld" /></td>
+                    <td style={{ minWidth: 80 }}><NumberInput value={l.interestRate} onChange={(interestRate) => setLoan(l.id, { interestRate })} ariaLabel="Zinssatz" /></td>
+                    <td style={{ minWidth: 100 }}><NumberInput value={l.monthlyPayment} onChange={(monthlyPayment) => setLoan(l.id, { monthlyPayment })} ariaLabel="Monatsrate" /></td>
+                    <td><input type="date" value={l.fixedUntil ?? ""} onChange={(e) => setLoan(l.id, { fixedUntil: e.target.value || null })} aria-label="Zinsbindung bis" /></td>
+                    <td><input type="date" value={l.startDate ?? ""} onChange={(e) => setLoan(l.id, { startDate: e.target.value || null })} aria-label="Auszahlung bzw. Übernahme" /></td>
+                    <td><button className="ghost" onClick={() => set({ loans: p.loans.filter((x) => x.id !== l.id) })} aria-label="Darlehen entfernen">✕</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        )}
+        <button
+          onClick={() =>
+            set({ loans: [...p.loans, { id: uid(), lender: "", principal: 0, balance: 0, interestRate: 0, monthlyPayment: 0, fixedUntil: null, startDate: p.purchaseDate }] })
+          }
+        >
+          + Darlehen
+        </button>
+      </div>
 
-          <div id="laufende-kosten" className="card">
-            <h2>Laufende Kosten, die du selbst trägst</h2>
-            <p className="hint">Diese Kosten sind nicht auf die Mieter umlegbar und mindern deine Rendite. Umlagefähige Betriebskosten erfasst du in der jährlichen Abrechnung.</p>
-            <div className="grid">
-              {p.type === "etw" && plan && (
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <div className="alert info small">
-                    <strong>Hausgeld laut Wirtschaftsplan {plan.year}:</strong> {formatEUR(plan.monthlyHausgeld ?? 0)} pro Monat
-                    {plan.monthlyReserve != null ? `, davon Erhaltungsrücklage ${formatEUR(plan.monthlyReserve)}` : ""}. Davon trägst du selbst (nicht umlagefähig laut
-                    Verwaltung) {formatEUR(ownerYear / 12)} pro Monat bzw. {formatEUR(ownerYear)} pro Jahr. Die App nimmt diese Werte automatisch aus dem Plan des jeweiligen
-                    Jahres; ohne neuen Plan gilt der letzte weiter.{" "}
-                    <a href={`#/weg/wirtschaftsplan/${plan.id}`}>Wirtschaftsplan öffnen</a>
-                  </div>
-                </div>
-              )}
-              {p.type === "etw" && !plan && (
-                <>
-                  <Field label="Hausgeld gesamt / Monat (€)" hint="laut aktuellem Wirtschaftsplan der WEG – oder den Plan unter „WEG-Unterlagen“ erfassen">
-                    <NumberInput value={p.hausgeldMonthly} onChange={(hausgeldMonthly) => set({ hausgeldMonthly })} />
-                  </Field>
-                  <Field label="davon Verwaltervergütung / Monat (€)" hint="nicht umlagefähig, steuerlich abziehbar">
-                    <NumberInput value={p.hausgeldManagementMonthly} onChange={(hausgeldManagementMonthly) => set({ hausgeldManagementMonthly })} />
-                  </Field>
-                  <Field label="davon Erhaltungsrücklage / Monat (€)" hint="nicht umlagefähig, steuerlich erst bei Verwendung abziehbar">
-                    <NumberInput value={p.hausgeldReserveMonthly} onChange={(hausgeldReserveMonthly) => set({ hausgeldReserveMonthly })} />
-                  </Field>
-                </>
-              )}
-              <Field label="Instandhaltung / Reparaturen p. a. (€)" hint={p.type === "etw" ? "für dein Sondereigentum" : "Faustwert: 10–15 € je m² Wohnfläche"}>
-                <NumberInput value={p.maintenanceAnnual} onChange={(maintenanceAnnual) => set({ maintenanceAnnual })} />
-              </Field>
-              <Field label="Verwaltung p. a. (€)" hint={p.type === "etw" ? "z. B. Sondereigentumsverwaltung" : "Hausverwaltung, Kontoführung"}>
-                <NumberInput value={p.managementAnnual} onChange={(managementAnnual) => set({ managementAnnual })} />
-              </Field>
-              <Field label="Sonstige Kosten p. a. (€)" hint="z. B. Rechtsschutz, Fahrtkosten, Leerstandskosten">
-                <NumberInput value={p.otherCostsAnnual} onChange={(otherCostsAnnual) => set({ otherCostsAnnual })} />
-              </Field>
+      <div id="laufende-kosten" className="card">
+        <h2>Laufende Kosten, die du selbst trägst</h2>
+        <p className="hint">Diese Kosten sind nicht auf die Mieter umlegbar und mindern deine Rendite. Umlagefähige Betriebskosten erfasst du in der jährlichen Abrechnung.</p>
+        <div className="grid">
+          {p.type === "etw" && plan && (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div className="alert info small">
+                <strong>Hausgeld laut Wirtschaftsplan {plan.year}:</strong> {formatEUR(plan.monthlyHausgeld ?? 0)} pro Monat
+                {plan.monthlyReserve != null ? `, davon Erhaltungsrücklage ${formatEUR(plan.monthlyReserve)}` : ""}. Davon trägst du selbst (nicht umlagefähig laut
+                Verwaltung) {formatEUR(ownerYear / 12)} pro Monat bzw. {formatEUR(ownerYear)} pro Jahr. Die App nimmt diese Werte automatisch aus dem Plan des jeweiligen
+                Jahres; ohne neuen Plan gilt der letzte weiter.{" "}
+                <a href={`#/weg/wirtschaftsplan/${plan.id}`}>Wirtschaftsplan öffnen</a>
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          )}
+          {p.type === "etw" && !plan && (
+            <>
+              <Field label="Hausgeld gesamt / Monat (€)" hint="laut aktuellem Wirtschaftsplan der WEG – oder den Plan unter „WEG-Unterlagen“ erfassen">
+                <NumberInput value={p.hausgeldMonthly} onChange={(hausgeldMonthly) => set({ hausgeldMonthly })} />
+              </Field>
+              <Field label="davon Verwaltervergütung / Monat (€)" hint="nicht umlagefähig, steuerlich abziehbar">
+                <NumberInput value={p.hausgeldManagementMonthly} onChange={(hausgeldManagementMonthly) => set({ hausgeldManagementMonthly })} />
+              </Field>
+              <Field label="davon Erhaltungsrücklage / Monat (€)" hint="nicht umlagefähig, steuerlich erst bei Verwendung abziehbar">
+                <NumberInput value={p.hausgeldReserveMonthly} onChange={(hausgeldReserveMonthly) => set({ hausgeldReserveMonthly })} />
+              </Field>
+            </>
+          )}
+          <Field label="Instandhaltung / Reparaturen p. a. (€)" hint={p.type === "etw" ? "für dein Sondereigentum" : "Faustwert: 10–15 € je m² Wohnfläche"}>
+            <NumberInput value={p.maintenanceAnnual} onChange={(maintenanceAnnual) => set({ maintenanceAnnual })} />
+          </Field>
+          <Field label="Verwaltung p. a. (€)" hint={p.type === "etw" ? "z. B. Sondereigentumsverwaltung" : "Hausverwaltung, Kontoführung"}>
+            <NumberInput value={p.managementAnnual} onChange={(managementAnnual) => set({ managementAnnual })} />
+          </Field>
+          <Field label="Sonstige Kosten p. a. (€)" hint="z. B. Rechtsschutz, Fahrtkosten, Leerstandskosten">
+            <NumberInput value={p.otherCostsAnnual} onChange={(otherCostsAnnual) => set({ otherCostsAnnual })} />
+          </Field>
+        </div>
+      </div>
 
       <div className="row" style={{ justifyContent: "flex-end" }}>
         {!valid && <span className="small muted">Bezeichnung und Wohnfläche aller Einheiten sind Pflicht.</span>}

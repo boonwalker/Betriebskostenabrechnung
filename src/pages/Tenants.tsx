@@ -8,6 +8,7 @@ import { newRentPeriod, rentAt, uid, warmRent } from "../lib/model";
 import { COST_CATEGORIES } from "../lib/betrkv";
 import { ALLOCATION_RULE_LABELS, defaultLease } from "../lib/lease";
 import type { AppData, LeaseAgreement, RentPeriod, Tenant } from "../lib/types";
+import { askConfirm } from "../components/dialog";
 
 export function newTenant(data: AppData, propertyId?: string, unitId?: string): Tenant | null {
   const p = data.properties.find((x) => x.id === propertyId) ?? data.properties[0];
@@ -41,8 +42,8 @@ export default function Tenants({ data, update }: PageProps) {
   const viewingTenant = data.tenants.find((t) => t.id === viewing) ?? null;
   const today = todayISO();
 
-  const remove = (t: Tenant) => {
-    if (!confirm(`Mieter „${t.name}“ löschen? Tipp: Bei Auszug besser ein Auszugsdatum eintragen, damit ältere Abrechnungen stimmen.`)) return false;
+  const remove = async (t: Tenant) => {
+    if (!(await askConfirm(`Mieter „${t.name}“ löschen? Tipp: Bei Auszug besser ein Auszugsdatum eintragen, damit ältere Abrechnungen stimmen.`, { confirmLabel: "Löschen", danger: true }))) return false;
     update((d) => ({ ...d, tenants: d.tenants.filter((x) => x.id !== t.id) }));
     return true;
   };
@@ -104,7 +105,7 @@ export default function Tenants({ data, update }: PageProps) {
             if (focus) focusElement(focus);
           }}
           onRemove={() => {
-            if (remove(viewingTenant)) setViewing(null);
+            void remove(viewingTenant).then((ok) => ok && setViewing(null));
           }}
         />
       )}
@@ -417,7 +418,7 @@ function LeaseSection({ lease, onChange }: { lease: LeaseAgreement | null; onCha
       <div className="row">
         <h3 style={{ margin: 0 }}>Betriebskosten laut Mietvertrag</h3>
         <span className="spacer" />
-        <button className="ghost" onClick={() => confirm("Vereinbarung entfernen?") && onChange(null)}>Entfernen</button>
+        <button className="ghost" onClick={async () => (await askConfirm("Vereinbarung entfernen?", { confirmLabel: "Entfernen", danger: true })) && onChange(null)}>Entfernen</button>
       </div>
       <label className="field">
         Fundstelle

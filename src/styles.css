@@ -707,6 +707,11 @@ a.brand { position: relative; }
 .upload-buttons .upload-btn { flex: 1 1 200px; justify-content: center; padding: 11px 14px; font-weight: 600; }
 
 /* Belegablage */
+.dialog-backdrop { z-index: 80; align-items: center; }
+.modal.dialog { max-width: 420px; }
+.dialog-message { margin: 0 0 18px; white-space: pre-line; line-height: 1.5; }
+.dialog-actions { gap: 8px; }
+button.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
 .inbox-card { border-top: 4px solid var(--accent); }
 .tile-missing { margin: 12px 0; padding: 10px 12px; background: var(--tint); border-radius: 10px; }
 .tile-missing ul { margin: 6px 0 0; padding-left: 18px; }

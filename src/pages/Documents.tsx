@@ -7,6 +7,7 @@ import { releaseUnusedBlobs } from "../lib/attachments";
 import { formatDate } from "../lib/dates";
 import { DOCUMENT_KIND_LABELS, rerouteDocument } from "../lib/inbox";
 import type { StoredDocument } from "../lib/types";
+import { askConfirm } from "../components/dialog";
 
 /** Belegeingang und Belegablage */
 export default function Documents({ data, update, onUpload }: PageProps & { onUpload: (files: File[]) => void }) {
@@ -16,8 +17,8 @@ export default function Documents({ data, update, onUpload }: PageProps & { onUp
   const years = [...new Set(docs.map((d) => d.year))].sort((a, b) => (b ?? 0) - (a ?? 0));
   const propertyName = (id: string | null) => data.properties.find((p) => p.id === id)?.name;
 
-  const remove = (doc: StoredDocument) => {
-    if (!confirm(`„${doc.title}“ aus der Ablage löschen? Bereits übernommene Daten und Anlagen bleiben erhalten.`)) return;
+  const remove = async (doc: StoredDocument) => {
+    if (!(await askConfirm(`„${doc.title}“ aus der Ablage löschen? Bereits übernommene Daten und Anlagen bleiben erhalten.`, { confirmLabel: "Löschen", danger: true }))) return;
     update((d) => {
       const after = { ...d, documents: (d.documents ?? []).filter((x) => x.id !== doc.id) };
       releaseUnusedBlobs(d, after);

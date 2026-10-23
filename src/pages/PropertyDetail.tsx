@@ -15,6 +15,7 @@ import { planCheckpoints, planSplit, summarizeAnnual, summarizePlan } from "../l
 import { Checkpoints } from "../components/Charts";
 import WegImport from "../components/WegImport";
 import { notMovedOut, newTenant, saveTenant, TenantForm, TenantTable } from "./Tenants";
+import { askConfirm } from "../components/dialog";
 
 export default function PropertyDetail({ data, update, propertyId }: PageProps & { propertyId: string }) {
   const p = data.properties.find((x) => x.id === propertyId);
@@ -63,8 +64,8 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
     .filter((d) => d.propertyId === p.id)
     .sort((a, b) => b.year - a.year || a.kind.localeCompare(b.kind));
 
-  const remove = () => {
-    if (!confirm(`„${p.name}“ mit ${tenants.length} Mietern und ${statements.length} Abrechnungen löschen?`)) return;
+  const remove = async () => {
+    if (!(await askConfirm(`„${p.name}“ mit ${tenants.length} Mietern und ${statements.length} Abrechnungen löschen?`, { confirmLabel: "Löschen", danger: true }))) return;
     update((d) => ({
       ...d,
       properties: d.properties.filter((x) => x.id !== p.id),

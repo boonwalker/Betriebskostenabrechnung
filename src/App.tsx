@@ -14,6 +14,7 @@ import PrintView from "./pages/PrintView";
 import SettingsPage from "./pages/Settings";
 import Documents from "./pages/Documents";
 import Home from "./pages/Home";
+import { DialogHost } from "./components/dialog";
 import { aiAccess } from "./lib/aiAccess";
 
 function useHashRoute() {
@@ -102,6 +103,7 @@ export default function App() {
         </div>
       </header>
       <main>{page}</main>
+      <DialogHost />
     </>
   );
 }

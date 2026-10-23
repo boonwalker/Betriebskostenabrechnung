@@ -6,6 +6,7 @@ import { demoData } from "../lib/demo";
 import { we09Annual2024, we09Plan2025, we09PreviousTenant, we09Property, we09Tenant } from "../lib/fixtures/we09";
 import { emptyData, exportData, parseBackup } from "../lib/store";
 import type { AppData, Landlord } from "../lib/types";
+import { askConfirm } from "../components/dialog";
 
 export default function SettingsPage({ data, update, replace }: PageProps & { replace: (d: AppData) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -28,7 +29,7 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
   const restore = async (file: File) => {
     try {
       const restored = parseBackup(await file.text());
-      if (!confirm("Alle aktuellen Daten durch die Sicherung ersetzen?")) return;
+      if (!(await askConfirm("Alle aktuellen Daten durch die Sicherung ersetzen?", { confirmLabel: "Ersetzen", danger: true }))) return;
       replace({ ...restored, settings: { ...restored.settings, anthropicApiKey: data.settings.anthropicApiKey, inviteCode: data.settings.inviteCode } });
       setMessage("Sicherung wiederhergestellt.");
     } catch (e) {
@@ -140,8 +141,8 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
         </div>
         <div className="row">
           <button
-            onClick={() => {
-              if (hasData && !confirm("Aktuelle Daten durch Beispieldaten ersetzen?")) return;
+            onClick={async () => {
+              if (hasData && !(await askConfirm("Aktuelle Daten durch Beispieldaten ersetzen?", { confirmLabel: "Ersetzen", danger: true }))) return;
               replace({ ...demoData(), settings: { ...demoData().settings, anthropicApiKey: data.settings.anthropicApiKey, inviteCode: data.settings.inviteCode } });
               setMessage("Beispieldaten geladen – schau dir die Abrechnung unter „Abrechnungen“ an.");
             }}
@@ -170,8 +171,8 @@ export default function SettingsPage({ data, update, replace }: PageProps & { re
           )}
           <button
             className="danger"
-            onClick={() => {
-              if (!confirm("Wirklich alle Objekte, Mieter und Abrechnungen löschen?")) return;
+            onClick={async () => {
+              if (!(await askConfirm("Wirklich alle Objekte, Mieter und Abrechnungen löschen?", { confirmLabel: "Alles löschen", danger: true }))) return;
               replace({ ...emptyData(), settings: data.settings });
               setMessage("Alle Daten gelöscht.");
             }}

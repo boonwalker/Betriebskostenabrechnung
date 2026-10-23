@@ -9,6 +9,7 @@ import { fromCents, sumCents, toCents } from "../lib/money";
 import type { AppData, EconomicPlan, HeatingBill, WegAnnualStatement } from "../lib/types";
 import { BarList, BudgetMeter, Checkpoints, SplitBar } from "../components/Charts";
 import { formatSignedPct } from "../lib/format";
+import { askConfirm, showMessage } from "../components/dialog";
 import {
   budgetUsage,
   checkAnnual,
@@ -45,8 +46,8 @@ export default function WegEditor({ data, update, kind, id }: PageProps & { kind
   const property = data.properties.find((p) => p.id === doc.propertyId);
   const unit = property?.units.find((u) => u.id === doc.unitId);
 
-  const remove = () => {
-    if (!confirm("Dieses Dokument mit allen erfassten Positionen löschen?")) return;
+  const remove = async () => {
+    if (!(await askConfirm("Dieses Dokument mit allen erfassten Positionen löschen?", { confirmLabel: "Löschen", danger: true }))) return;
     update((d) => {
       const after = kind === "annual" ? { ...d, wegAnnuals: d.wegAnnuals.filter((x) => x.id !== id) } : { ...d, economicPlans: d.economicPlans.filter((x) => x.id !== id) };
       // Gespeicherte Seitenbilder freigeben, sofern sie nicht als Anlage weiterverwendet werden
@@ -175,7 +176,7 @@ function AnnualSummaryCard({ data, update, annual }: { data: AppData; update: Pa
 
   const toStatement = () => {
     if (statement?.status === "released") {
-      alert("Die Mieterabrechnung ist für alle Mieter freigegeben. Hebe eine Freigabe auf, wenn du sie ändern willst.");
+      void showMessage("Die Mieterabrechnung ist für alle Mieter freigegeben. Hebe eine Freigabe auf, wenn du sie ändern willst.");
       return;
     }
     const base = statement ?? newStatement(annual.propertyId, `${annual.year}-01-01`, `${annual.year}-12-31`);
@@ -184,7 +185,7 @@ function AnnualSummaryCard({ data, update, annual }: { data: AppData; update: Pa
     const next = { ...base, costs: [...base.costs, ...items] };
     update((d) => ({ ...d, statements: statement ? d.statements.map((x) => (x.id === next.id ? next : x)) : [...d.statements, next] }));
     const notTaken = skipped.filter((x) => x.reason !== "bereits übernommen" && x.reason !== "nicht umlagefähig");
-    alert(
+    void showMessage(
       `${items.length} Position(en) übernommen.` +
         (notTaken.length ? `\n\nNicht übernommen:\n${notTaken.map((x) => `• ${x.position.label}: ${x.reason}`).join("\n")}` : ""),
     );
@@ -509,7 +510,7 @@ function HeatingCard({ annual, onChange }: { annual: WegAnnualStatement; onChang
       <div className="row" style={{ marginBottom: 8 }}>
         <h2 style={{ margin: 0 }}>Heiz- und Warmwasserkostenabrechnung</h2>
         <span className="spacer" />
-        <button className="ghost" onClick={() => confirm("Heizkostenabrechnung entfernen?") && onChange(null)}>Entfernen</button>
+        <button className="ghost" onClick={async () => (await askConfirm("Heizkostenabrechnung entfernen?", { confirmLabel: "Entfernen", danger: true })) && onChange(null)}>Entfernen</button>
       </div>
       <div className="grid">
         <label className="field">

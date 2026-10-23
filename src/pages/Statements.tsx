@@ -6,12 +6,13 @@ import { formatEUR } from "../lib/format";
 import { uid } from "../lib/store";
 import { carryOverCosts } from "../lib/model";
 import type { AppData, Statement } from "../lib/types";
+import { askConfirm } from "../components/dialog";
 
 export default function Statements({ data, update }: PageProps) {
   const [creating, setCreating] = useState(false);
 
-  const remove = (s: Statement) => {
-    if (!confirm("Diese Abrechnung löschen?")) return;
+  const remove = async (s: Statement) => {
+    if (!(await askConfirm("Diese Abrechnung löschen?", { confirmLabel: "Löschen", danger: true }))) return;
     update((d) => ({ ...d, statements: d.statements.filter((x) => x.id !== s.id) }));
   };
 

@@ -4,6 +4,7 @@ import { getBlob } from "../lib/blobs";
 import { uid } from "../lib/model";
 import type { AppData, Attachment, AttachmentKind, AttachmentPage, DocPage, Property, Redaction, Tenant } from "../lib/types";
 import { Modal, type PageProps } from "./ui";
+import { askConfirm } from "./dialog";
 
 /** Objekt-URL für ein gespeichertes Seitenbild */
 function useBlobUrl(blobId: string): string | null | undefined {
@@ -125,7 +126,7 @@ export function AttachmentsCard({ data, update, property, year, tenants }: PageP
                         Seite {i + 1}
                       </label>
                       <span className="spacer" />
-                      <button className="ghost small" aria-label="Seite entfernen" onClick={() => confirm("Seite entfernen?") && change(kind, (old) => old.filter((x) => x.id !== p.id))}>
+                      <button className="ghost small" aria-label="Seite entfernen" onClick={async () => (await askConfirm("Seite entfernen?", { confirmLabel: "Entfernen", danger: true })) && change(kind, (old) => old.filter((x) => x.id !== p.id))}>
                         ✕
                       </button>
                     </div>

@@ -15,6 +15,7 @@ import { changedSinceRelease, releaseTenant, revokeRelease, statementReadiness }
 import { uid } from "../lib/store";
 import { transferToStatement } from "../lib/weg";
 import type { AllocationKey, CostItem, MeterKind, Property, Section35aKind, Statement } from "../lib/types";
+import { askConfirm, showMessage } from "../components/dialog";
 
 export default function StatementEditor({ data, update, statementId }: PageProps & { statementId: string }) {
   const statement = data.statements.find((s) => s.id === statementId);
@@ -103,7 +104,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
       for (const sk of skipped) if (sk.reason !== "bereits übernommen" && sk.reason !== "nicht umlagefähig") notes.push(`• ${sk.position.label}: ${sk.reason}`);
     }
     set({ costs });
-    alert(`${added} Position(en) übernommen.` + (notes.length ? `\n\nNicht übernommen:\n${notes.join("\n")}` : ""));
+    void showMessage(`${added} Position(en) übernommen.` + (notes.length ? `\n\nNicht übernommen:\n${notes.join("\n")}` : ""));
   };
 
   const save = (next: Statement) => update((d) => ({ ...d, statements: d.statements.map((s) => (s.id === next.id ? next : s)) }));
@@ -111,11 +112,12 @@ export default function StatementEditor({ data, update, statementId }: PageProps
     try {
       save(releaseTenant(statement, data, tenantId));
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
+      void showMessage(e instanceof Error ? e.message : String(e));
     }
   };
-  const revoke = (tenantId: string, name: string) =>
-    confirm(`Freigabe für ${name} aufheben? Das Anschreiben wird wieder zum Entwurf.`) && save(revokeRelease(statement, data, tenantId));
+  const revoke = async (tenantId: string, name: string) =>
+    (await askConfirm(`Freigabe für ${name} aufheben? Das Anschreiben wird wieder zum Entwurf.`, { confirmLabel: "Aufheben" })) &&
+    save(revokeRelease(statement, data, tenantId));
 
   const today = todayISO();
   const daysLeft = Math.round((Date.parse(result.deadline) - Date.parse(today)) / 86_400_000);

@@ -183,7 +183,7 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 .letter-sender strong { color: var(--l-head); }
 .letter-recipient { grid-column: 1; grid-row: 1; margin-top: 44mm; white-space: pre-line; font-size: 10pt; line-height: 1.4; max-width: 85mm; }
 .letter-recipient strong { color: var(--l-head); font-weight: 600; }
-.letter-return { font-size: 7.5pt; color: var(--l-muted); white-space: nowrap; padding-left: 3mm; height: 4mm; line-height: 4mm; margin-bottom: 1mm; overflow: hidden; text-overflow: ellipsis; }
+.letter-return { font-size: 7.5pt; color: var(--l-muted); white-space: nowrap; padding-left: 2mm; height: 4mm; line-height: 4mm; margin-bottom: 1mm; overflow: hidden; text-overflow: ellipsis; }
 .letter-date { grid-column: 1 / -1; grid-row: 2; text-align: right; white-space: nowrap; font-size: 10pt; margin-top: calc(1.4em - 8mm); }
 .letter-muted { color: var(--l-muted); }
 .letter-title { margin: 12mm 0 5mm; }

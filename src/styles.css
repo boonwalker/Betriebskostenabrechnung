@@ -640,7 +640,7 @@ table.meters input.carried { font-style: italic; color: var(--muted); }
 /* Logo */
 .brand { display: inline-flex; align-items: center; flex: none; }
 .logo { display: inline-flex; align-items: center; gap: 9px; }
-.logo-mark { display: block; flex: none; border-radius: 8px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18); }
+.logo-mark { display: block; flex: none; }
 .logo-word { font-size: 1.2rem; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
 .logo-word span { color: #8fd0cb; }
 

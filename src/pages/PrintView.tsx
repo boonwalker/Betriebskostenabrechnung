@@ -32,6 +32,8 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
   const property = data.properties.find((p) => p.id === statement?.propertyId);
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [suggestAdjustment, setSuggestAdjustment] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfMessage, setPdfMessage] = useState<string | null>(null);
 
   if (!statement || !property) return <div className="card empty">Abrechnung nicht gefunden.</div>;
   const live = calculateStatement(statement, property, data.tenants);
@@ -58,6 +60,31 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
   const isSelected = (r: TenantResult) => !selected || selected.has(r.tenant.id);
   const landlordMissing = !data.settings.landlord.name || !data.settings.landlord.address;
 
+  const makePdf = async () => {
+    const nodes = [...document.querySelectorAll<HTMLElement>(".letter")];
+    if (!nodes.length) return;
+    setPdfBusy(true);
+    setPdfMessage(null);
+    try {
+      const { lettersToPdf, deliverPdf } = await import("../lib/pdf");
+      const chosen = letters.filter((l) => isSelected(l.r));
+      const who = chosen.length === 1 ? chosen[0].r.tenant.name : property.name;
+      // Schlichter Dateiname: Browser verwerfen manche Sonderzeichen und speichern sonst als „download“
+      const safe = (t: string) =>
+        t
+          .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/Ä/g, "Ae").replace(/Ö/g, "Oe").replace(/Ü/g, "Ue").replace(/ß/g, "ss")
+          .replace(/[^A-Za-z0-9.]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+      const filename = `${safe(`Betriebskostenabrechnung ${statement.periodStart.slice(0, 4)} ${who}${anyDraft ? " Entwurf" : ""}`)}.pdf`;
+      const outcome = await deliverPdf(await lettersToPdf(nodes), filename);
+      if (outcome === "downloaded") setPdfMessage(`„${filename}“ wurde heruntergeladen.`);
+    } catch (e) {
+      setPdfMessage(`Das PDF konnte nicht erstellt werden: ${(e as Error).message}`);
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   return (
     <>
       <div className="print-toolbar card">
@@ -66,10 +93,12 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
             ← zurück zur Abrechnung
           </a>
           <span className="spacer" />
-          <button className="primary" onClick={() => window.print()}>
-            Drucken / als PDF speichern
+          <button onClick={() => window.print()}>Drucken</button>
+          <button className="primary" disabled={pdfBusy} onClick={makePdf}>
+            {pdfBusy ? "PDF wird erstellt …" : "PDF erstellen"}
           </button>
         </div>
+        {pdfMessage && <div className="alert info small" style={{ marginTop: 12 }}>{pdfMessage}</div>}
         {anyDraft && (
           <div className="alert danger" style={{ marginTop: 12 }}>
             <strong>Entwurf – nicht versenden.</strong> Mindestens ein ausgewähltes Anschreiben ist noch nicht freigegeben; sein Ergebnis ist vorläufig. Offene Punkte

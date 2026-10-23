@@ -1,0 +1,133 @@
+/**
+ * PDF der Anschreiben direkt im Browser: jedes Anschreiben wird als A4-Bild gerendert und an
+ * Absatz- bzw. Tabellenzeilengrenzen auf Seiten verteilt – nie mitten durch eine Zeile.
+ * Die Bibliotheken werden erst beim Klick geladen.
+ */
+
+const A4_W_MM = 210;
+const A4_H_MM = 297;
+/** Breite, in der die Seite gerendert wird: 210 mm bei 96 dpi */
+const PAGE_W_PX = 794;
+const PX_PER_MM = PAGE_W_PX / A4_W_MM;
+// Seitenränder wie beim Drucken (@page): oben 15, rechts 20, unten 12, links 25 mm
+const TOP_MM = 15;
+const BOTTOM_MM = 12;
+
+/** Elemente, nach denen umbrochen werden darf (Unterkante); Überschriften nicht, damit sie bei ihrem Abschnitt bleiben */
+const BREAKABLE = "p, tr, .letter-head, .letter-title, .letter-summary, .letter-notes > *, .letter-closing, table";
+
+export async function lettersToPdf(letters: HTMLElement[]): Promise<Blob> {
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
+  const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
+  let first = true;
+
+  for (const el of letters) {
+    let breaks: number[] = [];
+    const canvas = await html2canvas(el, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      // Eigene Fensterbreite für die Kopie: Handy-Darstellung (Media Queries) greift dann nicht
+      windowWidth: 1100,
+      onclone: (doc, clone) => {
+        // Druckformatierung (@media print) übernehmen, damit das PDF genau wie der Ausdruck aussieht
+        const printCss: string[] = [];
+        for (const sheet of [...doc.styleSheets]) {
+          let rules: CSSRuleList;
+          try {
+            rules = sheet.cssRules;
+          } catch {
+            continue;
+          }
+          for (const rule of [...rules]) {
+            if ("media" in rule && /print/.test((rule as CSSMediaRule).media.mediaText)) {
+              for (const inner of [...(rule as CSSMediaRule).cssRules]) if (!inner.cssText.startsWith("@page")) printCss.push(inner.cssText);
+            }
+          }
+        }
+        const style = doc.createElement("style");
+        style.textContent = printCss.join("\n");
+        doc.head.appendChild(style);
+        clone.style.margin = "0";
+        clone.style.border = "none";
+        clone.style.padding = "0 20mm 0 25mm";
+        clone.style.boxSizing = "border-box";
+        clone.style.width = `${PAGE_W_PX}px`;
+        clone.style.maxWidth = `${PAGE_W_PX}px`;
+        clone.querySelectorAll(".letter-foot").forEach((n) => n.remove());
+        const top = clone.getBoundingClientRect().top;
+        const inClosing = (n: Element) => !n.classList.contains("letter-closing") && n.closest(".letter-closing");
+        breaks = [...clone.querySelectorAll(BREAKABLE)]
+          .filter((n) => !inClosing(n))
+          .map((n) => n.getBoundingClientRect().bottom - top)
+          .sort((a, b) => a - b);
+      },
+    });
+
+    const scale = canvas.width / PAGE_W_PX;
+    const total = canvas.height / scale;
+    let y = 0;
+    while (y < total - 1) {
+      const top = TOP_MM * PX_PER_MM;
+      const room = A4_H_MM * PX_PER_MM - top - BOTTOM_MM * PX_PER_MM;
+      let end = Math.min(total, y + room);
+      if (end < total) {
+        // letzte erlaubte Umbruchstelle innerhalb der Seite; ohne passende Stelle hart schneiden
+        const candidates = breaks.filter((b) => b > y + 40 && b <= end);
+        if (candidates.length) end = candidates[candidates.length - 1];
+      }
+      const slice = document.createElement("canvas");
+      slice.width = canvas.width;
+      slice.height = Math.ceil((end - y) * scale);
+      slice.getContext("2d")!.drawImage(canvas, 0, Math.floor(y * scale), canvas.width, slice.height, 0, 0, canvas.width, slice.height);
+
+      if (!first) pdf.addPage();
+      first = false;
+      pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", 0, top / PX_PER_MM, A4_W_MM, (end - y) / PX_PER_MM);
+      y = end;
+    }
+  }
+  return pdf.output("blob");
+}
+
+type Downloads = { save(r: { filename: string; data: Blob }): Promise<{ status: string }> };
+
+/**
+ * Datei übergeben: in der Claude-Vorschau über deren Speichern-Dialog, auf Touch-Geräten über das
+ * Teilen-Menü (Sichern in Dateien, Mail …), sonst als Download.
+ */
+export async function deliverPdf(blob: Blob, filename: string): Promise<"saved" | "shared" | "downloaded" | "cancelled"> {
+  const claude = (window as unknown as { claude?: { use(name: string): Promise<unknown> } }).claude;
+  if (claude?.use) {
+    const downloads = (await claude.use("downloads").catch(() => null)) as Downloads | null;
+    if (downloads) {
+      try {
+        await downloads.save({ filename, data: blob });
+        return "saved";
+      } catch (e) {
+        if ((e as { code?: string }).code === "declined") return "cancelled";
+        // andere Fehler: unten weiter mit Teilen bzw. Download
+      }
+    }
+  }
+
+  const file = new File([blob], filename, { type: "application/pdf" });
+  const touch = window.matchMedia?.("(pointer: coarse)").matches;
+  if (touch && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return "shared";
+    } catch (e) {
+      if ((e as DOMException).name === "AbortError") return "cancelled";
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  return "downloaded";
+}

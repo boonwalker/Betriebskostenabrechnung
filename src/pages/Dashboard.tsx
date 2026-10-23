@@ -7,11 +7,9 @@ import { wealthSeries, type WealthSeries } from "../lib/wealth";
 import { formatEUR0, formatPct, formatSignedEUR0 } from "../lib/format";
 import { missingInfo, portfolioOn, PROPERTY_TYPE_LABELS } from "../lib/model";
 import type { AppData, Property } from "../lib/types";
-import { Logo } from "../components/Logo";
 import { backupDue } from "../lib/backup";
-import { demoData } from "../lib/demo";
 
-export default function Dashboard({ data, update, replace }: PageProps & { replace: (d: AppData) => void }) {
+export default function Dashboard({ data }: Pick<PageProps, "data">) {
   const today = todayISO();
   const showPortfolio = portfolioOn(data.settings);
   const lastYear = String(new Date().getFullYear() - 1);
@@ -42,49 +40,6 @@ export default function Dashboard({ data, update, replace }: PageProps & { repla
 
   const openStatement = (p: Property) =>
     data.tenants.some((t) => t.propertyId === p.id) && !data.statements.some((s) => s.propertyId === p.id && s.periodStart.startsWith(lastYear));
-
-  // Erster Start ohne Daten: Begrüßung statt leerem Portfolio
-  if (data.properties.length === 0 && data.tenants.length === 0 && data.statements.length === 0) {
-    return (
-      <div className="welcome">
-        <div className="welcome-hero">
-          <Logo size={64} />
-          <h1>Willkommen bei ImmoFriend</h1>
-          <p>
-            Behalte deine vermieteten Wohnungen wie ein Depot im Blick und erstelle die jährliche Betriebskostenabrechnung – mit Nachzahlung oder Guthaben je Mieter und
-            fertigem Anschreiben.
-          </p>
-          <p className="small muted" style={{ marginBottom: 8 }}>
-            Wofür möchtest du ImmoFriend nutzen? Ohne Portfolio entfallen Kaufpreis, Finanzierung und Wertentwicklung – umstellen kannst du das jederzeit in den
-            Einstellungen.
-          </p>
-          <div className="welcome-actions">
-            <a className="btn primary" href="#/objekte/neu" onClick={() => update((d) => ({ ...d, settings: { ...d.settings, portfolio: true } }))}>
-              Portfolio und Abrechnung
-            </a>
-            <a className="btn" href="#/objekte/neu" onClick={() => update((d) => ({ ...d, settings: { ...d.settings, portfolio: false } }))}>
-              Nur Betriebskostenabrechnung
-            </a>
-            <button onClick={() => replace({ ...demoData(), settings: { ...demoData().settings, inviteCode: data.settings.inviteCode } })}>Mit Beispieldaten ausprobieren</button>
-          </div>
-        </div>
-        <div className="welcome-points">
-          <div>
-            <strong>🔒 Deine Daten bleiben bei dir</strong>
-            <span>Alles wird nur auf diesem Gerät gespeichert – kein Konto, kein Server. Sichere regelmäßig unter Einstellungen.</span>
-          </div>
-          <div>
-            <strong>📱 Als App auf den Homebildschirm</strong>
-            <span>iPhone: in Safari auf Teilen → „Zum Home-Bildschirm“. Android: im Chrome-Menü „App installieren“.</span>
-          </div>
-          <div>
-            <strong>🧾 Belege per Foto</strong>
-            <span>Optional liest eine KI Rechnungen und Bescheide aus – mit einem Einladungscode oder eigenem API-Schlüssel (Einstellungen).</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // Nur für eigene Daten erinnern – Beispieldaten muss niemand sichern
   const remindBackup = !import.meta.env.VITE_SHOWCASE && data.properties.some((p) => !p.id.startsWith("demo-")) && backupDue();

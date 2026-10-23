@@ -13,7 +13,7 @@ import StatementEditor from "./pages/StatementEditor";
 import PrintView from "./pages/PrintView";
 import SettingsPage from "./pages/Settings";
 import Documents from "./pages/Documents";
-import { UploadButtons } from "./components/UploadButtons";
+import Home from "./pages/Home";
 import { aiAccess } from "./lib/aiAccess";
 import { portfolioOn } from "./lib/model";
 
@@ -45,26 +45,17 @@ export default function App() {
   const [data, update, replace, sync] = useAppData();
   const { parts } = useHashRoute();
   const [section = "", id, sub] = parts;
-  const [menuOpen, setMenuOpen] = useState(false);
   const access = aiAccess(data.settings);
   const portfolio = portfolioOn(data.settings);
 
   // Belegeingang: verarbeitet im Hintergrund weiter, auch wenn die Seite gewechselt wird
   const upload = (files: File[]) => {
     if (!access) return;
-    setMenuOpen(false);
+    // Ergebnis erscheint auf der Startseite bzw. in der Belegablage
     void import("./lib/inbox").then(({ processUpload }) => processUpload(files, access, data, update));
-    if (section !== "belege") window.location.hash = "#/belege";
   };
   const processing = (data.documents ?? []).filter((d) => d.status === "processing").length;
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [menuOpen]);
-  useEffect(() => setMenuOpen(false), [section, id, sub]);
 
   let page;
   if (section === "objekte" && id === "neu") page = <PropertyWizard key="neu" data={data} update={update} />;
@@ -78,16 +69,18 @@ export default function App() {
   else if (section === "abrechnungen") page = <Statements data={data} update={update} />;
   else if (section === "einstellungen") page = <SettingsPage data={data} update={update} replace={replace} />;
   else if (section === "belege") page = <Documents data={data} update={update} onUpload={upload} />;
-  else page = <Dashboard data={data} update={update} replace={replace} />;
+  else if (section === "start" || (section === "" && data.properties.length === 0 && data.tenants.length === 0 && data.statements.length === 0))
+    page = <Home data={data} update={update} replace={replace} onUpload={upload} />;
+  else page = <Dashboard data={data} />;
 
   return (
     <>
       <header className="app-header">
         <div className="app-header-inner">
-          <button type="button" className="brand" aria-label="Hauptmenü" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
+          <a className={`brand ${section === "start" ? "active" : ""}`} href="#/start" aria-label="Startseite">
             <Logo />
             {processing > 0 && <span className="brand-badge" title="Belege werden verarbeitet">{processing}</span>}
-          </button>
+          </a>
           <nav className="nav">
             {NAV(portfolio).map(([path, label]) => (
               <a key={path} href={`#/${path}`} className={section === path || (path === "" && (section === "objekte" || section === "weg")) ? "active" : ""}>
@@ -105,28 +98,6 @@ export default function App() {
           )}
         </div>
       </header>
-      {menuOpen && (
-        <div className="main-menu-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setMenuOpen(false)}>
-          <nav className="main-menu" aria-label="Hauptmenü">
-            <div className="main-menu-section">
-              <div className="main-menu-label">Belege erfassen</div>
-              {access ? (
-                <UploadButtons onFiles={upload} />
-              ) : (
-                <a className="main-menu-hint" href="#/einstellungen?f=belegerkennung">Für die Belegerkennung zuerst Einladungscode oder API-Schlüssel eintragen →</a>
-              )}
-            </div>
-            <a href="#/belege" className={section === "belege" ? "active" : ""}>
-              <span aria-hidden>🗂️</span> Belegablage
-              {(data.documents?.length ?? 0) > 0 && <span className="main-menu-count">{data.documents!.length}</span>}
-            </a>
-            <a href="#/"><span aria-hidden>🏠</span> {portfolio ? "Portfolio" : "Objekte"}</a>
-            <a href="#/mieter"><span aria-hidden>👥</span> Mieter</a>
-            <a href="#/abrechnungen"><span aria-hidden>🧾</span> Abrechnungen</a>
-            <a href="#/einstellungen"><span aria-hidden>⚙️</span> Einstellungen</a>
-          </nav>
-        </div>
-      )}
       <main>{page}</main>
     </>
   );

@@ -29,7 +29,7 @@ jobs:
       - run: npm run build -- --base=./
         env:
           # Adresse des ImmoFriend-Proxys für die Belegerkennung per Einladungscode (siehe worker/README.md)
-          VITE_PROXY_URL: ""
+          VITE_PROXY_URL: "https://immofriend-proxy.niklas-bocket.workers.dev"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

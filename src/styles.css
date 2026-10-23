@@ -177,7 +177,7 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 .letter-sender strong { font-size: 10pt; color: var(--l-head); }
 .letter-recipient { grid-column: 1; grid-row: 1; margin-top: 60mm; white-space: pre-line; line-height: 1.4; }
 .letter-recipient strong { color: var(--l-head); font-weight: 600; }
-.letter-return { font-size: 7.5pt; color: var(--l-muted); white-space: nowrap; border-bottom: 1px solid var(--l-line); padding-bottom: 1mm; margin-bottom: 3mm; max-width: 85mm; overflow: hidden; text-overflow: ellipsis; }
+.letter-return { font-size: 7.5pt; color: var(--l-muted); white-space: nowrap; padding-left: 3mm; margin-bottom: 3mm; max-width: 85mm; overflow: hidden; text-overflow: ellipsis; }
 .letter-date { margin-top: 5mm; white-space: nowrap; }
 .letter-muted { color: var(--l-muted); }
 .letter-title { margin: 12mm 0 5mm; }

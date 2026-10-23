@@ -283,7 +283,7 @@ function Letter({
       <div className="letter-head">
         <div className="letter-recipient">
           {/* Rücksendeangabe für Fensterumschläge */}
-          <div className="letter-return">{[landlord.name, landlord.address.replace(/\n/g, ", ")].filter(Boolean).join(" · ")}</div>
+          <div className="letter-return">{[landlord.name, landlord.address.replace(/\n/g, ", ")].filter(Boolean).join(", ")}</div>
           <strong>{r.tenant.name}</strong>
           <div>{address}</div>
         </div>

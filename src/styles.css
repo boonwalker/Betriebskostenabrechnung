@@ -171,13 +171,13 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
   border: 1px solid var(--border); font-size: 10.5pt; line-height: 1.45; overflow: hidden;
 }
 .letter-band { height: 6mm; background: var(--l-accent); margin: 0 -20mm 0 -25mm; }
-/* Absender beginnt 4,5 cm unter der Blattkante */
-.letter-sender { margin-top: 39mm; font-size: 9.5pt; line-height: 1.4; white-space: pre-line; }
-.letter-sender strong { font-size: 11pt; color: var(--l-head); }
-.letter-head { display: grid; grid-template-columns: 1fr auto; gap: 8mm; align-items: end; margin-top: 12mm; }
-.letter-recipient { white-space: pre-line; line-height: 1.4; }
-.letter-recipient strong { color: var(--l-head); }
-.letter-date { text-align: right; white-space: nowrap; }
+/* Absender oben rechts, Empfänger links; Anschrift beginnt rund 7 cm unter der Blattkante */
+.letter-head { display: grid; grid-template-columns: 1fr auto; gap: 8mm; align-items: start; }
+.letter-sender { grid-column: 2; grid-row: 1; margin-top: 8mm; text-align: right; font-size: 9pt; line-height: 1.4; white-space: pre-line; }
+.letter-sender strong { font-size: 10pt; color: var(--l-head); }
+.letter-recipient { grid-column: 1; grid-row: 1; margin-top: 66mm; white-space: pre-line; line-height: 1.4; }
+.letter-recipient strong { color: var(--l-head); font-weight: 600; }
+.letter-date { margin-top: 5mm; white-space: nowrap; }
 .letter-muted { color: var(--l-muted); }
 .letter-title { margin: 12mm 0 5mm; }
 .letter-title h1 { font-size: 18pt; margin: 0; color: var(--l-head); letter-spacing: -0.01em; }
@@ -218,9 +218,9 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
 @media (max-width: 640px) {
   .letter { padding: 0 5mm 8mm; font-size: 10pt; }
   .letter-band { margin: 0 -5mm; }
-  .letter-sender { margin-top: 8mm; }
-  .letter-head { gap: 3mm; }
-  .letter-date { white-space: normal; }
+  .letter-head { grid-template-columns: 1fr; gap: 0; }
+  .letter-sender { grid-column: 1; grid-row: 1; text-align: left; margin-top: 6mm; }
+  .letter-recipient { grid-column: 1; grid-row: 2; margin-top: 8mm; }
   .letter-summary { grid-template-columns: 1fr; }
   .letter table th, .letter table td { padding: 1.5mm; }
 }
@@ -230,10 +230,10 @@ table.compact input, table.compact select { padding: 5px 7px; width: 100%; }
   .app-header, .no-print, .print-toolbar { display: none !important; }
   main { padding: 0; max-width: none; }
   .letter { border: none; margin: 0; padding: 0; max-width: none; page-break-after: always; font-size: 10pt; line-height: 1.38; overflow: visible; }
-  /* Seitenrand oben 15 mm + Band 5 mm + 25 mm = Absender bei 4,5 cm; links 2,5 cm, rechts 2 cm */
+  /* Seitenrand oben 15 mm + Band 5 mm + 52 mm = Empfänger bei rund 7 cm; links 2,5 cm, rechts 2 cm */
   .letter-band { margin: 0; height: 5mm; }
-  .letter-sender { margin-top: 25mm; }
-  .letter-head { margin-top: 10mm; }
+  .letter-sender { margin-top: 6mm; }
+  .letter-recipient { margin-top: 52mm; }
   .letter-title { margin: 9mm 0 3mm; }
   .letter-title h1 { font-size: 16pt; }
   .letter p { margin-bottom: 2mm; }

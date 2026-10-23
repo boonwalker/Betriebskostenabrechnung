@@ -279,17 +279,18 @@ function Letter({
     <div className={`letter ${draft ? "is-draft" : ""}`}>
       {draft && <div className="watermark">ENTWURF</div>}
       <div className="letter-band" />
-      {/* Briefkopf nach Norm: Absender ab 4,5 cm, Empfänger darunter, Datum rechtsbündig auf Höhe der letzten Empfängerzeile */}
-      <div className="letter-sender">
-        <strong>{landlord.name}</strong>
-        {landlord.address && <div>{landlord.address}</div>}
-      </div>
+      {/* Briefkopf: Absender oben rechts mit Datum, Empfänger links tiefer im Anschriftfeld */}
       <div className="letter-head">
         <div className="letter-recipient">
           <strong>{r.tenant.name}</strong>
           <div>{address}</div>
         </div>
-        <div className="letter-date">{placeDate(landlord.address, releasedAt?.slice(0, 10) ?? todayISO())}</div>
+        <div className="letter-sender">
+          <strong>{landlord.name}</strong>
+          {landlord.address && <div>{landlord.address}</div>}
+          {landlord.iban && <div className="letter-muted">IBAN {landlord.iban}</div>}
+          <div className="letter-date">{placeDate(landlord.address, releasedAt?.slice(0, 10) ?? todayISO())}</div>
+        </div>
       </div>
 
       <div className="letter-title">

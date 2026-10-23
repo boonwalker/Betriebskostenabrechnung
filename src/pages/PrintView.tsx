@@ -19,6 +19,14 @@ const BASIS_UNIT: Record<DistributionKey, string> = {
   direct: "",
 };
 
+/** „Ort, 23. Oktober 2026“ – der Ort aus der letzten Zeile der Absenderanschrift (ohne Postleitzahl) */
+function placeDate(address: string, iso: string): string {
+  const lastLine = address.trim().split(/\n|,/).map((l) => l.trim()).filter(Boolean).pop() ?? "";
+  const place = lastLine.replace(/^\d{4,5}\s+/, "");
+  const date = new Date(`${iso}T12:00:00`).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" });
+  return place && place !== lastLine ? `${place}, ${date}` : date;
+}
+
 export default function PrintView({ data, statementId }: { data: AppData; statementId: string }) {
   const statement = data.statements.find((s) => s.id === statementId);
   const property = data.properties.find((p) => p.id === statement?.propertyId);
@@ -271,17 +279,17 @@ function Letter({
     <div className={`letter ${draft ? "is-draft" : ""}`}>
       {draft && <div className="watermark">ENTWURF</div>}
       <div className="letter-band" />
+      {/* Briefkopf nach Norm: Absender ab 4,5 cm, Empfänger darunter, Datum rechtsbündig auf Höhe der letzten Empfängerzeile */}
+      <div className="letter-sender">
+        <strong>{landlord.name}</strong>
+        {landlord.address && <div>{landlord.address}</div>}
+      </div>
       <div className="letter-head">
-        <div className="letter-window">
-          <div className="sender">{[landlord.name, landlord.address.replace(/\n/g, ", ")].filter(Boolean).join(" · ")}</div>
-          <div className="address-block">{`${r.tenant.name}\n${address}`}</div>
+        <div className="letter-recipient">
+          <strong>{r.tenant.name}</strong>
+          <div>{address}</div>
         </div>
-        <div className="letter-from">
-          <strong>{landlord.name}</strong>
-          <div>{landlord.address}</div>
-          {landlord.iban && <div className="letter-muted">IBAN {landlord.iban}</div>}
-          <div className="letter-date">{formatDate(releasedAt?.slice(0, 10) ?? todayISO())}</div>
-        </div>
+        <div className="letter-date">{placeDate(landlord.address, releasedAt?.slice(0, 10) ?? todayISO())}</div>
       </div>
 
       <div className="letter-title">

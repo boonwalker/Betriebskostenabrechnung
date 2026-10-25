@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { includedAttachments, SheetImage } from "../components/Attachments";
-import { attachmentLabel } from "../lib/attachments";
+import { ATTACHMENT_SHORT_LABELS, attachmentLabel } from "../lib/attachments";
 import { KEY_LABELS } from "../lib/betrkv";
 import { releasedTenant } from "../lib/release";
 import { calculateStatement, type Co2Result, type DistributionKey, type ItemShare, type TenantResult } from "../lib/calc";
 import { formatDate, todayISO } from "../lib/dates";
-import { formatEUR, formatNum } from "../lib/format";
+import { formatEUR, formatIban, formatNum } from "../lib/format";
 import { rentAt } from "../lib/model";
 import { landlordFor } from "../lib/release";
 import type { AppData, Attachment, CostItem, Property, Statement } from "../lib/types";
@@ -120,46 +120,56 @@ export default function PrintView({ data, statementId }: { data: AppData; statem
             Bitte hinterlege in den <a href="#/einstellungen">Einstellungen</a> deinen Namen, deine Anschrift und deine Bankverbindung als Vermieter.
           </div>
         )}
-        <div className="row small" style={{ marginTop: 12 }}>
-          {letters.map(({ r, draft }) => (
-            <label key={r.tenant.id} className="row">
-              <input
-                type="checkbox"
-                checked={isSelected(r)}
-                onChange={(e) => {
-                  const next = new Set<string>(selected ?? letters.map((l) => l.r.tenant.id));
-                  if (e.target.checked) next.add(r.tenant.id);
-                  else next.delete(r.tenant.id);
-                  setSelected(next);
-                }}
-              />
-              {r.tenant.name} <span className={`badge ${draft ? "status-draft" : "status-released"}`}>{draft ? "Entwurf" : "freigegeben"}</span>
-            </label>
-          ))}
-        </div>
-        {availableAttachments.length > 0 ? (
-          <div className="row small" style={{ marginTop: 8 }}>
-            <span className="muted">Anlagen:</span>
-            {availableAttachments.map((a) => (
-              <label key={a.id} className="row">
+        <div className="print-options">
+          <div className="print-options-group">
+            <span className="print-options-title">Schreiben</span>
+            {letters.map(({ r, draft }) => (
+              <label key={r.tenant.id} className="check">
                 <input
                   type="checkbox"
-                  checked={!skipped.has(a.id)}
-                  onChange={(e) => setSkipped((s) => { const n = new Set(s); if (e.target.checked) n.delete(a.id); else n.add(a.id); return n; })}
+                  checked={isSelected(r)}
+                  onChange={(e) => {
+                    const next = new Set<string>(selected ?? letters.map((l) => l.r.tenant.id));
+                    if (e.target.checked) next.add(r.tenant.id);
+                    else next.delete(r.tenant.id);
+                    setSelected(next);
+                  }}
                 />
-                {attachmentLabel(a)} ({a.pages.filter((p) => p.include).length} S.)
+                <span>
+                  {r.tenant.name} <span className={`badge ${draft ? "status-draft" : "status-released"}`}>{draft ? "Entwurf" : "freigegeben"}</span>
+                </span>
               </label>
             ))}
           </div>
-        ) : (
-          <p className="small muted" style={{ marginTop: 8 }}>
-            Anlagen wie Heizkostenabrechnung oder Grundsteuerbescheid fügst du in der <a href={`#/abrechnungen/${statement.id}?f=anlagen`}>Abrechnung</a> hinzu.
-          </p>
-        )}
-        <label className="row small" style={{ marginTop: 8 }}>
-          <input type="checkbox" checked={suggestAdjustment} onChange={(e) => setSuggestAdjustment(e.target.checked)} />
-          Anpassung der monatlichen Vorauszahlung (§ 560 Abs. 4 BGB) aufnehmen
-        </label>
+          <div className="print-options-group">
+            <span className="print-options-title">Anlagen</span>
+            {availableAttachments.length > 0 ? (
+              availableAttachments.map((a) => (
+                <label key={a.id} className="check">
+                  <input
+                    type="checkbox"
+                    checked={!skipped.has(a.id)}
+                    onChange={(e) => setSkipped((s) => { const n = new Set(s); if (e.target.checked) n.delete(a.id); else n.add(a.id); return n; })}
+                  />
+                  <span>
+                    {ATTACHMENT_SHORT_LABELS[a.kind]} {a.year} <span className="muted nowrap">· {a.pages.filter((p) => p.include).length} S.</span>
+                  </span>
+                </label>
+              ))
+            ) : (
+              <span className="muted">
+                Heizkostenabrechnung, Bescheid usw. fügst du in der <a href={`#/abrechnungen/${statement.id}?f=anlagen`}>Abrechnung</a> hinzu.
+              </span>
+            )}
+          </div>
+          <div className="print-options-group">
+            <span className="print-options-title">Optionen</span>
+            <label className="check">
+              <input type="checkbox" checked={suggestAdjustment} onChange={(e) => setSuggestAdjustment(e.target.checked)} />
+              <span>Vorauszahlung anpassen (§ 560 Abs. 4 BGB)</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       {letters
@@ -355,7 +365,7 @@ function Letter({
         <div className="letter-sender">
           <strong>{landlord.name}</strong>
           {landlord.address && <div>{landlord.address}</div>}
-          {landlord.iban && <div className="letter-muted">IBAN {landlord.iban}</div>}
+          {landlord.iban && <div className="letter-muted">IBAN {formatIban(landlord.iban)}</div>}
         </div>
         {/* Ort und Datum rechtsbündig, eine Zeile unter der letzten Empfängerzeile */}
         <div className="letter-date">{placeDate(landlord.address, releasedAt?.slice(0, 10) ?? todayISO())}</div>
@@ -520,7 +530,7 @@ function Letter({
       {result?.kind === "due" && (
         <p>
           {w("Bitte überweisen Sie", "Bitte überweise")} den Nachzahlungsbetrag von <strong>{formatEUR(result.amount)}</strong> {paymentText}
-          {landlord.iban ? <> auf das Konto IBAN {landlord.iban}</> : null} unter Angabe des Verwendungszwecks „Betriebskosten {year}, {r.unit.name}“.
+          {landlord.iban ? <> auf das Konto IBAN {formatIban(landlord.iban)}</> : null} unter Angabe des Verwendungszwecks „Betriebskosten {year}, {r.unit.name}“.
         </p>
       )}
       {result?.kind === "credit" && (

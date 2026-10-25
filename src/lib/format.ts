@@ -27,3 +27,10 @@ export const formatPct = (n: number | null) => (n === null || !Number.isFinite(n
 export const formatSignedEUR0 = (n: number) => (n > 0 ? "+" : n < 0 ? "−" : "") + eur0.format(Math.abs(n));
 export const formatSignedPct = (n: number | null) =>
   n === null || !Number.isFinite(n) ? "–" : (n > 0 ? "+" : n < 0 ? "−" : "") + pct.format(Math.abs(n));
+
+/** IBAN in Vierergruppen, z. B. „DE09 2004 1177 0263 3048 00“ */
+export const formatIban = (iban: string) =>
+  iban
+    .replace(/\s+/g, "")
+    .toUpperCase()
+    .replace(/(.{4})(?=.)/g, "$1 ");

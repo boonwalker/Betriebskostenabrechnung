@@ -8,6 +8,13 @@ export const ATTACHMENT_LABELS: Record<AttachmentKind, string> = {
   propertyTax: "Grundsteuer- und Abgabenbescheid",
 };
 
+/** Kurzname für Auswahllisten */
+export const ATTACHMENT_SHORT_LABELS: Record<AttachmentKind, string> = {
+  wegAnnual: "WEG-Einzelabrechnung",
+  heating: "Heizkostenabrechnung",
+  propertyTax: "Grundsteuerbescheid",
+};
+
 /** Reihenfolge im Mieterschreiben: zuerst die WEG-Abrechnung */
 export const ATTACHMENT_KINDS: AttachmentKind[] = ["wegAnnual", "heating", "propertyTax"];
 

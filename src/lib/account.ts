@@ -25,6 +25,9 @@ export interface AccountLedger {
   outgoing: number;
 }
 
+/** Angenommener Zahltag einer Abrechnungsspitze ohne erfassten Zahltag: 31.12. des Folgejahres */
+export const settlementDefaultDate = (year: number): ISODate => `${year + 1}-12-31`;
+
 /** Fälligkeiten der Grundbesitzabgaben: vierteljährlich (§ 28 GrStG) */
 const QUARTER_DUE = ["02-15", "05-15", "08-15", "11-15"];
 
@@ -79,10 +82,10 @@ export function accountLedger(property: Property, data: AppData, until: ISODate)
     }
 
     // Abrechnungsspitzen aus den WEG-Jahresabrechnungen am Tag der Zahlung
-    // ohne erfassten Zahltag: zur Fälligkeit laut Abrechnung
-    for (const a of data.wegAnnuals.filter((x) => x.propertyId === property.id && (x.settlement?.paidOn || x.settlement?.due) && x.settlement.amount)) {
+    // ohne erfassten Zahltag: am 31.12. des Folgejahres (bis dahin ist die Abrechnung beschlossen und ausgeglichen)
+    for (const a of data.wegAnnuals.filter((x) => x.propertyId === property.id && x.settlement?.amount)) {
       const s = a.settlement!;
-      add("wegSettlement", (s.paidOn ?? s.due)!, `Abrechnungsspitze WEG ${a.year} (${s.amount > 0 ? "Erstattung" : "Nachzahlung"})`, s.amount);
+      add("wegSettlement", s.paidOn ?? settlementDefaultDate(a.year), `Abrechnungsspitze WEG ${a.year} (${s.amount > 0 ? "Erstattung" : "Nachzahlung"}${s.paidOn ? "" : ", Zahltag angenommen"})`, s.amount);
     }
 
     // Grundsteuer und Müll laut Bescheid des jeweiligen Jahres als gemeinsame Quartalsrate, ab dem Jahr, ab dem du sie trägst

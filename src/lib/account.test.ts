@@ -57,4 +57,11 @@ describe("Mietkonto WE 09 (Soll-Kontostand)", () => {
     expect([b.date, b.amount, b.label]).toEqual(["2025-12-04", 110.65, "Abrechnungsspitze WEG 2024 (Erstattung)"]);
     expect(l.balance).toBeCloseTo(accountLedger(p, data, "2025-12-31")!.balance + 110.65, 2);
   });
+
+  it("Abrechnungsspitze ohne Zahltag: am 31.12. des Folgejahres", () => {
+    const annuals = data.wegAnnuals.map((a) => ({ ...a, year: 2025, settlement: { amount: 155.3, paidOn: null } }));
+    const l = accountLedger(p, { ...data, wegAnnuals: annuals }, "2026-12-31")!;
+    const b = l.bookings.find((x) => x.kind === "wegSettlement")!;
+    expect([b.date, b.amount, b.label]).toEqual(["2026-12-31", 155.3, "Abrechnungsspitze WEG 2025 (Erstattung, Zahltag angenommen)"]);
+  });
 });

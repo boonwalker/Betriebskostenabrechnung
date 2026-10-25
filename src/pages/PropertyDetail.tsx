@@ -217,7 +217,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
         </div>
       )}
 
-      <AccountCard data={data} property={p} />
+      <AccountCard data={data} update={update} property={p} />
 
       <div className="card" id="wertentwicklung">
         <h2>Wertentwicklung</h2>
@@ -641,9 +641,21 @@ function AnlageVCard({ data, property, taxRate }: { data: PageProps["data"]; pro
 }
 
 /** Soll-Kontostand des Mietkontos zu einem Stichtag, mit Abgleich und Kontoauszug */
-function AccountCard({ data, property }: { data: PageProps["data"]; property: Property }) {
-  const [date, setDate] = useState(todayISO());
-  const [actual, setActual] = useState<number>(NaN);
+function AccountCard({ data, update, property }: { data: PageProps["data"]; update: PageProps["update"]; property: Property }) {
+  // Der echte Kontostand wird mit seinem Stichtag am Objekt gespeichert und beim nächsten Öffnen wieder angezeigt
+  const saved = property.accountCheck ?? null;
+  const [date, setDate] = useState(saved?.date ?? todayISO());
+  const [actual, setActualState] = useState<number>(saved?.actual ?? NaN);
+  const store = (check: Property["accountCheck"]) =>
+    update((d) => ({ ...d, properties: d.properties.map((x) => (x.id === property.id ? { ...x, accountCheck: check } : x)) }));
+  const setActual = (v: number) => {
+    setActualState(v);
+    store(Number.isNaN(v) ? null : { date: date || todayISO(), actual: v });
+  };
+  const changeDate = (d: string) => {
+    setDate(d);
+    if (!Number.isNaN(actual) && d) store({ date: d, actual });
+  };
   const [showAll, setShowAll] = useState(false);
   const ledger = accountLedger(property, data, date || todayISO());
   if (!ledger) return null;
@@ -666,7 +678,7 @@ function AccountCard({ data, property }: { data: PageProps["data"]; property: Pr
             aria-label="Stichtag"
             value={date}
             max="2100-12-31"
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => changeDate(e.target.value)}
           />
           <strong>{formatEUR(ledger.balance)}</strong>
           <span className="account-flow">

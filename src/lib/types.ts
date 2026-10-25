@@ -119,6 +119,8 @@ export interface Property {
   /** Kontostand des Mietkontos zu Beginn (Standard: 0 € zum Erwerb) */
   accountOpeningBalance?: number | null;
   accountOpeningDate?: ISODate | null;
+  /** zuletzt eingetragener echter Kontostand zum Abgleich mit dem Soll */
+  accountCheck?: { date: ISODate; actual: number } | null;
   /** regelmäßige Entnahmen vom Mietkonto (Privatentnahmen) */
   withdrawals?: Withdrawal[];
 }

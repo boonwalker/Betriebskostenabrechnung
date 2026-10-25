@@ -367,10 +367,25 @@ const WegSchema = z.object({
       declaredAllocable: z.enum(["yes", "no", "unknown"]),
       isReserve: z.boolean(),
       page: z.number().int().nullable(),
+      rowTop: z.number().nullable(),
+      rowBottom: z.number().nullable(),
       sourceText: z.string(),
       confidence: z.number(),
     }),
   ),
+  sheet: z
+    .object({
+      page: z.number().int(),
+      sumTop: z.number(),
+      sumBottom: z.number(),
+      sumTotalLeft: z.number(),
+      sumTotalRight: z.number(),
+      sumShareLeft: z.number(),
+      sumShareRight: z.number(),
+      ownerTop: z.number().nullable(),
+      ownerBottom: z.number().nullable(),
+    })
+    .nullable(),
   heating: z
     .object({
       heatSource: z.string(),
@@ -410,6 +425,7 @@ const WEG_JSON_SCHEMA = {
     "monthlyHausgeld",
     "positions",
     "heating",
+    "sheet",
     "notes",
   ],
   properties: {
@@ -441,6 +457,8 @@ const WEG_JSON_SCHEMA = {
           "declaredAllocable",
           "isReserve",
           "page",
+          "rowTop",
+          "rowBottom",
           "sourceText",
           "confidence",
         ],
@@ -456,6 +474,8 @@ const WEG_JSON_SCHEMA = {
           declaredAllocable: { type: "string", enum: ["yes", "no", "unknown"], description: "Kennzeichnung der Verwaltung, ob umlagefähig" },
           isReserve: { type: "boolean", description: "Zuführung zur Erhaltungsrücklage" },
           page: { type: ["integer", "null"], description: "Seite im Dokument (1-basiert, über alle Dateien fortlaufend)" },
+          rowTop: { ...nullableNumber, description: "Oberkante der Tabellenzeile auf der Seite, 0 = oberer, 1 = unterer Bildrand (bei zweizeiligen Bezeichnungen die obere Zeile)" },
+          rowBottom: { ...nullableNumber, description: "Unterkante der Tabellenzeile auf der Seite, 0–1" },
           sourceText: { type: "string", description: "Tabellenzeile wörtlich, gekürzt" },
           confidence: { type: "number", description: "Sicherheit der Erkennung von 0 bis 1" },
         },
@@ -521,6 +541,28 @@ const WEG_JSON_SCHEMA = {
         },
       ],
     },
+    sheet: {
+      anyOf: [
+        { type: "null" },
+        {
+          type: "object",
+          additionalProperties: false,
+          description: "Lage der Summenzeile der Kostentabelle der Einzelabrechnung und des Blocks darunter (Kostenanteil, Vorschüsse, Abrechnungsspitze) – alle Werte relativ zur Seite (0–1)",
+          required: ["page", "sumTop", "sumBottom", "sumTotalLeft", "sumTotalRight", "sumShareLeft", "sumShareRight", "ownerTop", "ownerBottom"],
+          properties: {
+            page: { type: "integer", description: "Seite der Kostentabelle (1-basiert)" },
+            sumTop: { type: "number" },
+            sumBottom: { type: "number" },
+            sumTotalLeft: { type: "number", description: "linker Rand des Summenbetrags der Spalte Gesamt (x, 0 = links)" },
+            sumTotalRight: { type: "number" },
+            sumShareLeft: { type: "number", description: "linker Rand des Summenbetrags der Spalte Anteil der Wohnung" },
+            sumShareRight: { type: "number" },
+            ownerTop: { ...nullableNumber, description: "Oberkante des Blocks Kostenanteil/Vorschüsse/Ergebnis unter der Tabelle" },
+            ownerBottom: { ...nullableNumber, description: "Unterkante dieses Blocks einschließlich Doppelstrich" },
+          },
+        },
+      ],
+    },
     notes: { type: "string", description: "Unklarheiten, unleserliche Stellen, Hinweise auf Deutsch" },
   },
 } as const;
@@ -536,6 +578,7 @@ Regeln:
 - Heizkosten: Ist eine Heizkostenabrechnung enthalten, erfasse in heating den Anteil der Wohnung, die Bestandteile (Grund-/Verbrauchskosten Heizung und Warmwasser), Verbräuche und ggf. CO2-Angaben. Die Gesamtsumme der Heizkosten der Wohnung erscheint zusätzlich als Position, wenn sie in der Einzelabrechnung als Zeile steht.
 - Übernimm zu jeder Position den Verteilerschlüssel mit Basis (z. B. 49 von 1000 MEA, 1 von 11 WE, 34,766 von 478,182 cbm) und Bemerkungen (z. B. „Rg. v. 19.12.23 und 28.11.24“), falls angegeben. Aus Gesamtdarstellungen der Einnahmen/Ausgaben übernimm nur Bemerkungen zu den Positionen der Einzelabrechnung, keine zusätzlichen Positionen.
 - Übersichten mit Daten anderer Eigentümer (Abrechnungsergebnis aller Wohnungen, Rücklagenanteile) nicht erfassen – nur die angegebene Wohnung.
+- Lage auf der Seite: Gib zu jeder Position rowTop/rowBottom an und in sheet die Lage der Summenzeile (mit den Rändern der beiden Summenbeträge) sowie des Blocks darunter mit Kostenanteil, Vorschüssen und Ergebnis. Die App schneidet damit nicht umlagefähige Zeilen aus dem Foto für den Mieter heraus. Kein Fund: null.
 - Seiten über mehrere Dateien fortlaufend zählen. Gedrehte oder fotografierte Seiten sorgfältig lesen.
 - confidence < 0.8, wenn ein Wert schwer lesbar oder die Zuordnung zur Wohnung unsicher ist.
 - Erfinde keine Werte. Fehlende Werte als null, Unklarheiten in notes.`;

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ATTACHMENT_KINDS, ATTACHMENT_LABELS, findAttachment, redactionsFor, releaseUnusedBlobs } from "../lib/attachments";
+import { ATTACHMENT_KINDS, ATTACHMENT_LABELS, attachTenantSheet, findAttachment, hasSheetEdits, redactionsFor, releaseUnusedBlobs, renderPage } from "../lib/attachments";
 import { getBlob } from "../lib/blobs";
 import { uid } from "../lib/model";
 import type { AppData, Attachment, AttachmentKind, AttachmentPage, DocPage, Property, Redaction, Tenant } from "../lib/types";
@@ -36,6 +36,35 @@ export function PageImage({ page, redactions = [], maxHeight }: { page: DocPage;
       {redactions.map((r) => (
         <span key={r.id} className="redaction" style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` }} />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Seite so, wie sie ins Mieterschreiben kommt (mit herausgeschnittenen Zeilen und überschriebenen Beträgen).
+ * Ohne solche Änderungen genügt das Originalbild mit darübergelegten Schwärzungen.
+ */
+export function SheetImage({ page, tenantId, maxHeight }: { page: AttachmentPage; tenantId: string | null; maxHeight?: string }) {
+  const [src, setSrc] = useState<{ url: string; w: number; h: number } | null>(null);
+  const edited = hasSheetEdits(page);
+  // nur neu rendern, wenn sich Bild oder Änderungen wirklich ändern (page ist oft ein neues Objekt)
+  const key = JSON.stringify([page.blobId, page.cuts, page.patches, redactionsFor(page, tenantId)]);
+  useEffect(() => {
+    if (!edited) return;
+    let alive = true;
+    renderPage(page, tenantId)
+      .then((c) => alive && setSrc({ url: c.toDataURL("image/jpeg", 0.9), w: c.width, h: c.height }))
+      .catch(() => alive && setSrc(null));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, edited]);
+  if (!edited) return <PageImage page={page} redactions={redactionsFor(page, tenantId)} maxHeight={maxHeight} />;
+  const width = maxHeight && src ? `min(100%, calc(${maxHeight} * ${src.w / src.h}))` : undefined;
+  return (
+    <div className="page-image" style={{ aspectRatio: src ? `${src.w} / ${src.h}` : `${page.width} / ${page.height}`, width, marginInline: maxHeight ? "auto" : undefined }}>
+      {src ? <img src={src.url} alt={page.source} draggable={false} /> : <span className="muted small">lädt …</span>}
     </div>
   );
 }
@@ -77,15 +106,30 @@ export function AttachmentsCard({ data, update, property, year, tenants }: PageP
     }
   };
 
+  // Einzelabrechnung ohne nicht umlagefähige Zeilen erzeugen (auch nach geänderten Einstufungen)
+  const createSheet = async () => {
+    if (!annual) return;
+    setBusy("wegAnnual");
+    setError(null);
+    try {
+      const ok = await attachTenantSheet(update, annual);
+      if (!ok) setError("Die Kostentabelle der Einzelabrechnung wurde im Foto nicht gefunden. Lade die Seite über „+ Fotos / PDF“ hoch und nimm die Zeilen im Editor heraus.");
+    } catch (e) {
+      setError(`Die Einzelabrechnung konnte nicht aufbereitet werden: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const editingPage = editing ? findAttachment(data, property.id, year, editing.kind)?.pages.find((p) => p.id === editing.pageId) : undefined;
 
   return (
     <div className="card" id="anlagen">
       <h2>Anlagen für das Mieterschreiben</h2>
       <p className="hint">
-        Diese Seiten werden jedem Mieterschreiben angehängt – im Ausdruck und im PDF. Die Heizkostenabrechnung aus hochgeladenen WEG-Unterlagen und ein über
-        „Belege hochladen“ erkannter Bescheid der Gemeinde werden automatisch übernommen. Schwärze, was der jeweilige Mieter nicht sehen soll (z. B. Name und Verbrauch
-        des Vor- oder Nachmieters). Die Originale bleiben unverändert gespeichert.
+        Diese Seiten werden jedem Mieterschreiben angehängt – im Ausdruck und im PDF. Aus hochgeladenen WEG-Unterlagen werden die Einzelabrechnung (ohne nicht
+        umlagefähige Zeilen, mit angepassten Summen) und die Heizkostenabrechnung automatisch übernommen, ebenso ein erkannter Bescheid der Gemeinde. Schwärze, was der
+        jeweilige Mieter nicht sehen soll (z. B. Name und Verbrauch des Vor- oder Nachmieters). Die Originale bleiben unverändert gespeichert.
       </p>
       {error && <div className="alert danger small">{error}</div>}
       {ATTACHMENT_KINDS.map((kind) => {
@@ -102,6 +146,11 @@ export function AttachmentsCard({ data, update, property, year, tenants }: PageP
               {kind === "heating" && annual && (
                 <button className="small" onClick={() => setPicking(true)}>Aus WEG-Unterlagen wählen</button>
               )}
+              {kind === "wegAnnual" && annual && (
+                <button className="small" disabled={busy !== null} onClick={() => void createSheet()}>
+                  {busy === "wegAnnual" ? "Wird erzeugt …" : pages.length ? "Neu erzeugen" : "Aus WEG-Abrechnung erzeugen"}
+                </button>
+              )}
               <label className={`btn small ${busy === kind ? "disabled" : ""}`}>
                 {busy === kind ? "Wird übernommen …" : "+ Fotos / PDF"}
                 <input type="file" multiple accept="application/pdf,image/*" hidden disabled={busy !== null} onChange={(e) => { void upload(kind, [...(e.target.files ?? [])]); e.target.value = ""; }} />
@@ -109,16 +158,18 @@ export function AttachmentsCard({ data, update, property, year, tenants }: PageP
             </div>
             {pages.length === 0 ? (
               <p className="muted small">
-                {kind === "heating"
-                  ? "Noch keine Seiten. Wähle sie aus den hochgeladenen WEG-Unterlagen oder lade die Heizkostenabrechnung hoch."
-                  : "Noch keine Seiten. Lade den Bescheid der Gemeinde (Grundsteuer und Müll) als Foto oder PDF hoch."}
+                {kind === "wegAnnual"
+                  ? "Noch keine Seite. Die Einzelabrechnung der WEG wird ohne nicht umlagefähige Zeilen und mit angepassten Summen beigefügt – erzeuge sie aus den hochgeladenen WEG-Unterlagen."
+                  : kind === "heating"
+                    ? "Noch keine Seiten. Wähle sie aus den hochgeladenen WEG-Unterlagen oder lade die Heizkostenabrechnung hoch."
+                    : "Noch keine Seiten. Lade den Bescheid der Gemeinde (Grundsteuer und Müll) als Foto oder PDF hoch."}
               </p>
             ) : (
               <div className="attachment-pages">
                 {pages.map((p, i) => (
                   <div key={p.id} className={`attachment-thumb ${p.include ? "" : "excluded"}`}>
                     <button type="button" className="thumb-open" onClick={() => setEditing({ kind, pageId: p.id })} title="Schwärzen">
-                      <PageImage page={p} redactions={p.redactions.filter((r) => r.tenantId === null)} maxHeight="200px" />
+                      <SheetImage page={{ ...p, redactions: p.redactions.filter((r) => r.tenantId === null) }} tenantId={null} maxHeight="200px" />
                     </button>
                     <div className="thumb-bar">
                       <label className="row small" title="dem Mieterschreiben beifügen">
@@ -157,7 +208,7 @@ export function AttachmentsCard({ data, update, property, year, tenants }: PageP
           page={editingPage}
           tenants={tenants}
           onClose={() => setEditing(null)}
-          onChange={(redactions) => change(editing.kind, (old) => old.map((x) => (x.id === editingPage.id ? { ...x, redactions } : x)))}
+          onChange={(patch) => change(editing.kind, (old) => old.map((x) => (x.id === editingPage.id ? { ...x, ...patch } : x)))}
         />
       )}
     </div>
@@ -207,8 +258,20 @@ const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
  * Rechtecke über eine Seite ziehen – für alle Schreiben oder nur für das Schreiben an einen Mieter.
  * Ein Finger schwärzt, zwei Finger zoomen und verschieben; am Rechner per Knöpfen oder Strg + Mausrad.
  */
-function RedactionEditor({ page, tenants, onClose, onChange }: { page: AttachmentPage; tenants: Tenant[]; onClose: () => void; onChange: (r: Redaction[]) => void }) {
+function RedactionEditor({
+  page,
+  tenants,
+  onClose,
+  onChange,
+}: {
+  page: AttachmentPage;
+  tenants: Tenant[];
+  onClose: () => void;
+  onChange: (patch: Partial<AttachmentPage>) => void;
+}) {
   const [scope, setScope] = useState<string | null>(null);
+  // Schwärzen oder ganze Zeilen herausnehmen (z. B. nicht umlagefähige Kosten)
+  const [mode, setMode] = useState<"redact" | "cut">("redact");
   const [draft, setDraft] = useState<Redaction | null>(null);
   const [zoom, setZoom] = useState(1);
   const viewport = useRef<HTMLDivElement>(null);
@@ -286,7 +349,8 @@ function RedactionEditor({ page, tenants, onClose, onChange }: { page: Attachmen
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).classList.contains("redaction") && pointers.current.size === 0) return;
+    const t = (e.target as HTMLElement).classList;
+    if ((t.contains("redaction") || t.contains("cut-band") || t.contains("patch-box")) && pointers.current.size === 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2) {
@@ -323,19 +387,27 @@ function RedactionEditor({ page, tenants, onClose, onChange }: { page: Attachmen
     const r = rectFrom(start.current, point(e));
     start.current = null;
     setDraft(null);
-    if (e.type === "pointerup" && r.w > 0.005 && r.h > 0.003) onChange([...page.redactions, r]);
+    if (e.type !== "pointerup" || r.h <= 0.003) return;
+    if (mode === "cut") onChange({ cuts: [...(page.cuts ?? []), { id: uid(), y: r.y, h: r.h }] });
+    else if (r.w > 0.005) onChange({ redactions: [...page.redactions, r] });
   };
 
   const shown = redactionsFor(page, scope);
   const tenantName = (id: string | null) => (id === null ? "alle" : tenants.find((t) => t.id === id)?.name ?? "?");
 
   return (
-    <Modal title="Schwärzen" onClose={onClose}>
+    <Modal title="Bearbeiten" onClose={onClose}>
+      <div className="row small" style={{ marginBottom: 8 }}>
+        <button className={`chip ${mode === "redact" ? "active" : ""}`} onClick={() => setMode("redact")}>Schwärzen</button>
+        <button className={`chip ${mode === "cut" ? "active" : ""}`} onClick={() => setMode("cut")}>Zeilen herausnehmen</button>
+      </div>
       <p className="small muted">
-        Ziehe mit einem Finger oder der Maus ein Rechteck über die Stelle. Mit zwei Fingern zoomst und verschiebst du (am Rechner: Strg + Mausrad). Tippe
-        auf eine schwarze Fläche, um sie wieder zu entfernen.
+        {mode === "cut"
+          ? "Ziehe senkrecht über die Zeilen, die das Mieterschreiben nicht zeigen soll – sie werden herausgeschnitten, der Rest rückt nach. "
+          : "Ziehe mit einem Finger oder der Maus ein Rechteck über die Stelle. "}
+        Mit zwei Fingern zoomst und verschiebst du (am Rechner: Strg + Mausrad). Tippe auf eine markierte Fläche, um sie wieder zu entfernen.
       </p>
-      <div className="row small" style={{ marginBottom: 10 }}>
+      <div className="row small" style={{ marginBottom: 10, display: mode === "cut" ? "none" : undefined }}>
         <span className="muted">Gilt für:</span>
         <button className={`chip ${scope === null ? "active" : ""}`} onClick={() => setScope(null)}>alle Schreiben</button>
         {tenants.map((t) => (
@@ -368,10 +440,37 @@ function RedactionEditor({ page, tenants, onClose, onChange }: { page: Attachmen
               className={`redaction ${r.tenantId ? "scoped" : ""}`}
               title={`Schwärzung für ${tenantName(r.tenantId)} – antippen zum Entfernen`}
               style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` }}
-              onClick={() => onChange(page.redactions.filter((x) => x.id !== r.id))}
+              onClick={() => onChange({ redactions: page.redactions.filter((x) => x.id !== r.id) })}
             />
           ))}
-          {draft && <span className="redaction draft" style={{ left: `${draft.x * 100}%`, top: `${draft.y * 100}%`, width: `${draft.w * 100}%`, height: `${draft.h * 100}%` }} />}
+          {(page.patches ?? []).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="patch-box"
+              title={`Überschrieben mit „${p.text}“ – antippen, um das Original zu zeigen`}
+              style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, width: `${p.w * 100}%`, height: `${p.h * 100}%` }}
+              onClick={() => onChange({ patches: (page.patches ?? []).filter((x) => x.id !== p.id) })}
+            >
+              {p.text}
+            </button>
+          ))}
+          {(page.cuts ?? []).map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className="cut-band"
+              title="Wird herausgenommen – antippen zum Behalten"
+              style={{ top: `${c.y * 100}%`, height: `${c.h * 100}%` }}
+              onClick={() => onChange({ cuts: (page.cuts ?? []).filter((x) => x.id !== c.id) })}
+            />
+          ))}
+          {draft &&
+            (mode === "cut" ? (
+              <span className="cut-band draft" style={{ top: `${draft.y * 100}%`, height: `${draft.h * 100}%` }} />
+            ) : (
+              <span className="redaction draft" style={{ left: `${draft.x * 100}%`, top: `${draft.y * 100}%`, width: `${draft.w * 100}%`, height: `${draft.h * 100}%` }} />
+            ))}
         </div>
       </div>
       <p className="small muted" style={{ marginTop: 8 }}>

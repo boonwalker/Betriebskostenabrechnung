@@ -676,6 +676,9 @@ table.meters input.carried { font-style: italic; color: var(--muted); }
 .redaction { position: absolute; background: #000; border: 0; padding: 0; border-radius: 0; }
 .redaction.scoped { background: #1f3347; outline: 2px dashed #f0b429; outline-offset: -2px; }
 .redaction.draft { background: rgba(0, 0, 0, 0.55); outline: 1px dashed #fff; }
+.cut-band { position: absolute; left: 0; right: 0; border: 0; padding: 0; border-radius: 0; background: repeating-linear-gradient(-45deg, rgba(201, 55, 44, 0.32) 0 6px, rgba(201, 55, 44, 0.12) 6px 12px); outline: 1px solid rgba(201, 55, 44, 0.8); }
+.cut-band.draft { pointer-events: none; }
+.patch-box { position: absolute; border: 0; padding: 0 2px; border-radius: 0; background: rgba(255, 248, 225, 0.92); outline: 1px dashed #9a6700; color: #2b2b2b; font-size: clamp(8px, 1.4vw, 14px); display: flex; align-items: center; justify-content: flex-end; white-space: nowrap; overflow: hidden; }
 .attachment-group { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
 .attachment-group .row { gap: 10px; }
 .attachment-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-top: 10px; }

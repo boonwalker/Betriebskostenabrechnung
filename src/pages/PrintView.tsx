@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { includedAttachments, PageImage } from "../components/Attachments";
-import { attachmentLabel, redactionsFor } from "../lib/attachments";
+import { includedAttachments, SheetImage } from "../components/Attachments";
+import { attachmentLabel } from "../lib/attachments";
 import { KEY_LABELS } from "../lib/betrkv";
 import { releasedTenant } from "../lib/release";
 import { calculateStatement, type Co2Result, type DistributionKey, type ItemShare, type TenantResult } from "../lib/calc";
@@ -576,7 +576,7 @@ function AttachmentPages({ attachments, tenantId }: { attachments: Attachment[];
               Anlage: {attachmentLabel(a)}
               {pages.length > 1 ? ` · Seite ${i + 1} von ${pages.length}` : ""}
             </div>
-            <PageImage page={p} redactions={redactionsFor(p, tenantId)} maxHeight="250mm" />
+            <SheetImage page={p} tenantId={tenantId} maxHeight="250mm" />
           </div>
         ));
       })}

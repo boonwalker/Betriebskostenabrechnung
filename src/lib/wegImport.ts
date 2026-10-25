@@ -28,7 +28,7 @@ function toPositions(x: WegExtraction, year: number, document: string): LedgerPo
         // Automatisch erkannte Werte gelten erst nach Bestätigung durch den Vermieter als geprüft
         reviewed: false,
         declaredAllocable: p.declaredAllocable === "unknown" ? null : p.declaredAllocable === "yes",
-        provenance: { document, page: p.page ?? undefined, row: p.sourceText || undefined },
+        provenance: { document, page: p.page ?? undefined, row: p.sourceText || undefined, rowTop: p.rowTop ?? undefined, rowBottom: p.rowBottom ?? undefined },
         confidence: p.confidence,
       },
       year,
@@ -76,6 +76,20 @@ export function annualFromExtraction(x: WegExtraction, ctx: Context): WegAnnualS
         }
       : null,
     documents: ctx.documents,
+    sheet: x.sheet
+      ? {
+          page: x.sheet.page,
+          sum: {
+            top: x.sheet.sumTop,
+            bottom: x.sheet.sumBottom,
+            totalLeft: x.sheet.sumTotalLeft,
+            totalRight: x.sheet.sumTotalRight,
+            shareLeft: x.sheet.sumShareLeft,
+            shareRight: x.sheet.sumShareRight,
+          },
+          owner: x.sheet.ownerTop !== null && x.sheet.ownerBottom !== null ? { top: x.sheet.ownerTop, bottom: x.sheet.ownerBottom } : null,
+        }
+      : null,
     createdAt: new Date().toISOString(),
   };
 }

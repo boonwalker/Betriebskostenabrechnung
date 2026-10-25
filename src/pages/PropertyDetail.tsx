@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { autoAttach, heatingSourcePages } from "../lib/attachments";
+import { attachTenantSheet, autoAttach, heatingSourcePages } from "../lib/attachments";
 import { go, parseHash } from "../lib/nav";
 import ValueChart from "../components/ValueChart";
 import { Balance, Delta, Kpi, NumberInput, type PageProps } from "../components/ui";
@@ -507,6 +507,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
                   autoAttach(ensureStatement({ ...d, wegAnnuals: [...d.wegAnnuals, doc] }, doc.propertyId, doc.year).data, doc.propertyId, doc.year, "heating", heatingSourcePages(doc))
                 : { ...d, economicPlans: [...d.economicPlans, doc] },
             );
+            if (doc.kind === "annual") void attachTenantSheet(update, doc).catch(() => undefined);
             setImporting(false);
             window.location.hash = `#/weg/${doc.kind === "annual" ? "jahresabrechnung" : "wirtschaftsplan"}/${doc.id}`;
           }}

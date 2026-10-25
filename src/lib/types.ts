@@ -283,6 +283,18 @@ export interface Provenance {
   page?: number;
   /** Tabellenzeile bzw. Originaltext */
   row?: string;
+  /** ungefähre Lage der Tabellenzeile auf der Seite (0 = oben, 1 = unten) – laut Auslese */
+  rowTop?: number;
+  rowBottom?: number;
+}
+
+/** Lage von Summenzeile und Eigentümerblock in der fotografierten Einzelabrechnung (relativ zur Seite, laut Auslese) */
+export interface SheetLayout {
+  /** Seite in sourcePages (1-basiert) */
+  page: number;
+  sum: { top: number; bottom: number; totalLeft: number; totalRight: number; shareLeft: number; shareRight: number } | null;
+  /** Kostenanteil, Vorschüsse, Abrechnungsspitze – nur für den Eigentümer */
+  owner: { top: number; bottom: number } | null;
 }
 
 export interface LedgerPosition {
@@ -366,6 +378,8 @@ export interface WegAnnualStatement {
   sourcePages?: DocPage[];
   /** Nummern (1-basiert) der Seiten in sourcePages, die zur Heizkostenabrechnung gehören – laut Auslese */
   heatingPages?: number[];
+  /** Lage von Summenzeile und Eigentümerblock in der Einzelabrechnung – für die Anlage ans Mieterschreiben */
+  sheet?: SheetLayout | null;
   createdAt: string;
 }
 
@@ -456,12 +470,34 @@ export interface Redaction {
   h: number;
 }
 
-export type AttachmentKind = "heating" | "propertyTax";
+export type AttachmentKind = "wegAnnual" | "heating" | "propertyTax";
+
+/** Waagerechter Streifen, der aus der Seite herausgeschnitten wird (z. B. nicht umlagefähige Zeilen), relativ zur Seite */
+export interface PageCut {
+  id: string;
+  y: number;
+  h: number;
+}
+
+/** Überschriebener Text, z. B. eine angepasste Summe: Fläche im Papierton, Text rechtsbündig, relativ zur Seite */
+export interface TextPatch {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text: string;
+  /** Schriftgröße und Grundlinie relativ zur Seitenhöhe */
+  fontSize: number;
+  baseline: number;
+}
 
 export interface AttachmentPage extends DocPage {
   /** dem Mieterschreiben beifügen */
   include: boolean;
   redactions: Redaction[];
+  cuts?: PageCut[];
+  patches?: TextPatch[];
 }
 
 /** Anlage zum Mieterschreiben: Heizkostenabrechnung oder Grundsteuer-/Abgabenbescheid eines Jahres */

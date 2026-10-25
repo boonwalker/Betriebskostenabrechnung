@@ -4,7 +4,7 @@
  * und legt sie in der Belegablage ab.
  */
 import type { AiAccess } from "./aiAccess";
-import { autoAttach, heatingSourcePages } from "./attachments";
+import { attachTenantSheet, autoAttach, heatingSourcePages } from "./attachments";
 import { COST_CATEGORIES } from "./betrkv";
 import { getBlob } from "./blobs";
 import { ensureStatement, newRentPeriod, uid } from "./model";
@@ -140,9 +140,12 @@ async function route(
       if (snapshot.wegAnnuals.some(same)) return { year: annual.year, result: `Für ${annual.year} gibt es schon eine WEG-Jahresabrechnung – nur abgelegt.` };
       const extra = ensure(annual.year);
       update((d) => (d.wegAnnuals.some(same) ? d : autoAttach({ ...d, wegAnnuals: [...d.wegAnnuals, annual] }, property.id, annual.year, "heating", heatingSourcePages(annual))));
+      // Einzelabrechnung für den Mieter (ohne nicht umlagefähige Zeilen) als erste Anlage
+      const sheet = await attachTenantSheet(update, annual).catch(() => false);
+      const attached = [sheet ? "Einzelabrechnung (nur umlagefähige Kosten)" : "", annual.heatingPages?.length ? "Heizkostenabrechnung" : ""].filter(Boolean);
       return {
         year: annual.year,
-        result: `WEG-Jahresabrechnung ${annual.year} angelegt${annual.heatingPages?.length ? ", Heizkostenabrechnung als Anlage übernommen" : ""} – bitte Positionen prüfen und dann in die Abrechnung übernehmen.${extra}`,
+        result: `WEG-Jahresabrechnung ${annual.year} angelegt${attached.length ? `, als Anlage übernommen: ${attached.join(" und ")}` : ""} – bitte Positionen prüfen und dann in die Abrechnung übernehmen.${extra}`,
         link: `#/weg/jahresabrechnung/${annual.id}`,
       };
     }

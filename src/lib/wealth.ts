@@ -1,9 +1,6 @@
-import { settlementDefaultDate } from "./account";
-import { sumRent } from "./calc";
-import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
+import { accountLedger } from "./account";
+import { addMonths, fromDay, toDay } from "./dates";
 import { propertyMetrics } from "./finance";
-import { municipalCharges, propertyTaxStart } from "./propertyTax";
-import { releasedTenant } from "./release";
 import type { AppData, ISODate, Loan, Property } from "./types";
 
 export interface WealthPoint {
@@ -86,56 +83,19 @@ function schedule(loan: Loan, months: string[]): { debt: number[]; payment: numb
 
 /**
  * Monatliche Vermögensentwicklung eines Objekts seit dem Erwerb – wie ein Depotwert inklusive Ausschüttungen.
- * Vereinfachungen: Mieten und Hausgeld wie vereinbart bzw. geplant gezahlt; bei Häusern (keine WEG) sind
- * Betriebskosten und Vorauszahlungen durchlaufende Posten und bleiben außen vor.
+ * Die Zu- und Abflüsse stammen aus dem Soll-Mietkonto (ohne dessen Anfangsbestand), damit beide übereinstimmen;
+ * bei Häusern (keine WEG) sind Betriebskosten und Vorauszahlungen durchlaufende Posten und bleiben außen vor.
  */
 export function wealthSeries(property: Property, data: AppData, today: ISODate): WealthSeries | null {
   if (!property.purchaseDate || property.purchaseDate > today) return null;
   const acq = property.purchaseDate;
-  const isEtw = property.type === "etw";
   const months: string[] = [];
   for (let m = acq.slice(0, 7); m <= today.slice(0, 7); m = addMonths(m + "-01", 1).slice(0, 7)) months.push(m);
 
-  const tenants = data.tenants.filter((t) => t.propertyId === property.id && !t.landlord);
   const loans = property.loans.map((l) => schedule(l, months));
-  const ownCostsYear = property.maintenanceAnnual + property.managementAnnual + property.otherCostsAnnual;
-  // Grundsteuer und Müllgebühr laut Bescheid der Gemeinde, ab dem Tag, ab dem du sie trägst
-  const chargeOf = (year: number, key: "tax" | "waste") => municipalCharges(property, year).find((c) => c.key === key)?.amount ?? 0;
-  const taxStart = propertyTaxStart(property) ?? acq;
-  const withdrawals = property.withdrawals ?? [];
-
-  // Hausgeld laut Wirtschaftsplan des Jahres; ohne Plan gilt der letzte frühere Plan weiter (wie bei der WEG üblich)
-  const plansWithHausgeld = data.economicPlans.filter((p) => p.propertyId === property.id && p.monthlyHausgeld !== null);
-  const hausgeldMonthly = (year: number) => {
-    const known = plansWithHausgeld.filter((p) => p.year <= year);
-    if (!known.length) return property.hausgeldMonthly;
-    const latest = Math.max(...known.map((p) => p.year));
-    return known.filter((p) => p.year === latest).reduce((a, p) => a + (p.monthlyHausgeld ?? 0), 0);
-  };
-  const propertyTaxYear = (year: number) => {
-    const st = data.statements.find((s) => s.propertyId === property.id && s.periodStart.startsWith(String(year)));
-    const fromStatement = st?.costs.filter((c) => c.category === 1).reduce((a, c) => a + c.amount, 0);
-    return fromStatement || chargeOf(year, "tax");
-  };
-  // Ergebnisse freigegebener Mieterabrechnungen: Nachzahlung fließt zu, Guthaben ab – im Monat der Zahlung,
-  // sonst der Freigabe (wie im Mietkonto); Mietverhältnisse eines anderen Vermieters zählen nicht
-  const settlements = new Map<string, number>();
-  const addSettlement = (date: ISODate, amount: number) => {
-    if (date < acq || date > today) return;
-    const m = date.slice(0, 7);
-    settlements.set(m, (settlements.get(m) ?? 0) + amount);
-  };
-  const ownTenants = new Set(data.tenants.filter((t) => !t.landlord).map((t) => t.id));
-  for (const st of data.statements.filter((s) => s.propertyId === property.id)) {
-    for (const [tenantId, rel] of Object.entries(st.releases)) {
-      const r = releasedTenant(st, tenantId);
-      if (!r || !ownTenants.has(tenantId)) continue;
-      addSettlement(st.settled?.[tenantId] ?? rel.releasedAt.slice(0, 10), r.result.balance);
-    }
-  }
-  // Abrechnungsspitzen der WEG am Zahltag (ohne Zahltag am 31.12. des Folgejahres)
-  for (const a of data.wegAnnuals.filter((x) => x.propertyId === property.id && x.settlement?.amount))
-    addSettlement(a.settlement!.paidOn ?? settlementDefaultDate(a.year), a.settlement!.amount);
+  // Zu- und Abflüsse wie im Mietkonto: Miete, Hausgeld, Kreditrate und eigene Kosten zum Monatsersten,
+  // Abgaben der Gemeinde zur Fälligkeit der Rate, Abrechnungsergebnisse am Zahltag
+  const bookings = accountLedger(property, data, today)?.bookings ?? [];
 
   const points: WealthPoint[] = [];
   let cumulative = 0;
@@ -143,33 +103,10 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
   months.forEach((m, i) => {
     const monthStart = `${m}-01`;
     const monthEnd = fromDay(toDay(addMonths(monthStart, 1)) - 1);
-    const range = intersect(monthStart, monthEnd, acq, today)!;
-    const share = daysInclusive(range.start, range.end) / daysInclusive(monthStart, monthEnd);
-    const year = Number(m.slice(0, 4));
-
-    let income = 0;
-    for (const t of tenants) {
-      const tr = intersect(range.start, range.end, t.moveIn, t.moveOut ?? "9999-12-31");
-      if (!tr) continue;
-      income += sumRent(t, tr.start, tr.end, (r) => r.coldRent + (r.surcharge ?? 0) + (isEtw ? r.prepaymentOperating + r.prepaymentHeating : 0));
-    }
-    // Grundsteuer erst ab dem Tag, ab dem du sie trägst
-    const taxRange = intersect(range.start, range.end, taxStart, "9999-12-31");
-    const taxShare = taxRange ? daysInclusive(taxRange.start, taxRange.end) / daysInclusive(monthStart, monthEnd) : 0;
-    const costs =
-      (isEtw ? hausgeldMonthly(year) * share + ((propertyTaxYear(year) + chargeOf(year, "waste")) / 12) * taxShare : 0) +
-      (ownCostsYear / 12) * share +
-      loans.reduce((a, l) => a + l.payment[i], 0);
-    const cashflow = round2(income - costs + (settlements.get(m) ?? 0));
+    const inMonth = bookings.filter((b) => b.date >= monthStart && b.date <= monthEnd && b.date >= acq);
+    const cashflow = round2(inMonth.filter((b) => b.kind !== "withdrawal").reduce((a, b) => a + b.amount, 0));
+    const withdrawal = round2(-inMonth.filter((b) => b.kind === "withdrawal").reduce((a, b) => a + b.amount, 0)) || 0;
     cumulative = round2(cumulative + cashflow);
-    // Entnahme am Stichtag des Monats, sofern schon erfolgt
-    const withdrawal = round2(
-      withdrawals.reduce((a, w) => {
-        const day = `${m}-${w.from.slice(8, 10)}`;
-        const due = day > monthEnd ? monthEnd : day;
-        return w.from <= due && (!w.to || due <= w.to) && due <= today && due >= acq ? a + w.monthly : a;
-      }, 0),
-    );
     withdrawn = round2(withdrawn + withdrawal);
     const date = monthEnd < today ? monthEnd : today;
     const value = round2(valueAt(property, date));

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { accountLedger } from "./account";
 import { propertyMetrics } from "./finance";
 import { emptyData, newProperty } from "./model";
 import type { AppData, Property, Tenant } from "./types";
@@ -120,6 +121,12 @@ describe("WE 09: Schenkung zum 01.08.2025", () => {
     expect(s.current.value).toBe(112200);
     // 2026 ohne eigenen Plan: Hausgeld laut Plan 2025 läuft weiter
     const s26 = wealthSeries(p, d, "2026-03-31")!;
-    expect(s26.points[s26.points.length - 1].cashflow).toBeCloseTo(630 - 160.31 - 336.97 / 12, 2);
+    // Abgaben der Gemeinde zur Fälligkeit der Rate: Februar mit 1. Rate, März ohne
+    expect(s26.points[s26.points.length - 2].cashflow).toBeCloseTo(630 - 160.31 - 84.24, 2);
+    expect(s26.points[s26.points.length - 1].cashflow).toBeCloseTo(630 - 160.31, 2);
+    // Miete und Hausgeld zählen ab dem Monatsersten voll; Vermögenszuwachs = Soll-Mietkonto
+    const mid = wealthSeries(p, d, "2026-03-05")!;
+    expect(mid.current.cashflow).toBeCloseTo(630 - 160.31, 2);
+    expect(mid.gain).toBe(accountLedger(p, d, "2026-03-05")!.balance);
   });
 });

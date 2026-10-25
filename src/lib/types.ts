@@ -106,6 +106,10 @@ export interface Property {
   wegShareAlways?: string[];
   /** Grundsteuerwert laut Feststellungsbescheid des Finanzamts */
   propertyTaxValue?: number | null;
+  /** Grundstücksfläche in m², bei Wohnungseigentum dein Anteil (laut Grundsteuerwertbescheid „davon Fläche“) */
+  landArea?: number | null;
+  /** Lage im Kataster, z. B. „Gemarkung Heinsberg, Flur 2, Flurstück 668, Grundbuch-Blatt 4376“ */
+  parcel?: string;
   /** Hebesatz der Gemeinde in % (Grundsteuer B, ggf. für Wohngrundstücke) */
   propertyTaxRate?: number | null;
   /** Grundsteuer pro Jahr laut Bescheid der Gemeinde (maßgeblich vor der Schätzung) */

@@ -211,6 +211,17 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
           <Field label="Hebesatz der Gemeinde (%)" hint="Grundsteuer B, ggf. Satz für Wohngrundstücke">
             <NumberInput value={p.propertyTaxRate ?? undefined} onChange={(v) => set({ propertyTaxRate: v || null })} />
           </Field>
+          <Field label={p.type === "etw" ? "Grundstücksfläche, dein Anteil (m²)" : "Grundstücksfläche (m²)"} hint="im Grundsteuerwertbescheid unter „Liste der Flurstücke“">
+            <NumberInput value={p.landArea ?? undefined} onChange={(v) => set({ landArea: v || null })} />
+            {p.type === "etw" && !!p.landArea && !!p.wegMeaTotal && (p.units[0]?.mea ?? 0) > 0 && (
+              <span className="small muted">
+                Grundstück gesamt ≈ {Math.round(p.landArea / (p.units.reduce((a, u) => a + (u.mea ?? 0), 0) / p.wegMeaTotal)).toLocaleString("de-DE")} m² (über die Miteigentumsanteile)
+              </span>
+            )}
+          </Field>
+          <Field label="Flurstück / Grundbuch">
+            <input value={p.parcel ?? ""} onChange={(e) => set({ parcel: e.target.value })} placeholder="z. B. Gemarkung Heinsberg, Flur 2, Flurstück 668, Blatt 4376" />
+          </Field>
           <div>
             <div className="muted small">Geschätzte Grundsteuer pro Jahr</div>
             <div className="kpi-value">{estimatePropertyTax(p) ? formatEUR(estimatePropertyTax(p)!.tax) : "–"}</div>

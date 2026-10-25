@@ -457,6 +457,16 @@ describe("2025: Mieterwechsel am 31.07./01.08.", () => {
     expect(r.tenants[1].prepayments).toBe(650);
   });
 
+  it("berechnet eine Kostenart laut Objekteinstellung jedem Mieter mit dem WEG-Anteil", () => {
+    const property = { ...we09Property(), wegShareAlways: ["Treppenhausreinigung"] };
+    const r = calculateStatement(statementWithCosts(), property, tenants());
+    const stairs = (i: number) => r.tenants[i].items.find((x) => x.label === "Treppenhausreinigung")!.amount;
+    // beide nach WEG-Schlüssel 126,10 € zeitanteilig, nichts bleibt beim Vermieter
+    expect(stairs(0) + stairs(1)).toBe(126.1);
+    expect(stairs(1)).toBe(52.86);
+    expect(r.landlordItems.find((x) => x.label === "Treppenhausreinigung")).toBeUndefined();
+  });
+
   it("verlangt Vermieterangaben je Mietverhältnis und keine erfundenen Vorauszahlungen", () => {
     const data = appData({ tenants: tenants(), wegAnnuals: [annual2025()] });
     const st = { ...statementWithCosts(), prepaymentsConfirmed: { "we09-vormieterin": true, "we09-t": true } };

@@ -107,6 +107,29 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
               <NumberInput value={p.wegAreaTotal ?? undefined} onChange={(n) => set({ wegAreaTotal: n || null })} />
             </Field>
           </div>
+          {(p.wegShareAlways ?? []).length > 0 && (
+            <div className="stack" style={{ gap: 6, marginTop: 12 }}>
+              <span className="small">
+                <strong>Immer mit dem Anteil laut WEG an den Mieter</strong> – auch wenn sein Mietvertrag einen anderen Umlagemaßstab nennt:
+              </span>
+              <div className="row small">
+                {(p.wegShareAlways ?? []).map((label) => (
+                  <span key={label} className="chip active">
+                    {label}{" "}
+                    <button
+                      type="button"
+                      className="link"
+                      style={{ color: "inherit" }}
+                      aria-label={`${label} entfernen`}
+                      onClick={() => set({ wegShareAlways: (p.wegShareAlways ?? []).filter((x) => x !== label) })}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

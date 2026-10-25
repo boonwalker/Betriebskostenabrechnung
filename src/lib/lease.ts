@@ -95,11 +95,15 @@ export interface LeaseAmount {
  * Anteil einer WEG-Position nach dem Umlagemaßstab des Mietvertrags.
  * Heizkosten folgen immer der Heizkostenabrechnung (HeizkostenV geht vor).
  */
+/** Trägt der Mieter diese Kostenart laut Objekteinstellung immer mit dem Anteil laut WEG? */
+export const wegShareAlways = (property: Pick<Property, "wegShareAlways">, label: string) =>
+  (property.wegShareAlways ?? []).some((l) => norm(l) === norm(label));
+
 export function amountByLease(p: LedgerPosition, lease: LeaseAgreement | null | undefined, unit: Unit, property: Property): LeaseAmount {
   const wegBasis = p.wegBasis ? { ...p.wegBasis, label: p.wegBasis.unit === "MEA" ? "MEA" : p.wegKey ?? p.wegBasis.unit } : undefined;
   const asWeg: LeaseAmount = { amount: p.amount, totalAmount: p.totalAmount ?? undefined, basis: wegBasis };
   // Anteil 0 laut WEG (z. B. Einzelkosten einer anderen Wohnung) bleibt 0
-  if (!lease || lease.allocationRule === "weg" || p.heating === "total" || p.amount === 0) return asWeg;
+  if (!lease || lease.allocationRule === "weg" || p.heating === "total" || p.amount === 0 || wegShareAlways(property, p.label)) return asWeg;
   if (p.wegBasis && CONSUMPTION_UNITS.test(p.wegBasis.unit + " " + (p.wegKey ?? ""))) return { ...asWeg, basis: { ...p.wegBasis, label: "Verbrauch" } };
   const meaTotal = property.wegMeaTotal;
   if (p.wegBasis && p.wegBasis.unit === "MEA" && p.wegBasis.share === unit.mea && p.wegBasis.total === meaTotal) return asWeg;

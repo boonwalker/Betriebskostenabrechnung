@@ -4,7 +4,7 @@ import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
 import { allocate, fromCents, sumEuro, toCents, type Cents } from "./money";
 import { degreeDays } from "./degreeDays";
 import { segmentConsumption } from "./meters";
-import { agreementForItem } from "./lease";
+import { agreementForItem, wegShareAlways } from "./lease";
 import type { CostItem, ISODate, LeaseAllocationRule, Property, Section35aKind, Statement, Tenant, Unit } from "./types";
 
 /** Belegungsabschnitt einer Einheit: ein Mieter oder Leerstand (tenantId = null) */
@@ -371,7 +371,8 @@ export function calculateStatement(statement: Statement, property: Property, all
       const byRule = new Map<string, Cents[]>();
       const amountFor = (rule: LeaseAllocationRule) => {
         if (!byRule.has(rule)) {
-          const la = item.leaseAmounts?.[rule];
+          // Objekteinstellung: diese Kostenart trägt jeder Mieter mit dem Anteil laut WEG
+          const la = wegShareAlways(property, item.label) ? undefined : item.leaseAmounts?.[rule];
           byRule.set(rule, allocate(la ? toCents(la.amount) : itemDistributable, days));
         }
         return byRule.get(rule)!;

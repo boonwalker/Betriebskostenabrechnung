@@ -22,7 +22,7 @@ export interface TenantReadiness {
 }
 
 /** Direkte Behebung: Abgabe eintragen oder Leistung laut Mietvertrag bestätigen */
-export type IssueFix = { kind: "tax" | "waste"; amount: number } | { kind: "confirm"; costId: string; term: string };
+export type IssueFix = { kind: "tax" | "waste"; amount: number } | { kind: "confirm"; costId: string; term: string } | { kind: "wegShare"; label: string };
 
 /** Wohin ein Klick auf einen Hinweis führt; `fix` trägt den fehlenden Betrag direkt ein */
 export interface IssueTarget extends Target {
@@ -160,7 +160,15 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
       );
     }
   }
-  for (const x of result.landlordItems) generalHints.push(to(`„${x.label}“: ${eur(x.amount)} trägt der Vermieter (${x.reason}).`, here("vermieteranteil", "Details")));
+  for (const x of result.landlordItems)
+    generalHints.push(
+      to(
+        `„${x.label}“: ${eur(x.amount)} trägt der Vermieter (${x.reason}).`,
+        x.reason.startsWith("Differenz zwischen WEG-Schlüssel")
+          ? { ...here("vermieteranteil", "Immer dem Mieter berechnen"), fix: { kind: "wegShare", label: x.label } }
+          : here("vermieteranteil", "Details"),
+      ),
+    );
   for (const w of result.warnings) generalHints.push(w);
   if (result.tenants.length === 0) generalHints.push(to("Im Abrechnungszeitraum gab es keinen Mieter.", objectPage({ f: "mieter" }, "Mieter erfassen")));
 

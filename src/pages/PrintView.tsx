@@ -8,7 +8,8 @@ import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
 import { rentAt } from "../lib/model";
 import { landlordFor } from "../lib/release";
-import type { AppData, Attachment, Property, Statement } from "../lib/types";
+import type { AppData, Attachment, CostItem, Property, Statement } from "../lib/types";
+import { wegShareAlways } from "../lib/lease";
 
 const BASIS_UNIT: Record<DistributionKey, string> = {
   time: "Tage",
@@ -248,10 +249,13 @@ function Letter({
       position: annual?.positions.find((p) => p.id === cost?.sourcePositionId),
     };
   };
+  // Schlüssel dieses Mieters für eine Kostenposition – oder der WEG-Schlüssel, wenn das Objekt es für die Kostenart so festlegt
+  const leaseBasis = (cost: CostItem | undefined) =>
+    (cost && wegShareAlways(property, cost.label) ? cost.leaseAmounts?.weg?.basis : cost?.leaseAmounts?.[rule]?.basis) ?? cost?.basis;
   const keyText = (item: ItemShare) => {
     const { annual, position } = sourceOf(item.costId);
     const { cost } = sourceOf(item.costId);
-    const ruleBasis = cost?.leaseAmounts?.[rule]?.basis ?? cost?.basis;
+    const ruleBasis = leaseBasis(cost);
     if (item.key === "direct" && ruleBasis) return ruleBasis.label;
     if (item.key === "direct" && annual) return position?.wegBasis?.unit === "cbm" ? "Verbrauch" : (position?.wegKey ?? "WEG-Schlüssel");
     return KEY_LABELS[item.key as keyof typeof KEY_LABELS];
@@ -268,7 +272,7 @@ function Letter({
     const time = r.days < periodDays ? ` × ${r.days}/${periodDays} Tage` : "";
     if (position?.heating === "total") return { total: "–", share: `lt. Heizkosten\u00ADabrechnung${time}` };
     const cost = sourceOf(item.costId).cost;
-    const own = cost?.leaseAmounts?.[rule]?.basis ?? cost?.basis;
+    const own = leaseBasis(cost);
     if (own)
       return {
         total: `${formatBasis(own.total)} ${own.unit}`,
@@ -319,7 +323,7 @@ function Letter({
       : (wegShare(item)?.total ?? (item.key === "direct" ? null : `${formatNum(item.basisTotal)} ${BASIS_UNIT[item.key]}`));
     const share = item.basisUnit ? shareText(item, r, periodDays) : (wegShare(item)?.share ?? shareText(item, r, periodDays));
     const cost = sourceOf(item.costId).cost;
-    const own = cost?.leaseAmounts?.[rule]?.basis ?? cost?.basis;
+    const own = leaseBasis(cost);
     if (item.key === "direct" && !item.basisUnit && own) {
       const time = r.days < periodDays ? ` × ${r.days}/${periodDays} Tage` : "";
       return `nach ${own.label} · gesamt ${formatBasis(own.total)} ${own.unit} · ${w("Ihr", "dein")} Anteil ${formatBasis(own.share)} ${own.unit}${time}`;

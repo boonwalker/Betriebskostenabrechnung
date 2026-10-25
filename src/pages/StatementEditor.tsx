@@ -50,7 +50,15 @@ export default function StatementEditor({ data, update, statementId }: PageProps
     });
   // Fehlende Abgaben der Gemeinde mit einem Klick als Position anlegen (Jahresbetrag laut Bescheid, direkt der Wohnung)
   const applyFix = (fix: IssueFix) =>
-    fix.kind === "confirm"
+    fix.kind === "wegShare"
+      ? // Objekteinstellung: diese Kostenart trägt der Mieter künftig immer mit dem WEG-Anteil
+        update((d) => ({
+          ...d,
+          properties: d.properties.map((p) =>
+            p.id === property.id ? { ...p, wegShareAlways: [...new Set([...(p.wegShareAlways ?? []), fix.label])] } : p,
+          ),
+        }))
+      : fix.kind === "confirm"
       ? setCost(fix.costId, { confirmedAgreement: fix.term })
       : set({
       costs: [

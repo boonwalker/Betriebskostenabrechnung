@@ -94,7 +94,8 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
             annualPage(annual.id, "Positionen bewerten"),
           ),
         );
-      const unreviewed = annual.positions.filter((p) => p.classification === "allocable" && !p.reviewed);
+      // Posten mit Anteil 0 € (z. B. Einzelkosten einer anderen Wohnung) brauchen keine Bestätigung
+      const unreviewed = annual.positions.filter((p) => p.classification === "allocable" && !p.reviewed && p.amount !== 0);
       if (unreviewed.length)
         general.push(
           to(`${unreviewed.length} umlagefähige Position(en) der WEG-Jahresabrechnung ${year} sind noch nicht als geprüft bestätigt.`, annualPage(annual.id, "Positionen bestätigen")),

@@ -110,6 +110,9 @@ export interface Property {
   landArea?: number | null;
   /** Lage im Kataster, z. B. „Gemarkung Heinsberg, Flur 2, Flurstück 668, Grundbuch-Blatt 4376“ */
   parcel?: string;
+  /** Bodenrichtwert in €/m² mit Quelle und Stand (z. B. BORIS NRW) – zur Kontrolle des Bodenanteils */
+  landValuePerSqm?: number | null;
+  landValueNote?: string;
   /** Hebesatz der Gemeinde in % (Grundsteuer B, ggf. für Wohngrundstücke) */
   propertyTaxRate?: number | null;
   /** Grundsteuer pro Jahr laut Bescheid der Gemeinde (maßgeblich vor der Schätzung) */

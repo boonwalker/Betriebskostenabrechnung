@@ -219,6 +219,15 @@ export default function PropertyEditor({ data, update, propertyId }: PageProps &
               </span>
             )}
           </Field>
+          <Field label="Bodenrichtwert (€/m²)" hint="z. B. aus boris.nrw.de">
+            <NumberInput value={p.landValuePerSqm ?? undefined} onChange={(v) => set({ landValuePerSqm: v || null })} />
+            {!!p.landValuePerSqm && !!p.landArea && (
+              <span className="small muted">Bodenwert deines Anteils ≈ {formatEUR(p.landArea * p.landValuePerSqm)}</span>
+            )}
+          </Field>
+          <Field label="Quelle und Stand des Bodenrichtwerts">
+            <input value={p.landValueNote ?? ""} onChange={(e) => set({ landValueNote: e.target.value })} placeholder="z. B. BORIS NRW, Stand 01.01.2025" />
+          </Field>
           <Field label="Flurstück / Grundbuch">
             <input value={p.parcel ?? ""} onChange={(e) => set({ parcel: e.target.value })} placeholder="z. B. Gemarkung Heinsberg, Flur 2, Flurstück 668, Blatt 4376" />
           </Field>

@@ -1,5 +1,5 @@
 import { formatEUR } from "../lib/format";
-import { transferToStatement } from "../lib/weg";
+import { orderCosts, transferToStatement } from "../lib/weg";
 import type { AppData, Statement, WegAnnualStatement } from "../lib/types";
 import { askConfirm, showMessage } from "./dialog";
 
@@ -43,7 +43,7 @@ export async function takeOverAnnuals(
     for (const sk of skipped) if (!["bereits übernommen", "nicht umlagefähig", "Betrag 0"].includes(sk.reason)) notes.push(`• ${sk.position.label}: ${sk.reason}`);
   }
   // Bestätigte Einstufungen in der WEG-Abrechnung festhalten, Positionen in die Abrechnung schreiben
-  const next = { ...statement, costs };
+  const next = { ...statement, costs: orderCosts(costs, sources) };
   update((d) => ({
     ...d,
     wegAnnuals: d.wegAnnuals.map((w) => sources.find((s) => s.id === w.id) ?? w),

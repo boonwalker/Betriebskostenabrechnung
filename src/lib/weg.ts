@@ -616,6 +616,23 @@ export interface TransferResult {
  * - bereits übernommene Positionen werden nicht doppelt angelegt
  * - Umlage direkt auf die Wohnung: Der Anteil laut Einzelabrechnung folgt dem WEG-Schlüssel (§ 556a Abs. 3 BGB)
  */
+/**
+ * Kostenpositionen sortieren: eigene Positionen (Bescheide, Rechnungen) in ihrer Reihenfolge zuerst, danach die aus
+ * WEG-Jahresabrechnungen in der Reihenfolge des Originalbelegs – egal, in welcher Reihenfolge sie übernommen wurden.
+ */
+export function orderCosts(costs: CostItem[], annuals: WegAnnualStatement[]): CostItem[] {
+  const rank = (c: CostItem) => {
+    const a = annuals.findIndex((x) => x.id === c.sourceAnnualId);
+    if (a < 0) return -1;
+    const p = annuals[a].positions.findIndex((x) => x.id === c.sourcePositionId);
+    return a * 10000 + (p < 0 ? 9999 : p);
+  };
+  return costs
+    .map((c, i) => ({ c, i, r: rank(c) }))
+    .sort((x, y) => (x.r < 0 && y.r < 0 ? x.i - y.i : x.r - y.r || x.i - y.i))
+    .map((x) => x.c);
+}
+
 export function transferToStatement(
   annual: WegAnnualStatement | EconomicPlan,
   statement: Statement,

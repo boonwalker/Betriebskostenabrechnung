@@ -539,7 +539,8 @@ function Letter({
           {w("können Sie", "kannst du")} bis zum Ablauf des zwölften Monats nach Zugang dieser Abrechnung mitteilen (§ 556 Abs. 3 BGB).
         </p>
         <p className="letter-sign">
-          {w("Freundliche Grüße", "Viele Grüße")}
+          {/* bei einer Nachzahlung mit Dank */}
+          {result?.kind === "due" ? w("Vielen Dank und freundliche Grüße", "Danke und viele Grüße") : w("Freundliche Grüße", "Viele Grüße")}
           <br />
           {landlord.name}
         </p>

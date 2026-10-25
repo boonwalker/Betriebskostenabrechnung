@@ -1,3 +1,4 @@
+import { settlementDefaultDate } from "./account";
 import { sumRent } from "./calc";
 import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
 import { propertyMetrics } from "./finance";
@@ -95,7 +96,7 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
   const months: string[] = [];
   for (let m = acq.slice(0, 7); m <= today.slice(0, 7); m = addMonths(m + "-01", 1).slice(0, 7)) months.push(m);
 
-  const tenants = data.tenants.filter((t) => t.propertyId === property.id);
+  const tenants = data.tenants.filter((t) => t.propertyId === property.id && !t.landlord);
   const loans = property.loans.map((l) => schedule(l, months));
   const ownCostsYear = property.maintenanceAnnual + property.managementAnnual + property.otherCostsAnnual;
   // Grundsteuer und Müllgebühr laut Bescheid der Gemeinde, ab dem Tag, ab dem du sie trägst
@@ -116,16 +117,25 @@ export function wealthSeries(property: Property, data: AppData, today: ISODate):
     const fromStatement = st?.costs.filter((c) => c.category === 1).reduce((a, c) => a + c.amount, 0);
     return fromStatement || chargeOf(year, "tax");
   };
-  // Ergebnisse freigegebener Mieterabrechnungen: Nachzahlung fließt zu, Guthaben ab (im Monat der Freigabe)
+  // Ergebnisse freigegebener Mieterabrechnungen: Nachzahlung fließt zu, Guthaben ab – im Monat der Zahlung,
+  // sonst der Freigabe (wie im Mietkonto); Mietverhältnisse eines anderen Vermieters zählen nicht
   const settlements = new Map<string, number>();
+  const addSettlement = (date: ISODate, amount: number) => {
+    if (date < acq || date > today) return;
+    const m = date.slice(0, 7);
+    settlements.set(m, (settlements.get(m) ?? 0) + amount);
+  };
+  const ownTenants = new Set(data.tenants.filter((t) => !t.landlord).map((t) => t.id));
   for (const st of data.statements.filter((s) => s.propertyId === property.id)) {
     for (const [tenantId, rel] of Object.entries(st.releases)) {
       const r = releasedTenant(st, tenantId);
-      if (!r) continue;
-      const m = rel.releasedAt.slice(0, 7);
-      settlements.set(m, (settlements.get(m) ?? 0) + r.result.balance);
+      if (!r || !ownTenants.has(tenantId)) continue;
+      addSettlement(st.settled?.[tenantId] ?? rel.releasedAt.slice(0, 10), r.result.balance);
     }
   }
+  // Abrechnungsspitzen der WEG am Zahltag (ohne Zahltag am 31.12. des Folgejahres)
+  for (const a of data.wegAnnuals.filter((x) => x.propertyId === property.id && x.settlement?.amount))
+    addSettlement(a.settlement!.paidOn ?? settlementDefaultDate(a.year), a.settlement!.amount);
 
   const points: WealthPoint[] = [];
   let cumulative = 0;

@@ -106,3 +106,17 @@ describe("Anlage V WE 09", () => {
     expect(deadlines.find((d) => d.title.includes("2025 zustellen"))?.date).toBe("2026-12-31");
   });
 });
+
+describe("Erhaltungsrücklage", () => {
+  it("WE 09: ab August 2025 je Monat 18,38 € laut Wirtschaftsplan", async () => {
+    const { reserveOverview } = await import("./reserve");
+    const data = showcaseData();
+    const p = data.properties[0];
+    const o = reserveOverview(p, data, "2026-10-25")!;
+    expect(o.years.map((y) => [y.year, y.months, y.monthly, y.paid])).toEqual([
+      [2025, 5, 18.38, 91.9],
+      [2026, 10, 18.38, 183.8],
+    ]);
+    expect(o.total).toBe(275.7);
+  });
+});

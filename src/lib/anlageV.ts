@@ -35,7 +35,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 const isReserve = (label: string) => /r(ü|ue)cklage/i.test(label);
 
 /** Zuführung zur Erhaltungsrücklage je Monat laut Wirtschaftsplan des Jahres (sonst des letzten früheren) */
-function monthlyReserve(property: Property, plans: EconomicPlan[], year: number): number {
+export function monthlyReserve(property: Property, plans: EconomicPlan[], year: number): number {
   const known = plans.filter((p) => p.propertyId === property.id && p.year <= year);
   if (!known.length) return property.hausgeldReserveMonthly;
   const latest = Math.max(...known.map((p) => p.year));

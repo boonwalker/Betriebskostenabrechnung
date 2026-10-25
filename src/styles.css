@@ -781,3 +781,6 @@ label.check input { margin: 2px 0 0; width: 18px; height: 18px; }
 .rent-increase h3 { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
 .rent-increase-inputs { margin-top: 8px; }
 .anlage-v-hints { margin: 8px 0 0; padding-left: 18px; }
+.reserve-list { list-style: none; margin: 0; padding: 0; }
+.reserve-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.reserve-list li .num { text-align: right; }

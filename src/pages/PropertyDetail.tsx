@@ -12,6 +12,7 @@ import type { EconomicPlan, Property, Tenant, WegAnnualStatement } from "../lib/
 import { wealthSeries, type WealthSeries } from "../lib/wealth";
 import { accountLedger } from "../lib/account";
 import { anlageV, anlageVYears } from "../lib/anlageV";
+import { reserveOverview } from "../lib/reserve";
 import { CopyTextModal } from "../components/CopyText";
 import { planCheckpoints, planSplit, summarizeAnnual, summarizePlan } from "../lib/weg";
 import { Checkpoints } from "../components/Charts";
@@ -218,6 +219,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
       )}
 
       <AccountCard data={data} update={update} property={p} />
+      <ReserveCard data={data} property={p} />
 
       <div className="card" id="wertentwicklung">
         <h2>Wertentwicklung</h2>
@@ -636,6 +638,49 @@ function AnlageVCard({ data, property, taxRate }: { data: PageProps["data"]; pro
         <button onClick={() => setCopy(true)}>Als Text</button>
       </div>
       {copy && <CopyTextModal title={`Anlage V ${av.year}`} text={text} onClose={() => setCopy(false)} />}
+    </div>
+  );
+}
+
+/** Erhaltungsrücklage: deine Zuführungen über das Hausgeld je Jahr, abgeglichen mit der Jahresabrechnung */
+function ReserveCard({ data, property }: { data: PageProps["data"]; property: Property }) {
+  const today = todayISO();
+  const o = reserveOverview(property, data, today);
+  if (!o) return null;
+  const thisYear = Number(today.slice(0, 4));
+  return (
+    <div className="card" id="ruecklage">
+      <div className="row" style={{ marginBottom: 8 }}>
+        <h2 style={{ margin: 0 }}>Erhaltungsrücklage</h2>
+        <span className="spacer" />
+        <span className="small muted">deine Zuführung seit Erwerb</span>
+        <strong>{formatEUR(o.total)}</strong>
+      </div>
+      <ul className="reserve-list">
+        {o.years.map((y) => (
+          <li key={y.year}>
+            <div>
+              <strong>{y.year}</strong>
+              {y.year === thisYear && <span className="small muted"> bis heute</span>}
+              <div className="small muted">
+                {y.months} × {formatEUR(y.monthly)} im Hausgeld
+              </div>
+            </div>
+            <div className="num">
+              <strong>{formatEUR(y.paid)}</strong>
+              <div className="small muted">
+                {y.annualTotal === null
+                  ? "Abrechnung fehlt noch"
+                  : `laut Abrechnung ${formatEUR(y.annualOwn!)}${y.months < 12 ? ` (von ${formatEUR(y.annualTotal)} fürs Jahr)` : ""}`}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="hint" style={{ margin: "8px 0 0" }}>
+        Zuführung = Rücklagenanteil im Hausgeld laut Wirtschaftsplan × Monate in deinem Eigentum. „Laut Abrechnung“ ist die Zuführung aus der WEG-Jahresabrechnung
+        (Zuführung der Gemeinschaft × Miteigentumsanteil), zeitanteilig für deine Monate. Steuerlich zählt die Rücklage erst, wenn die WEG sie für Erhaltung ausgibt.
+      </p>
     </div>
   );
 }

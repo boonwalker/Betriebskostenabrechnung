@@ -200,6 +200,8 @@ export interface CostItem {
   /** Gesamtbetrag (brutto) der Position für den Abrechnungszeitraum, nur umlagefähige Kosten */
   amount: number;
   key: AllocationKey;
+  /** vom Vermieter anhand der Rechnung bestätigt: die Position betrifft diese im Mietvertrag genannte Leistung */
+  confirmedAgreement?: string;
   /** bei key = "direct" */
   directUnitId?: string;
   /** bei key = "consumption" / "heating": Verbrauch je Einheit */

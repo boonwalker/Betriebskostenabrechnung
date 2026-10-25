@@ -1,7 +1,7 @@
 import { calculateStatement, type Co2Result, type TenantResult } from "./calc";
 import { formatDate } from "./dates";
 import type { AppData, Statement, Tenant } from "./types";
-import { agreementFor } from "./lease";
+import { agreementForItem } from "./lease";
 import { billFor, estimatePropertyTax, propertyTaxStart } from "./propertyTax";
 import { checkAnnual } from "./weg";
 import { link, type Target } from "./nav";
@@ -21,9 +21,12 @@ export interface TenantReadiness {
   ready: boolean;
 }
 
+/** Direkte Behebung: Abgabe eintragen oder Leistung laut Mietvertrag bestätigen */
+export type IssueFix = { kind: "tax" | "waste"; amount: number } | { kind: "confirm"; costId: string; term: string };
+
 /** Wohin ein Klick auf einen Hinweis führt; `fix` trägt den fehlenden Betrag direkt ein */
 export interface IssueTarget extends Target {
-  fix?: { kind: "tax" | "waste"; amount: number };
+  fix?: IssueFix;
 }
 
 export interface Readiness {
@@ -175,10 +178,16 @@ export function statementReadiness(statement: Statement, data: AppData): Readine
     } else {
       for (const c of statement.costs) {
         if (c.key === "direct" && c.directUnitId !== t.unit.id) continue;
-        const m = agreementFor(c.label, c.category, lease);
+        const m = agreementForItem(c, lease);
         if (m.status === "not_agreed")
           hints.push(to(`„${c.label}“ wird ${t.tenant.name} nicht berechnet (${m.text}); der Anteil bleibt beim Vermieter.`, objectPage({ t: t.tenant.id, f: "vertrag" }, "Mietvertrag ansehen")));
-        else if (m.status === "partial") hints.push(to(`„${c.label}“: ${m.text}. Bitte anhand der Rechnung bestätigen.`, here("kosten", "Zur Position")));
+        else if (m.status === "partial")
+          hints.push(
+            to(`„${c.label}“: ${m.text}. Bitte anhand der Rechnung bestätigen.`, {
+              ...here("kosten", `Bestätigen: betrifft „${m.term}“`),
+              fix: { kind: "confirm", costId: c.id, term: m.term! },
+            }),
+          );
       }
       if (property.type === "etw" && !beforeStart && wasteFee && lease.agreedCategories.includes(8) && !wasteItems.length) {
         hints.push(

@@ -4,7 +4,7 @@ import { addMonths, daysInclusive, fromDay, intersect, toDay } from "./dates";
 import { allocate, fromCents, sumEuro, toCents, type Cents } from "./money";
 import { degreeDays } from "./degreeDays";
 import { segmentConsumption } from "./meters";
-import { agreementFor } from "./lease";
+import { agreementForItem } from "./lease";
 import type { CostItem, ISODate, LeaseAllocationRule, Property, Section35aKind, Statement, Tenant, Unit } from "./types";
 
 /** Belegungsabschnitt einer Einheit: ein Mieter oder Leerstand (tenantId = null) */
@@ -287,7 +287,7 @@ export function calculateStatement(statement: Statement, property: Property, all
     // Mieter, mit denen diese Kostenart nicht vereinbart ist: Ihr Anteil bleibt beim Vermieter
     const notAgreed = (seg: Segment) => {
       const lease = tenantOf(seg)?.lease;
-      return !!lease && agreementFor(item.label, item.category, lease).status === "not_agreed";
+      return !!lease && agreementForItem(item, lease).status === "not_agreed";
     };
 
     /** verteilt Centbeträge auf Abschnitte und bucht nicht vereinbarte Anteile zum Vermieter */

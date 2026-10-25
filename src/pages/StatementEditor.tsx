@@ -11,7 +11,7 @@ import { aiAccess } from "../lib/aiAccess";
 import { meterDates, METER_LABELS, segmentConsumption } from "../lib/meters";
 import { formatDate, todayISO } from "../lib/dates";
 import { formatEUR, formatNum } from "../lib/format";
-import { changedSinceRelease, releaseTenant, revokeRelease, statementReadiness } from "../lib/release";
+import { changedSinceRelease, releaseTenant, revokeRelease, statementReadiness, type IssueFix } from "../lib/release";
 import { uid } from "../lib/store";
 import { takeOverAnnuals } from "../components/wegTransfer";
 import type { AllocationKey, CostItem, MeterKind, Property, Section35aKind, Statement } from "../lib/types";
@@ -49,8 +49,10 @@ export default function StatementEditor({ data, update, statementId }: PageProps
       ],
     });
   // Fehlende Abgaben der Gemeinde mit einem Klick als Position anlegen (Jahresbetrag laut Bescheid, direkt der Wohnung)
-  const applyFix = (fix: { kind: "tax" | "waste"; amount: number }) =>
-    set({
+  const applyFix = (fix: IssueFix) =>
+    fix.kind === "confirm"
+      ? setCost(fix.costId, { confirmedAgreement: fix.term })
+      : set({
       costs: [
         ...statement.costs,
         fix.kind === "tax"
@@ -564,6 +566,14 @@ function CostRow({ index, cost, property, onChange, onRemove }: { index: number;
             </div>
           ) : (
             cost.source && <div className="muted small" title={cost.note}>aus Beleg: {cost.source}</div>
+          )}
+          {cost.confirmedAgreement && (
+            <div className="small ok-text">
+              ✓ bestätigt als „{cost.confirmedAgreement}“ laut Mietvertrag{" "}
+              <button type="button" className="link" onClick={() => onChange({ confirmedAgreement: undefined })}>
+                aufheben
+              </button>
+            </div>
           )}
         </div>
         <span className="cost-field-label">Betrag (€)</span>

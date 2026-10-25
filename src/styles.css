@@ -587,6 +587,7 @@ table.transposed td.wrap .badge { white-space: normal; }
 .profile-list { list-style: none; margin: 0; padding: 0; }
 .profile-list li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
 .danger-text { color: var(--danger); }
+.ok-text { color: var(--ok); }
 @media (max-width: 560px) {
   .house-body { margin: 0 8px; padding: 12px; }
   .house-roof { height: 92px; }

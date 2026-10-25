@@ -45,7 +45,7 @@ const SYNONYMS: [RegExp, string][] = [
 ];
 const concepts = (s: string) => new Set(SYNONYMS.filter(([re]) => re.test(norm(s))).map(([, c]) => c));
 
-export type AgreementMatch = { status: "agreed" | "partial" | "not_agreed"; text: string };
+export type AgreementMatch = { status: "agreed" | "partial" | "not_agreed"; text: string; /** bei partial: die ähnlich lautende Leistung im Vertrag */ term?: string };
 
 /**
  * Ist eine Kostenposition laut Mietvertrag umlegbar?
@@ -67,9 +67,17 @@ export function agreementFor(label: string, category: number | null, lease: Leas
     return {
       status: "partial",
       text: `vereinbart ist nur „${similar}“ – umlegbar nur, wenn die Rechnung genau diese Leistung betrifft`,
+      term: similar,
     };
   }
   return { status: "not_agreed", text: "nicht als sonstige Betriebskosten im Mietvertrag genannt (§ 2 Nr. 17 BetrKV verlangt die ausdrückliche Vereinbarung)" };
+}
+
+/** Wie agreementFor, berücksichtigt aber die Bestätigung des Vermieters an der Kostenposition */
+export function agreementForItem(item: { label: string; category: number | null; confirmedAgreement?: string }, lease: LeaseAgreement): AgreementMatch {
+  if (item.confirmedAgreement && lease.otherCosts.includes(item.confirmedAgreement))
+    return { status: "agreed", text: `als „${item.confirmedAgreement}“ bestätigt (sonstige Betriebskosten laut Mietvertrag)` };
+  return agreementFor(item.label, item.category, lease);
 }
 
 const CONSUMPTION_UNITS = /cbm|m³|m3|kwh|liter|zähler|verbrauch/i;

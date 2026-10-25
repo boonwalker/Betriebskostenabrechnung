@@ -549,7 +549,11 @@ function Letter({
       )}
       <div className="letter-closing">
         <p className="letter-small">
-          Die Rechnungen und Belege zu dieser Abrechnung {w("können Sie", "kannst du")} nach vorheriger Terminabsprache gerne einsehen. Einwendungen gegen die Abrechnung{" "}
+          {/* mit Anlagen: Verweis darauf, sonst Angebot zur Belegeinsicht */}
+          {attachments.length > 0
+            ? `Die Rechnungen und Belege zu dieser Abrechnung ${w("finden Sie", "findest du")} im Anhang.`
+            : `Die Rechnungen und Belege zu dieser Abrechnung ${w("können Sie", "kannst du")} nach vorheriger Terminabsprache gerne einsehen.`}{" "}
+          Einwendungen gegen die Abrechnung{" "}
           {w("können Sie", "kannst du")} bis zum Ablauf des zwölften Monats nach Zugang dieser Abrechnung mitteilen (§ 556 Abs. 3 BGB).
         </p>
         <p className="letter-sign">

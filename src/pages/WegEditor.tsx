@@ -10,6 +10,7 @@ import type { AppData, EconomicPlan, HeatingBill, WegAnnualStatement } from "../
 import { BarList, BudgetMeter, Checkpoints, SplitBar } from "../components/Charts";
 import { formatSignedPct } from "../lib/format";
 import { askConfirm, showMessage } from "../components/dialog";
+import { takeOverAnnuals } from "../components/wegTransfer";
 import {
   budgetUsage,
   checkAnnual,
@@ -23,7 +24,6 @@ import {
   planSplit,
   summarizeAnnual,
   summarizePlan,
-  transferToStatement,
 } from "../lib/weg";
 
 type Doc = WegAnnualStatement | EconomicPlan;
@@ -174,22 +174,14 @@ function AnnualSummaryCard({ data, update, annual }: { data: AppData; update: Pa
   const findings = checkAnnual(annual);
   const statement = data.statements.find((st) => st.propertyId === annual.propertyId && st.periodStart.startsWith(String(annual.year)));
 
-  const toStatement = () => {
+  const toStatement = async () => {
     if (statement?.status === "released") {
       void showMessage("Die Mieterabrechnung ist für alle Mieter freigegeben. Hebe eine Freigabe auf, wenn du sie ändern willst.");
       return;
     }
     const base = statement ?? newStatement(annual.propertyId, `${annual.year}-01-01`, `${annual.year}-12-31`);
-    const property = data.properties.find((p) => p.id === annual.propertyId)!;
-    const { items, skipped } = transferToStatement(annual, base, { property, tenants: data.tenants });
-    const next = { ...base, costs: [...base.costs, ...items] };
-    update((d) => ({ ...d, statements: statement ? d.statements.map((x) => (x.id === next.id ? next : x)) : [...d.statements, next] }));
-    const notTaken = skipped.filter((x) => x.reason !== "bereits übernommen" && x.reason !== "nicht umlagefähig");
-    void showMessage(
-      `${items.length} Position(en) übernommen.` +
-        (notTaken.length ? `\n\nNicht übernommen:\n${notTaken.map((x) => `• ${x.position.label}: ${x.reason}`).join("\n")}` : ""),
-    );
-    window.location.hash = `#/abrechnungen/${next.id}`;
+    await takeOverAnnuals(data, update, base, [annual]);
+    window.location.hash = `#/abrechnungen/${base.id}`;
   };
 
   return (

@@ -637,6 +637,8 @@ export function transferToStatement(
   for (const p of annual.positions) {
     if (already.has(p.id)) skipped.push({ position: p, reason: "bereits übernommen" });
     else if (p.classification !== "allocable") skipped.push({ position: p, reason: CLASSIFICATION_LABELS[p.classification] });
+    // Anteil 0 laut WEG (z. B. Einzelkosten einer anderen Wohnung) bleibt 0 – auch bei anderem Vertragsschlüssel
+    else if (p.amount === 0) skipped.push({ position: p, reason: "Betrag 0" });
     else if (!p.reviewed) skipped.push({ position: p, reason: "noch nicht geprüft" });
     else if (p.heating === "component" && includedInHeatingBill(p, annual.heating) === true)
       skipped.push({ position: p, reason: "in der Heizkostenabrechnung enthalten" });
@@ -651,8 +653,6 @@ export function transferToStatement(
               ? "möglicherweise in den Heizkosten enthalten – bitte selbst bewerten"
               : "Heizungsposition – bitte selbst bewerten",
       });
-    // Anteil 0 laut WEG (z. B. Einzelkosten einer anderen Wohnung) bleibt 0 – auch bei anderem Vertragsschlüssel
-    else if (p.amount === 0) skipped.push({ position: p, reason: "Betrag 0" });
     else {
       const agreements = leases.map((l) => agreementFor(p.label, p.category, l));
       // Nur ausschließen, wenn die Kostenart mit keinem Mieter des Zeitraums vereinbart ist

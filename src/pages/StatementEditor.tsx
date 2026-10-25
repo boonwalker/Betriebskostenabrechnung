@@ -93,18 +93,44 @@ export default function StatementEditor({ data, update, statementId }: PageProps
   const year = Number(statement.periodStart.slice(0, 4));
   const annuals = data.wegAnnuals.filter((a) => a.propertyId === property.id && a.year === year);
 
-  const takeOverWeg = () => {
+  const takeOverWeg = async () => {
+    // Noch ungeprüfte, eindeutig als umlagefähig eingestufte Positionen gleich hier bestätigen lassen
+    const transferred = new Set(statement.costs.map((c) => c.sourcePositionId).filter(Boolean));
+    const open = annuals.flatMap((a) =>
+      a.positions.filter((p) => !p.reviewed && p.classification === "allocable" && p.amount !== 0 && p.heating !== "component" && !transferred.has(p.id)),
+    );
+    let sources = annuals;
+    if (open.length) {
+      const confirmed = await askConfirm(
+        `${open.length} Position${open.length === 1 ? " ist" : "en sind"} in der WEG-Jahresabrechnung ${year} noch nicht geprüft. Die App stuft sie als umlagefähig ein:\n\n` +
+          open.map((p) => `• ${p.label}: ${formatEUR(p.amount)}`).join("\n") +
+          "\n\nEinstufung bestätigen und übernehmen?",
+        { confirmLabel: "Bestätigen und übernehmen" },
+      );
+      if (confirmed) {
+        const ids = new Set(open.map((p) => p.id));
+        sources = annuals.map((a) => ({ ...a, positions: a.positions.map((p) => (ids.has(p.id) ? { ...p, reviewed: true } : p)) }));
+      }
+    }
     let costs = statement.costs;
     const notes: string[] = [];
     let added = 0;
-    for (const a of annuals) {
+    for (const a of sources) {
       const { items, skipped } = transferToStatement(a, { ...statement, costs }, { property, tenants: data.tenants });
       costs = [...costs, ...items];
       added += items.length;
-      for (const sk of skipped) if (sk.reason !== "bereits übernommen" && sk.reason !== "nicht umlagefähig") notes.push(`• ${sk.position.label}: ${sk.reason}`);
+      for (const sk of skipped) if (!["bereits übernommen", "nicht umlagefähig", "Betrag 0"].includes(sk.reason)) notes.push(`• ${sk.position.label}: ${sk.reason}`);
     }
-    set({ costs });
-    void showMessage(`${added} Position(en) übernommen.` + (notes.length ? `\n\nNicht übernommen:\n${notes.join("\n")}` : ""));
+    // Bestätigte Einstufungen in der WEG-Abrechnung festhalten, Positionen in die Abrechnung schreiben
+    update((d) => ({
+      ...d,
+      wegAnnuals: d.wegAnnuals.map((w) => sources.find((s) => s.id === w.id) ?? w),
+      statements: d.statements.map((s) => (s.id === statement.id ? { ...s, costs } : s)),
+    }));
+    void showMessage(
+      `${added} Position${added === 1 ? "" : "en"} übernommen.` +
+        (notes.length ? `\n\nNicht übernommen:\n${notes.join("\n")}\n\nPrüfen kannst du sie in der WEG-Jahresabrechnung ${year}.` : ""),
+    );
   };
 
   const save = (next: Statement) => update((d) => ({ ...d, statements: d.statements.map((s) => (s.id === next.id ? next : s)) }));

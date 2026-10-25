@@ -139,7 +139,18 @@ export function anlageV(property: Property, data: AppData, year: number): Anlage
         amount: r2(hausgeld - reserve),
         note: `${hausgeldMonths} × Hausgeld ${(hausgeld / hausgeldMonths).toLocaleString("de-DE", { minimumFractionDigits: 2 })} € abzüglich Rücklage ${reserve.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €`,
       });
-    hints.push("Nachzahlungen an die WEG aus der Jahresabrechnung (bzw. Erstattungen) zählen im Jahr der Zahlung zusätzlich – Rücklage erst, wenn sie für Erhaltung verwendet wird.");
+    const settlement = out("wegSettlement");
+    if (settlement) {
+      const labels = inYear.filter((b) => b.kind === "wegSettlement").map((b) => b.label.replace(/ \(.*\)$/, ""));
+      costs.push({
+        label: settlement > 0 ? "Nachzahlung an die WEG (Abrechnungsspitze)" : "Erstattung der WEG (Abrechnungsspitze)",
+        amount: settlement,
+        note: `${labels.join(", ")}, gezahlt im Jahr ${year} – ${settlement > 0 ? "erhöht" : "mindert"} die Werbungskosten`,
+      });
+    }
+    const openSettlement = data.wegAnnuals.find((a) => a.propertyId === property.id && a.year === year - 1 && !a.settlement?.paidOn);
+    if (openSettlement)
+      hints.push(`Abrechnungsspitze der WEG-Abrechnung ${year - 1} noch nicht erfasst – Erstattungen und Nachzahlungen zählen im Jahr der Zahlung (WEG-Abrechnung → Abrechnungsspitze).`);
   }
   const municipal = out("municipal");
   if (municipal) {

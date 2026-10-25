@@ -83,6 +83,12 @@ describe("Anlage V WE 09", () => {
     expect(afa.amount).toBe(808.29);
   });
 
+  it("Erstattung der WEG mindert die Werbungskosten im Jahr der Zahlung", () => {
+    const annuals = data.wegAnnuals.map((a) => (a.year === 2024 ? { ...a, settlement: { amount: 110.65, paidOn: "2025-12-04" } } : a));
+    const line = anlageV(p, { ...data, wegAnnuals: annuals }, 2025)!.costs.find((c) => c.label.startsWith("Erstattung der WEG"))!;
+    expect(line.amount).toBe(-110.65);
+  });
+
   it("Nachzahlung zählt im Jahr des Eingangs", () => {
     const tenantId = data.tenants.find((t) => !t.landlord)!.id;
     const statement = {

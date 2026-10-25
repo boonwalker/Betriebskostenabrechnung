@@ -49,4 +49,12 @@ describe("Mietkonto WE 09 (Soll-Kontostand)", () => {
     const l = accountLedger({ ...p, accountOpeningBalance: 500 }, data, "2025-08-31")!;
     expect(l.balance).toBe(500 + 630 - 160.31);
   });
+
+  it("Abrechnungsspitze der WEG am Tag der Zahlung (Erstattung 2024 am 04.12.2025)", () => {
+    const annuals = data.wegAnnuals.map((a) => (a.year === 2024 ? { ...a, settlement: { amount: 110.65, paidOn: "2025-12-04" } } : a));
+    const l = accountLedger(p, { ...data, wegAnnuals: annuals }, "2025-12-31")!;
+    const b = l.bookings.find((x) => x.kind === "wegSettlement")!;
+    expect([b.date, b.amount, b.label]).toEqual(["2025-12-04", 110.65, "Abrechnungsspitze WEG 2024 (Erstattung)"]);
+    expect(l.balance).toBeCloseTo(accountLedger(p, data, "2025-12-31")!.balance + 110.65, 2);
+  });
 });

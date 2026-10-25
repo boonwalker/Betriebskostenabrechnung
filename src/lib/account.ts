@@ -5,7 +5,7 @@ import { municipalCharges, propertyTaxStart } from "./propertyTax";
 import { releasedTenant } from "./release";
 import type { AppData, ISODate, Property } from "./types";
 
-export type BookingKind = "rent" | "hausgeld" | "municipal" | "own" | "loan" | "withdrawal" | "result";
+export type BookingKind = "rent" | "hausgeld" | "wegSettlement" | "municipal" | "own" | "loan" | "withdrawal" | "result";
 
 export interface Booking {
   date: ISODate;
@@ -76,6 +76,12 @@ export function accountLedger(property: Property, data: AppData, until: ISODate)
       const latest = known.length ? Math.max(...known.map((p) => p.year)) : null;
       const monthly = latest !== null ? known.filter((p) => p.year === latest).reduce((a, p) => a + (p.monthlyHausgeld ?? 0), 0) : property.hausgeldMonthly;
       add("hausgeld", `${m}-01`, "Hausgeld WEG", -monthly);
+    }
+
+    // Abrechnungsspitzen aus den WEG-Jahresabrechnungen am Tag der Zahlung
+    for (const a of data.wegAnnuals.filter((x) => x.propertyId === property.id && x.settlement?.paidOn && x.settlement.amount)) {
+      const s = a.settlement!;
+      add("wegSettlement", s.paidOn!, `Abrechnungsspitze WEG ${a.year} (${s.amount > 0 ? "Erstattung" : "Nachzahlung"})`, s.amount);
     }
 
     // Grundsteuer und Müll laut Bescheid des jeweiligen Jahres als gemeinsame Quartalsrate, ab dem Jahr, ab dem du sie trägst

@@ -109,6 +109,44 @@ export default function WegEditor({ data, update, kind, id }: PageProps & { kind
                 Zuführung Erhaltungsrücklage (€)
                 <NumberInput value={doc.reserveContribution} onChange={(v) => set({ reserveContribution: v })} />
               </label>
+              <div className="field" id="abrechnungsspitze" style={{ gridColumn: "1 / -1" }}>
+                Abrechnungsspitze (Ergebnis der Einzelabrechnung)
+                <div className="row" style={{ flexWrap: "wrap" }}>
+                  <select
+                    value={(doc.settlement?.amount ?? 0) < 0 ? "due" : "refund"}
+                    onChange={(e) => {
+                      const amount = Math.abs(doc.settlement?.amount ?? 0);
+                      set({ settlement: { amount: e.target.value === "due" ? -amount : amount, paidOn: doc.settlement?.paidOn ?? null } });
+                    }}
+                    aria-label="Art"
+                  >
+                    <option value="refund">Erstattung an mich</option>
+                    <option value="due">Nachzahlung an die WEG</option>
+                  </select>
+                  <NumberInput
+                    value={doc.settlement ? Math.abs(doc.settlement.amount) : undefined}
+                    allowEmpty
+                    placeholder="Betrag"
+                    style={{ maxWidth: 130 }}
+                    ariaLabel="Betrag"
+                    onChange={(v) =>
+                      set({
+                        settlement: Number.isNaN(v) ? null : { amount: (doc.settlement?.amount ?? 0) < 0 ? -Math.abs(v) : Math.abs(v), paidOn: doc.settlement?.paidOn ?? null },
+                      })
+                    }
+                  />
+                  <label className="row small">
+                    gezahlt am
+                    <input
+                      type="date"
+                      value={doc.settlement?.paidOn ?? ""}
+                      disabled={!doc.settlement}
+                      onChange={(e) => doc.settlement && set({ settlement: { ...doc.settlement, paidOn: e.target.value || null } })}
+                    />
+                  </label>
+                </div>
+                <span className="small muted">Erscheint am Zahltag im Mietkonto und in der Anlage V dieses Jahres.</span>
+              </div>
             </>
           ) : (
             <>

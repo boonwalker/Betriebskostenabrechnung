@@ -408,6 +408,8 @@ export interface WegAnnualStatement {
   heatingPages?: number[];
   /** Lage von Summenzeile und Eigentümerblock in der Einzelabrechnung – für die Anlage ans Mieterschreiben */
   sheet?: SheetLayout | null;
+  /** Abrechnungsspitze laut Einzelabrechnung: + Erstattung der WEG an dich, − Nachzahlung an die WEG; paidOn = Tag der Zahlung */
+  settlement?: { amount: number; paidOn: ISODate | null } | null;
   createdAt: string;
 }
 

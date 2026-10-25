@@ -111,6 +111,22 @@ export default function WegEditor({ data, update, kind, id }: PageProps & { kind
                 Zuführung Erhaltungsrücklage (€)
                 <NumberInput value={doc.reserveContribution} onChange={(v) => set({ reserveContribution: v })} />
               </label>
+              <label className="field">
+                Rücklagenstand 31.12. Gemeinschaft (€)
+                <NumberInput
+                  value={doc.reserveBalance?.total ?? undefined}
+                  allowEmpty
+                  onChange={(v) => set({ reserveBalance: { total: Number.isNaN(v) ? null : v, share: doc.reserveBalance?.share ?? null } })}
+                />
+              </label>
+              <label className="field">
+                davon dein Anteil (€, leer = nach MEA)
+                <NumberInput
+                  value={doc.reserveBalance?.share ?? undefined}
+                  allowEmpty
+                  onChange={(v) => set({ reserveBalance: { total: doc.reserveBalance?.total ?? null, share: Number.isNaN(v) ? null : v } })}
+                />
+              </label>
               <div className="field" id="abrechnungsspitze" style={{ gridColumn: "1 / -1" }}>
                 Abrechnungsspitze (Ergebnis der Einzelabrechnung)
                 <div className="row" style={{ flexWrap: "wrap" }}>

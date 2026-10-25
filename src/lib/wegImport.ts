@@ -57,6 +57,7 @@ export function annualFromExtraction(x: WegExtraction, ctx: Context): WegAnnualS
     buildingTotal: x.buildingTotal,
     reserveContribution: x.reserveContribution ?? reserveFromPositions,
     settlement: settlementFromExtraction(x.settlement),
+    reserveBalance: x.reserveBalance && (x.reserveBalance.total !== null || x.reserveBalance.share !== null) ? x.reserveBalance : null,
     positions,
     heating: h
       ? {

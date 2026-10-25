@@ -120,3 +120,14 @@ describe("Erhaltungsrücklage", () => {
     expect(o.total).toBe(275.7);
   });
 });
+
+describe("Rücklagenstand", () => {
+  it("Anteil ausgewiesen oder über MEA berechnet", async () => {
+    const { reserveOverview } = await import("./reserve");
+    const data = showcaseData();
+    const p = { ...data.properties[0], wegMeaTotal: 1000 };
+    const withBalance = (b: { total: number | null; share: number | null }) => ({ ...data, properties: [p], wegAnnuals: data.wegAnnuals.map((a) => ({ ...a, year: 2025, reserveBalance: b })) });
+    expect(reserveOverview(p, withBalance({ total: 18118.74, share: null }), "2026-10-25")!.balance).toEqual({ date: "2025-12-31", share: 887.82, computed: true, total: 18118.74 });
+    expect(reserveOverview(p, withBalance({ total: null, share: 887.82 }), "2026-10-25")!.balance!.computed).toBe(false);
+  });
+});

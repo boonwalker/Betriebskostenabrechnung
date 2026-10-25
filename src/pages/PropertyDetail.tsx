@@ -656,6 +656,17 @@ function ReserveCard({ data, property }: { data: PageProps["data"]; property: Pr
         <span className="small muted">deine Zuführung seit Erwerb</span>
         <strong>{formatEUR(o.total)}</strong>
       </div>
+      {o.balance && (
+        <div className="reserve-balance">
+          <span className="small muted">Dein Anteil an der Rücklage am {formatDate(o.balance.date)}</span>
+          <strong>{formatEUR(o.balance.share)}</strong>
+          {o.balance.total !== null && (
+            <span className="small muted">
+              {o.balance.computed ? "berechnet aus" : "von"} {formatEUR(o.balance.total)} der Gemeinschaft
+            </span>
+          )}
+        </div>
+      )}
       <ul className="reserve-list">
         {o.years.map((y) => (
           <li key={y.year}>

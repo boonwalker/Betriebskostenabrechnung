@@ -19,8 +19,19 @@ export interface ReserveYear {
   annualOwn: number | null;
 }
 
+export interface ReserveBalance {
+  /** Stichtag (31.12. des Abrechnungsjahres) */
+  date: ISODate;
+  /** dein Anteil; ausgewiesen oder über die Miteigentumsanteile berechnet */
+  share: number;
+  computed: boolean;
+  total: number | null;
+}
+
 export interface ReserveOverview {
   years: ReserveYear[];
+  /** letzter bekannter Rücklagenstand laut Jahresabrechnung */
+  balance: ReserveBalance | null;
   /** Summe deiner Zuführungen seit Erwerb */
   total: number;
 }
@@ -40,5 +51,16 @@ export function reserveOverview(property: Property, data: AppData, today: ISODat
     const annualTotal = annual ? annual.reserveContribution : null;
     years.push({ year, months, monthly, paid: r2(months * monthly), annualTotal, annualOwn: annualTotal === null ? null : r2((annualTotal * months) / 12) });
   }
-  return { years, total: r2(years.reduce((a, y) => a + y.paid, 0)) };
+  // Rücklagenstand aus der neuesten Jahresabrechnung, die ihn ausweist
+  const mea = property.units.reduce((a, u) => a + (u.mea ?? 0), 0);
+  let balance: ReserveBalance | null = null;
+  for (const a of [...data.wegAnnuals].filter((x) => x.propertyId === property.id).sort((x, y) => y.year - x.year)) {
+    const b = a.reserveBalance;
+    if (!b) continue;
+    const share = b.share ?? (b.total !== null && mea && property.wegMeaTotal ? r2((b.total * mea) / property.wegMeaTotal) : null);
+    if (share === null) continue;
+    balance = { date: `${a.year}-12-31`, share, computed: b.share === null, total: b.total };
+    break;
+  }
+  return { years, balance, total: r2(years.reduce((a, y) => a + y.paid, 0)) };
 }

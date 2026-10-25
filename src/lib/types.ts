@@ -422,6 +422,8 @@ export interface WegAnnualStatement {
    * paidOn = Tag der Zahlung, due = Fälligkeit laut Abrechnung (falls genannt)
    */
   settlement?: { amount: number; paidOn: ISODate | null; due?: ISODate | null } | null;
+  /** Stand der Erhaltungsrücklage zum Jahresende laut „Entwicklung der Erhaltungsrücklage“: Gemeinschaft und Anteil der Wohnung */
+  reserveBalance?: { total: number | null; share: number | null } | null;
   createdAt: string;
 }
 

@@ -139,10 +139,23 @@ async function route(
       const same = (w: { propertyId: string; unitId: string; year: number }) => w.propertyId === property.id && w.unitId === annual.unitId && w.year === annual.year;
       const existing = snapshot.wegAnnuals.find(same);
       if (existing) {
-        // Abrechnungsspitze nachtragen, falls sie noch fehlt
-        if (!existing.settlement && annual.settlement) {
-          update((d) => ({ ...d, wegAnnuals: d.wegAnnuals.map((w) => (w.id === existing.id && !w.settlement ? { ...w, settlement: annual.settlement } : w)) }));
-          return { year: annual.year, result: `Abrechnungsspitze ${annual.year} ergänzt (${annual.settlement.amount > 0 ? "Erstattung" : "Nachzahlung"} ${Math.abs(annual.settlement.amount).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €) – sonst nur abgelegt.` };
+        // Abrechnungsspitze und Rücklagenstand nachtragen, falls sie noch fehlen
+        const addSettlement = !existing.settlement && !!annual.settlement;
+        const addBalance = !existing.reserveBalance && !!annual.reserveBalance;
+        if (addSettlement || addBalance) {
+          update((d) => ({
+            ...d,
+            wegAnnuals: d.wegAnnuals.map((w) =>
+              w.id === existing.id
+                ? { ...w, settlement: w.settlement ?? annual.settlement ?? null, reserveBalance: w.reserveBalance ?? annual.reserveBalance ?? null }
+                : w,
+            ),
+          }));
+          const what = [
+            addSettlement && `Abrechnungsspitze (${annual.settlement!.amount > 0 ? "Erstattung" : "Nachzahlung"} ${Math.abs(annual.settlement!.amount).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €)`,
+            addBalance && "Rücklagenstand",
+          ].filter(Boolean);
+          return { year: annual.year, result: `${what.join(" und ")} ${annual.year} ergänzt – sonst nur abgelegt.` };
         }
         return { year: annual.year, result: `Für ${annual.year} gibt es schon eine WEG-Jahresabrechnung – nur abgelegt.` };
       }

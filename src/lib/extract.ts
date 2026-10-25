@@ -354,6 +354,7 @@ const WegSchema = z.object({
   reserveContribution: z.number().nullable(),
   annualHausgeld: z.number().nullable(),
   monthlyHausgeld: z.number().nullable(),
+  reserveBalance: z.object({ total: z.number().nullable(), share: z.number().nullable() }).nullable(),
   settlement: z
     .object({
       costShare: z.number().nullable(),
@@ -433,6 +434,7 @@ const WEG_JSON_SCHEMA = {
     "annualHausgeld",
     "monthlyHausgeld",
     "settlement",
+    "reserveBalance",
     "positions",
     "heating",
     "sheet",
@@ -450,6 +452,21 @@ const WEG_JSON_SCHEMA = {
     reserveContribution: { ...nullableNumber, description: "Zuführung zur Erhaltungsrücklage der Wohnung" },
     annualHausgeld: { ...nullableNumber, description: "nur Wirtschaftsplan: Hausgeld pro Jahr" },
     monthlyHausgeld: { ...nullableNumber, description: "nur Wirtschaftsplan: Hausgeld pro Monat" },
+    reserveBalance: {
+      description: "nur Jahresabrechnung: Stand der Erhaltungsrücklage zum Jahresende (Seite „Entwicklung der Erhaltungsrücklage“), sonst null",
+      anyOf: [
+        { type: "null" },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["total", "share"],
+          properties: {
+            total: { ...nullableNumber, description: "Endbestand der Rücklage der Gemeinschaft zum 31.12." },
+            share: { ...nullableNumber, description: "Anteil der angegebenen Wohnung am Endbestand, falls ausgewiesen" },
+          },
+        },
+      ],
+    },
     settlement: {
       description: "nur Jahresabrechnung: Ergebnis der Einzelabrechnung (Abrechnungsspitze), sonst null",
       anyOf: [
@@ -606,7 +623,7 @@ Regeln:
 - unitAmount ist immer der Anteil der Wohnung, totalAmount der Gesamtbetrag der Gemeinschaft (falls ausgewiesen).
 - Deutsche Zahlen: „1.468,43“ = 1468.43.
 - Die Zuführung zur Erhaltungsrücklage ist bei Jahresabrechnungen meist nicht Teil der Bewirtschaftungskosten: Erfasse sie in reserveContribution und NICHT als Position. Im Wirtschaftsplan ist sie eine Position (isReserve = true).
-- Über-/Unterdeckung, Abrechnungsspitze, Hausgeldzahlungen und Salden sind keine Kostenpositionen – nicht als Position erfassen. Das Ergebnis der Einzelabrechnung (Kostenanteil, Vorschüsse, Abrechnungsspitze, ggf. Fälligkeit) gehört in settlement.
+- Über-/Unterdeckung, Abrechnungsspitze, Hausgeldzahlungen und Salden sind keine Kostenpositionen – nicht als Position erfassen. Das Ergebnis der Einzelabrechnung (Kostenanteil, Vorschüsse, Abrechnungsspitze, ggf. Fälligkeit) gehört in settlement, der Endbestand der Erhaltungsrücklage (Gemeinschaft und ggf. Anteil der Wohnung) in reserveBalance.
 - Heizkosten: Ist eine Heizkostenabrechnung enthalten, erfasse in heating den Anteil der Wohnung, die Bestandteile (Grund-/Verbrauchskosten Heizung und Warmwasser), Verbräuche und ggf. CO2-Angaben. Die Gesamtsumme der Heizkosten der Wohnung erscheint zusätzlich als Position, wenn sie in der Einzelabrechnung als Zeile steht.
 - Übernimm zu jeder Position den Verteilerschlüssel mit Basis (z. B. 49 von 1000 MEA, 1 von 11 WE, 34,766 von 478,182 cbm) und Bemerkungen (z. B. „Rg. v. 19.12.23 und 28.11.24“), falls angegeben. Aus Gesamtdarstellungen der Einnahmen/Ausgaben übernimm nur Bemerkungen zu den Positionen der Einzelabrechnung, keine zusätzlichen Positionen.
 - Übersichten mit Daten anderer Eigentümer (Abrechnungsergebnis aller Wohnungen, Rücklagenanteile) nicht erfassen – nur die angegebene Wohnung.

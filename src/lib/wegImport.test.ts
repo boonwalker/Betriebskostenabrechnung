@@ -39,6 +39,7 @@ describe("Import aus der KI-Auslese", () => {
       annualHausgeld: null,
       monthlyHausgeld: null,
       settlement: null,
+      reserveBalance: null,
       sheet: null,
       positions: [
         row("Wasser", 60.23, { totalAmount: 828.44, wegKey: "Verbrauch", basisTotal: 478.182, basisShare: 34.766, basisUnit: "cbm" }), row("Abwasser", 143.75), row("Treppenhausreinigung", 126.1), row("Allgemeinstrom", 45.53),
@@ -78,6 +79,7 @@ describe("Import aus der KI-Auslese", () => {
       annualHausgeld: 1923.76,
       monthlyHausgeld: 160.31,
       settlement: null,
+      reserveBalance: null,
       sheet: null,
       positions: [row("Strom Wärmepumpe", 1228.2, { declaredAllocable: "yes" }), row("Erhaltungsrücklage", 695.56, { declaredAllocable: "no", isReserve: true })],
       heating: null,

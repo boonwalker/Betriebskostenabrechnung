@@ -42,7 +42,7 @@ const NAV = [
 
 export default function App() {
   const [data, update, replace, sync] = useAppData();
-  const { parts } = useHashRoute();
+  const { parts, params } = useHashRoute();
   const [section = "", id, sub] = parts;
   const access = aiAccess(data.settings);
 
@@ -64,7 +64,7 @@ export default function App() {
   else if (section === "objekte" && id) page = <PropertyDetail key={id} data={data} update={update} propertyId={id} />;
   else if (section === "weg" && (id === "jahresabrechnung" || id === "wirtschaftsplan") && sub)
     page = <WegEditor key={sub} data={data} update={update} kind={id === "jahresabrechnung" ? "annual" : "plan"} id={sub} />;
-  else if (section === "mieter") page = <Tenants data={data} update={update} />;
+  else if (section === "mieter") page = <Tenants key={params.t ?? ""} data={data} update={update} openTenant={params.t} />;
   else if (section === "abrechnungen" && id && sub === "druck") page = <PrintView data={data} statementId={id} />;
   else if (section === "abrechnungen" && id) page = <StatementEditor data={data} update={update} statementId={id} />;
   else if (section === "abrechnungen") page = <Statements data={data} update={update} />;

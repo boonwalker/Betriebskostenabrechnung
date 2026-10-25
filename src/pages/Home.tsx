@@ -5,11 +5,15 @@ import { aiAccess, PROXY_URL } from "../lib/aiAccess";
 import { demoData } from "../lib/demo";
 import { DOCUMENT_KIND_LABELS } from "../lib/inbox";
 import type { AppData } from "../lib/types";
+import { formatDate, todayISO } from "../lib/dates";
+import { collectDeadlines } from "../lib/followUp";
 
 /** Startseite unter dem Logo: Begrüßung, Belege erfassen und was zuletzt erkannt wurde */
 export default function Home({ data, replace, onUpload }: PageProps & { replace: (d: AppData) => void; onUpload: (files: File[]) => void }) {
   const access = aiAccess(data.settings);
   const empty = data.properties.length === 0 && data.tenants.length === 0 && data.statements.length === 0;
+  const today = todayISO();
+  const deadlines = collectDeadlines(data, today);
   const recent = [...(data.documents ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
 
   return (
@@ -66,6 +70,27 @@ export default function Home({ data, replace, onUpload }: PageProps & { replace:
           </div>
         )}
       </div>
+
+      {deadlines.length > 0 && (
+        <div className="card home-deadlines">
+          <h2>Fristen und Termine</h2>
+          <ul>
+            {deadlines.map((d, i) => (
+              <li key={i} className={d.level}>
+                <a href={d.href}>
+                  <span className="deadline-date">{d.optional && d.date <= today ? "jetzt" : formatDate(d.date)}</span>
+                  <span className="deadline-text">
+                    <strong>{d.title}</strong>
+                    {d.detail && <span className="small muted">{d.detail}</span>}
+                  </span>
+                  {d.level === "overdue" && <span className="badge danger">überfällig</span>}
+                  {d.level === "soon" && <span className="badge warn">bald</span>}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {empty && (
         <div className="welcome-points">

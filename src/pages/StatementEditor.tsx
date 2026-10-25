@@ -16,6 +16,7 @@ import { uid } from "../lib/store";
 import { takeOverAnnuals } from "../components/wegTransfer";
 import type { AllocationKey, CostItem, MeterKind, Property, Section35aKind, Statement } from "../lib/types";
 import { askConfirm, showMessage } from "../components/dialog";
+import { TenantFollowUpRow } from "../components/FollowUp";
 
 export default function StatementEditor({ data, update, statementId }: PageProps & { statementId: string }) {
   const statement = data.statements.find((s) => s.id === statementId);
@@ -168,6 +169,7 @@ export default function StatementEditor({ data, update, statementId }: PageProps
                   berechnen.
                 </div>
               )}
+              {rel && <TenantFollowUpRow data={data} statement={statement} tenantId={t.tenantId} save={save} />}
               {!rel && (t.blockers.length > 0 || t.hints.length > 0) && (
                 <IssueList errors={t.blockers} warnings={t.hints} targets={readiness.targets} onFix={applyFix} style={{ marginTop: 6 }} />
               )}

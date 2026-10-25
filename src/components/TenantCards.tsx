@@ -5,7 +5,8 @@ import { formatEUR } from "../lib/format";
 import { rentAt, warmRent } from "../lib/model";
 import { releasedTenant } from "../lib/release";
 import type { AppData, Property, Tenant } from "../lib/types";
-import { Balance, Modal } from "./ui";
+import { Balance, Modal, type PageProps } from "./ui";
+import { RentIncreaseSection } from "./RentIncrease";
 
 const AVATAR_COLORS = ["#2f6b73", "#1f3347", "#4f7d5c", "#7a5c8f", "#9a6b3a", "#3d6f9e"];
 
@@ -127,12 +128,14 @@ export function VacantCard({ onRent }: { onRent: () => void }) {
 /** Profil mit allen Angaben, Mietentwicklung und Abrechnungen; von hier aus wird bearbeitet */
 export function TenantProfile({
   data,
+  update,
   tenant,
   onEdit,
   onRemove,
   onClose,
 }: {
   data: AppData;
+  update?: PageProps["update"];
   tenant: Tenant;
   onEdit: (focus?: string) => void;
   onRemove: () => void;
@@ -243,6 +246,8 @@ export function TenantProfile({
           )}
         </section>
       </div>
+
+      {update && !former && <RentIncreaseSection data={data} update={update} tenant={tenant} />}
 
       <div className="row" style={{ marginTop: 16 }}>
         <button className="ghost danger-text" onClick={onRemove}>Löschen</button>

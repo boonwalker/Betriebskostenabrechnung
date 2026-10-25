@@ -35,10 +35,10 @@ export function saveTenant(update: PageProps["update"], t: Tenant) {
   }));
 }
 
-export default function Tenants({ data, update }: PageProps) {
+export default function Tenants({ data, update, openTenant }: PageProps & { openTenant?: string }) {
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [showFormer, setShowFormer] = useState(false);
-  const [viewing, setViewing] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<string | null>(openTenant ?? null);
   const viewingTenant = data.tenants.find((t) => t.id === viewing) ?? null;
   const today = todayISO();
 
@@ -98,6 +98,7 @@ export default function Tenants({ data, update }: PageProps) {
       {viewingTenant && !editing && (
         <TenantProfile
           data={data}
+          update={update}
           tenant={viewingTenant}
           onClose={() => setViewing(null)}
           onEdit={(focus) => {

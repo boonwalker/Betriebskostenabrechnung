@@ -5,9 +5,12 @@ import { municipalCharges, propertyTaxStart } from "./propertyTax";
 import { releasedTenant } from "./release";
 import type { AppData, ISODate, Property } from "./types";
 
+export type BookingKind = "rent" | "hausgeld" | "municipal" | "own" | "loan" | "withdrawal" | "result";
+
 export interface Booking {
   date: ISODate;
   label: string;
+  kind: BookingKind;
   /** Eingang (+) bzw. Ausgang (−) */
   amount: number;
   /** Kontostand nach der Buchung */
@@ -45,22 +48,22 @@ export function accountLedger(property: Property, data: AppData, until: ISODate)
   const openingAmount = property.accountOpeningBalance ?? 0;
   const isEtw = property.type === "etw";
   const raw: Omit<Booking, "balance">[] = [];
-  const add = (date: ISODate, label: string, amount: number) => {
-    if (date >= start && date <= until && Math.abs(amount) >= 0.005) raw.push({ date, label, amount: Math.round(amount * 100) / 100 });
+  const add = (kind: BookingKind, date: ISODate, label: string, amount: number) => {
+    if (date >= start && date <= until && Math.abs(amount) >= 0.005) raw.push({ kind, date, label, amount: Math.round(amount * 100) / 100 });
   };
 
   const months: string[] = [];
   for (let m = start.slice(0, 7); m <= until.slice(0, 7); m = addMonths(m + "-01", 1).slice(0, 7)) months.push(m);
 
-  // Mieteingänge (anteilig im Ein- und Auszugsmonat)
-  for (const t of data.tenants.filter((x) => x.propertyId === property.id)) {
+  // Mieteingänge (anteilig im Ein- und Auszugsmonat) – ohne Mietverhältnisse eines anderen Vermieters (z. B. Voreigentümer)
+  for (const t of data.tenants.filter((x) => x.propertyId === property.id && !x.landlord)) {
     for (const m of months) {
       const monthStart = `${m}-01`;
       const monthEnd = fromDay(toDay(addMonths(monthStart, 1)) - 1);
       const r = intersect(monthStart, monthEnd, t.moveIn, t.moveOut ?? "9999-12-31");
       if (!r) continue;
       const amount = sumRent(t, r.start, r.end, (x) => x.coldRent + (x.surcharge ?? 0) + (isEtw ? x.prepaymentOperating + x.prepaymentHeating : 0));
-      add(r.start, `Miete ${t.name}`, amount);
+      add("rent", r.start, `Miete ${t.name}`, amount);
     }
   }
 
@@ -72,7 +75,7 @@ export function accountLedger(property: Property, data: AppData, until: ISODate)
       const known = plans.filter((p) => p.year <= year);
       const latest = known.length ? Math.max(...known.map((p) => p.year)) : null;
       const monthly = latest !== null ? known.filter((p) => p.year === latest).reduce((a, p) => a + (p.monthlyHausgeld ?? 0), 0) : property.hausgeldMonthly;
-      add(`${m}-01`, "Hausgeld WEG", -monthly);
+      add("hausgeld", `${m}-01`, "Hausgeld WEG", -monthly);
     }
 
     // Grundsteuer und Müll laut Bescheid des jeweiligen Jahres als gemeinsame Quartalsrate, ab dem Jahr, ab dem du sie trägst
@@ -87,24 +90,24 @@ export function accountLedger(property: Property, data: AppData, until: ISODate)
         // Im Übergangsjahr geht der Bescheid an den Voreigentümer: anteilige Erstattung (Annahme: zum Jahresende)
         const yearDays = daysInclusive(`${y}-01-01`, `${y}-12-31`);
         const share = (total * daysInclusive(chargeStart, `${y}-12-31`)) / yearDays;
-        add(`${y}-12-31`, `Erstattung ${label} ${y} an Voreigentümer (ab ${chargeStart.split("-").reverse().join(".")})`, -share);
+        add("municipal", `${y}-12-31`, `Erstattung ${label} ${y} an Voreigentümer (ab ${chargeStart.split("-").reverse().join(".")})`, -share);
         continue;
       }
       quarterRates(total).forEach((rate, i) => {
         const due = `${y}-${QUARTER_DUE[i]}`;
-        if (due >= chargeStart) add(due, `${label} (${i + 1}. Rate)`, -rate);
+        if (due >= chargeStart) add("municipal", due, `${label} (${i + 1}. Rate)`, -rate);
       });
     }
   }
 
   // Eigene laufende Kosten anteilig je Monat
   const own = property.maintenanceAnnual + property.managementAnnual + property.otherCostsAnnual;
-  if (own) for (const m of months) add(`${m}-01`, "eigene Kosten (anteilig)", -own / 12);
+  if (own) for (const m of months) add("own", `${m}-01`, "eigene Kosten (anteilig)", -own / 12);
 
   // Kreditraten ab dem Monat nach der Auszahlung
   for (const l of property.loans) {
     const first = l.startDate ? addMonths(l.startDate.slice(0, 7) + "-01", 1) : start;
-    for (const m of months) if (`${m}-01` >= first) add(`${m}-01`, `Rate ${l.lender || "Darlehen"}`, -l.monthlyPayment);
+    for (const m of months) if (`${m}-01` >= first) add("loan", `${m}-01`, `Rate ${l.lender || "Darlehen"}`, -l.monthlyPayment);
   }
 
   // Entnahmen am jeweiligen Tag
@@ -113,16 +116,17 @@ export function accountLedger(property: Property, data: AppData, until: ISODate)
       const monthEnd = fromDay(toDay(addMonths(`${m}-01`, 1)) - 1);
       const day = `${m}-${w.from.slice(8, 10)}`;
       const due = day > monthEnd ? monthEnd : day;
-      if (due >= w.from && (!w.to || due <= w.to)) add(due, w.note || "Entnahme", -w.monthly);
+      if (due >= w.from && (!w.to || due <= w.to)) add("withdrawal", due, w.note || "Entnahme", -w.monthly);
     }
   }
 
-  // Ergebnisse freigegebener Mieterabrechnungen
+  // Ergebnisse freigegebener Mieterabrechnungen: am Tag des Zahlungseingangs, sonst bei Freigabe
+  const ownTenants = new Set(data.tenants.filter((t) => !t.landlord).map((t) => t.id));
   for (const st of data.statements.filter((s) => s.propertyId === property.id)) {
     for (const [tenantId, rel] of Object.entries(st.releases)) {
       const r = releasedTenant(st, tenantId);
-      if (!r) continue;
-      add(rel.releasedAt.slice(0, 10), `${r.result.balance >= 0 ? "Nachzahlung" : "Guthaben"} ${r.result.tenant.name} ${st.periodStart.slice(0, 4)}`, r.result.balance);
+      if (!r || !ownTenants.has(tenantId)) continue;
+      add("result", st.settled?.[tenantId] ?? rel.releasedAt.slice(0, 10), `${r.result.balance >= 0 ? "Nachzahlung" : "Guthaben"} ${r.result.tenant.name} ${st.periodStart.slice(0, 4)}`, r.result.balance);
     }
   }
 

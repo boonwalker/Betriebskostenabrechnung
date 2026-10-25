@@ -159,6 +159,18 @@ export interface LeaseAgreement {
   paymentTerm: "30days" | "endOfNextMonth";
 }
 
+/** Grundlagen für eine Mieterhöhung bis zur ortsüblichen Vergleichsmiete (§ 558 BGB) */
+export interface RentReview {
+  /** ortsübliche Vergleichsmiete netto kalt je m² (z. B. Mietspiegel-Mittelwert) */
+  comparableRentPerSqm: number | null;
+  /** Begründungsmittel, z. B. „Mietspiegel der Stadt Heinsberg 2025, Feld B3“ */
+  source: string;
+  /** Kappungsgrenze in % für drei Jahre: 20, in Gebieten mit Verordnung 15 */
+  capPercent: 15 | 20;
+  /** Staffel- oder Indexmiete vereinbart – dann keine Erhöhung nach § 558 */
+  excluded?: boolean;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -178,6 +190,8 @@ export interface Tenant {
   landlord?: Landlord | null;
   /** Anrede im Anschreiben: true = du, sonst Sie */
   informal?: boolean;
+  /** Angaben zur Prüfung einer Mieterhöhung nach § 558 BGB */
+  rentReview?: RentReview;
 }
 
 /**
@@ -259,11 +273,23 @@ export interface Statement {
   status: "draft" | "partial" | "released";
   /** Freigaben je Mietverhältnis (Mieter-ID) – eingefrorener Stand, spätere Datenänderungen ändern ihn nicht */
   releases: Record<string, TenantRelease>;
+  /** Zustellung des Anschreibens je Mieter – ab Zugang laufen Zahlungsfrist und Einwendungsfrist */
+  delivery?: Record<string, Delivery>;
+  /** Nachzahlung eingegangen bzw. Guthaben ausgezahlt am (je Mieter) */
+  settled?: Record<string, ISODate>;
   createdAt: string;
 }
 
 /** heating = Wärmezähler/Heizkostenverteiler, water = Warmwasser, coldWater = Kaltwasser (m³) */
 export type MeterKind = "heating" | "water" | "coldWater";
+
+export type DeliveryMethod = "brief" | "einwurf" | "einschreiben" | "persoenlich" | "email";
+
+export interface Delivery {
+  /** Tag des Zugangs beim Mieter */
+  date: ISODate;
+  method: DeliveryMethod;
+}
 
 export interface TenantRelease {
   releasedAt: string;

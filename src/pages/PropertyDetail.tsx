@@ -11,6 +11,8 @@ import { ensureStatement, missingInfo, PROPERTY_TYPE_LABELS, rentAt, uid, warmRe
 import type { EconomicPlan, Property, Tenant, WegAnnualStatement } from "../lib/types";
 import { wealthSeries, type WealthSeries } from "../lib/wealth";
 import { accountLedger } from "../lib/account";
+import { anlageV, anlageVYears } from "../lib/anlageV";
+import { CopyTextModal } from "../components/CopyText";
 import { planCheckpoints, planSplit, summarizeAnnual, summarizePlan } from "../lib/weg";
 import { Checkpoints } from "../components/Charts";
 import WegImport from "../components/WegImport";
@@ -409,26 +411,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
           </p>
         </div>
 
-        <div className="card" style={{ marginBottom: 0 }}>
-          <h2>Steuer – Anlage V (Schätzung)</h2>
-          <table className="compact fin-table">
-            <tbody>
-              <Line label="Mieteinnahmen (kalt)" value={m.annualColdRent} />
-              <Line label={`− AfA ${formatPct(m.depreciationRate)} auf Gebäudeanteil`} value={-m.annualDepreciation} />
-              <Line label="− Schuldzinsen" value={-m.annualInterest} />
-              <Line
-                label="− Verwaltung, Instandhaltung, Sonstiges"
-                value={-(m.nonAllocableCosts - p.hausgeldReserveMonthly * 12)}
-              />
-              <Line label={m.taxableResult >= 0 ? "= Überschuss" : "= Verlust (mindert dein Einkommen)"} value={m.taxableResult} sum />
-              <Line label={`Steuerwirkung bei ${formatNum(taxRate)} % Grenzsteuersatz`} value={-m.taxEffect} />
-            </tbody>
-          </table>
-          <p className="hint" style={{ marginTop: 8 }}>
-            Vereinfachte Jahresbetrachtung. Die Erhaltungsrücklage ist erst bei Verwendung abziehbar. Den Steuersatz änderst du in den{" "}
-            <a href="#/einstellungen">Einstellungen</a>. Keine Steuerberatung.
-          </p>
-        </div>
+        <AnlageVCard data={data} property={p} taxRate={taxRate} />
       </div>
 
       {p.loans.length > 0 && (
@@ -530,11 +513,14 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
 }
 
 
-function Line({ label, value, sum }: { label: string; value: number; sum?: boolean }) {
+function Line({ label, value, sum, note, cents }: { label: string; value: number; sum?: boolean; note?: string; cents?: boolean }) {
   return (
     <tr className={sum ? "sum" : undefined}>
-      <td>{label}</td>
-      <td className="num">{formatEUR0(value === 0 ? 0 : value) /* kein „-0 €“ */}</td>
+      <td>
+        {label}
+        {note && <div className="small muted">{note}</div>}
+      </td>
+      <td className="num">{(cents ? formatEUR : formatEUR0)(value === 0 ? 0 : value) /* kein „-0 €“ */}</td>
     </tr>
   );
 }
@@ -585,6 +571,71 @@ function CostOverview({ data, property }: { data: PageProps["data"]; property: P
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+/** Vorschlag für die Anlage V eines Jahres – Einnahmen und Werbungskosten aus den erfassten Daten */
+function AnlageVCard({ data, property, taxRate }: { data: PageProps["data"]; property: Property; taxRate: number }) {
+  const today = todayISO();
+  const years = anlageVYears(property, today);
+  const [year, setYear] = useState(() => years.find((y) => y < Number(today.slice(0, 4))) ?? years[0]);
+  const [copy, setCopy] = useState(false);
+  const av = year ? anlageV(property, data, year) : null;
+  if (!av) return null;
+  const text = [
+    `Anlage V ${av.year} – ${property.name}, ${property.address}${av.from.slice(5) !== "01-01" ? ` (ab ${formatDate(av.from)})` : ""}`,
+    "",
+    "Einnahmen",
+    ...av.income.map((l) => `  ${l.label}: ${formatEUR(l.amount)}${l.note ? ` (${l.note})` : ""}`),
+    `  Summe: ${formatEUR(av.incomeTotal)}`,
+    "",
+    "Werbungskosten",
+    ...av.costs.map((l) => `  ${l.label}: ${formatEUR(l.amount)}${l.note ? ` (${l.note})` : ""}`),
+    `  Summe: ${formatEUR(av.costsTotal)}`,
+    "",
+    `${av.result >= 0 ? "Überschuss" : "Verlust"}: ${formatEUR(av.result)}`,
+    ...(av.hints.length ? ["", ...av.hints.map((h) => `Hinweis: ${h}`)] : []),
+  ].join("\n");
+  return (
+    <div className="card" style={{ marginBottom: 0 }} id="anlage-v">
+      <div className="row" style={{ marginBottom: 8 }}>
+        <h2 style={{ margin: 0 }}>Steuer – Anlage V</h2>
+        <span className="spacer" />
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Jahr">
+          {years.map((y) => (
+            <option key={y} value={y}>{y}{y === Number(today.slice(0, 4)) ? " (bisher geplant)" : ""}</option>
+          ))}
+        </select>
+      </div>
+      <table className="compact fin-table">
+        <tbody>
+          {av.income.map((l) => (
+            <Line key={l.label} label={l.label} note={l.note} value={l.amount} cents />
+          ))}
+          <Line label="= Einnahmen" value={av.incomeTotal} sum cents />
+          {av.costs.map((l) => (
+            <Line key={l.label} label={`− ${l.label}`} note={l.note} value={-l.amount} cents />
+          ))}
+          <Line label={av.result >= 0 ? "= Überschuss" : "= Verlust (mindert dein Einkommen)"} value={av.result} sum cents />
+          <Line label={`Steuerwirkung bei ${formatNum(taxRate)} % Grenzsteuersatz`} value={-(av.result * taxRate) / 100} />
+        </tbody>
+      </table>
+      {av.hints.length > 0 && (
+        <ul className="hint anlage-v-hints">
+          {av.hints.map((h) => (
+            <li key={h}>{h}</li>
+          ))}
+        </ul>
+      )}
+      <div className="row" style={{ marginTop: 8 }}>
+        <p className="hint" style={{ margin: 0, flex: 1 }}>
+          Vorschlag aus deinen Daten {av.from.slice(5) !== "01-01" ? `ab ${formatDate(av.from)} ` : ""}– mit Kontoauszügen, Zinsbescheinigung und WEG-Abrechnung abgleichen. Keine
+          Steuerberatung.
+        </p>
+        <button onClick={() => setCopy(true)}>Als Text</button>
+      </div>
+      {copy && <CopyTextModal title={`Anlage V ${av.year}`} text={text} onClose={() => setCopy(false)} />}
     </div>
   );
 }

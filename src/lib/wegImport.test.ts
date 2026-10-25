@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WegExtraction } from "./extract";
 import { summarizeAnnual, summarizePlan } from "./weg";
-import { annualFromExtraction, planFromExtraction } from "./wegImport";
+import { settlementFromExtraction, annualFromExtraction, planFromExtraction } from "./wegImport";
 
 const row = (label: string, unitAmount: number, extra: Partial<WegExtraction["positions"][number]> = {}) => ({
   label,
@@ -38,6 +38,7 @@ describe("Import aus der KI-Auslese", () => {
       reserveContribution: null,
       annualHausgeld: null,
       monthlyHausgeld: null,
+      settlement: null,
       sheet: null,
       positions: [
         row("Wasser", 60.23, { totalAmount: 828.44, wegKey: "Verbrauch", basisTotal: 478.182, basisShare: 34.766, basisUnit: "cbm" }), row("Abwasser", 143.75), row("Treppenhausreinigung", 126.1), row("Allgemeinstrom", 45.53),
@@ -76,6 +77,7 @@ describe("Import aus der KI-Auslese", () => {
       reserveContribution: null,
       annualHausgeld: 1923.76,
       monthlyHausgeld: 160.31,
+      settlement: null,
       sheet: null,
       positions: [row("Strom Wärmepumpe", 1228.2, { declaredAllocable: "yes" }), row("Erhaltungsrücklage", 695.56, { declaredAllocable: "no", isReserve: true })],
       heating: null,
@@ -85,5 +87,13 @@ describe("Import aus der KI-Auslese", () => {
     const s = summarizePlan(p);
     expect([s.declaredAllocable, s.declaredNonAllocable, s.matchesAnnualHausgeld, s.matchesMonthlyHausgeld]).toEqual([1228.2, 695.56, true, true]);
     expect([p.monthlyReserve, p.monthlyCosts]).toEqual([18.38, 141.94]);
+  });
+
+  it("Abrechnungsspitze: Vorzeichen aus Vorschüssen − Kostenanteil, auch wenn ein Guthaben ohne Minus gedruckt ist", () => {
+    // WE 09, 2025: Kostenanteil 1.547,92 €, Soll-Vorschüsse 1.703,22 €, gedruckt „Abrechnungsspitze (Ergebnis): 155,30 €“
+    expect(settlementFromExtraction({ costShare: 1547.92, advances: 1703.22, printedAmount: 155.3, direction: "unknown", dueDate: null })).toEqual({ amount: 155.3, paidOn: null, due: null });
+    expect(settlementFromExtraction({ costShare: 1800, advances: 1703.22, printedAmount: 96.78, direction: "unknown", dueDate: "2026-07-01" })).toEqual({ amount: -96.78, paidOn: null, due: "2026-07-01" });
+    expect(settlementFromExtraction({ costShare: null, advances: null, printedAmount: 50, direction: "due", dueDate: null })!.amount).toBe(-50);
+    expect(settlementFromExtraction({ costShare: null, advances: null, printedAmount: 50, direction: "unknown", dueDate: null })).toBeNull();
   });
 });

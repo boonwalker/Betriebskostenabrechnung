@@ -56,6 +56,7 @@ export function annualFromExtraction(x: WegExtraction, ctx: Context): WegAnnualS
     managementCostsPlan: x.managementCostsPlan,
     buildingTotal: x.buildingTotal,
     reserveContribution: x.reserveContribution ?? reserveFromPositions,
+    settlement: settlementFromExtraction(x.settlement),
     positions,
     heating: h
       ? {
@@ -111,4 +112,19 @@ export function planFromExtraction(x: WegExtraction, ctx: Context): EconomicPlan
     documents: ctx.documents,
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Abrechnungsspitze aus der Einzelabrechnung. Das Vorzeichen wird aus Vorschüssen − Kostenanteil berechnet,
+ * weil Verwaltungen ein Guthaben oft ohne Minus oder Wort drucken („Abrechnungsspitze: 155,30 €“).
+ * + = Erstattung an dich, − = Nachzahlung an die WEG.
+ */
+export function settlementFromExtraction(x: WegExtraction["settlement"]): WegAnnualStatement["settlement"] {
+  if (!x) return null;
+  let amount: number | null = null;
+  if (x.costShare !== null && x.advances !== null) amount = Math.round((x.advances - x.costShare) * 100) / 100;
+  else if (x.printedAmount !== null && x.direction !== "unknown") amount = Math.abs(x.printedAmount) * (x.direction === "refund" ? 1 : -1);
+  if (amount === null || Math.abs(amount) < 0.005) return null;
+  const due = x.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(x.dueDate) ? x.dueDate : null;
+  return { amount, paidOn: null, due };
 }

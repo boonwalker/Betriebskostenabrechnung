@@ -1,3 +1,4 @@
+import { formatDate } from "../lib/dates";
 import { focusElement } from "../lib/nav";
 import { releaseUnusedBlobs } from "../lib/attachments";
 import PositionsTable, { newPosition } from "../components/PositionsTable";
@@ -145,7 +146,15 @@ export default function WegEditor({ data, update, kind, id }: PageProps & { kind
                     />
                   </label>
                 </div>
-                <span className="small muted">Erscheint am Zahltag im Mietkonto und in der Anlage V dieses Jahres.</span>
+                <span className="small muted">
+                  {!doc.settlement
+                    ? "Wird beim Hochladen der Abrechnung ausgelesen. Erscheint am Zahltag im Mietkonto und in der Anlage V dieses Jahres."
+                    : doc.settlement.paidOn
+                      ? "Im Mietkonto und in der Anlage V am Zahltag gebucht."
+                      : doc.settlement.due
+                        ? `Laut Abrechnung fällig am ${formatDate(doc.settlement.due)} – bis du den Zahltag einträgst, bucht das Mietkonto zu diesem Datum.`
+                        : "Trage den Zahltag ein, sobald das Geld geflossen ist – erst dann erscheint die Spitze im Mietkonto und in der Anlage V."}
+                </span>
               </div>
             </>
           ) : (

@@ -79,9 +79,10 @@ export function accountLedger(property: Property, data: AppData, until: ISODate)
     }
 
     // Abrechnungsspitzen aus den WEG-Jahresabrechnungen am Tag der Zahlung
-    for (const a of data.wegAnnuals.filter((x) => x.propertyId === property.id && x.settlement?.paidOn && x.settlement.amount)) {
+    // ohne erfassten Zahltag: zur Fälligkeit laut Abrechnung
+    for (const a of data.wegAnnuals.filter((x) => x.propertyId === property.id && (x.settlement?.paidOn || x.settlement?.due) && x.settlement.amount)) {
       const s = a.settlement!;
-      add("wegSettlement", s.paidOn!, `Abrechnungsspitze WEG ${a.year} (${s.amount > 0 ? "Erstattung" : "Nachzahlung"})`, s.amount);
+      add("wegSettlement", (s.paidOn ?? s.due)!, `Abrechnungsspitze WEG ${a.year} (${s.amount > 0 ? "Erstattung" : "Nachzahlung"})`, s.amount);
     }
 
     // Grundsteuer und Müll laut Bescheid des jeweiligen Jahres als gemeinsame Quartalsrate, ab dem Jahr, ab dem du sie trägst

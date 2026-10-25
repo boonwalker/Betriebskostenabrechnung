@@ -148,9 +148,9 @@ export function anlageV(property: Property, data: AppData, year: number): Anlage
         note: `${labels.join(", ")}, gezahlt im Jahr ${year} – ${settlement > 0 ? "erhöht" : "mindert"} die Werbungskosten`,
       });
     }
-    const openSettlement = data.wegAnnuals.find((a) => a.propertyId === property.id && a.year === year - 1 && !a.settlement?.paidOn);
+    const openSettlement = data.wegAnnuals.find((a) => a.propertyId === property.id && a.year === year - 1 && !a.settlement?.paidOn && !a.settlement?.due);
     if (openSettlement)
-      hints.push(`Abrechnungsspitze der WEG-Abrechnung ${year - 1} noch nicht erfasst – Erstattungen und Nachzahlungen zählen im Jahr der Zahlung (WEG-Abrechnung → Abrechnungsspitze).`);
+      hints.push(`Abrechnungsspitze bzw. Zahltag der WEG-Abrechnung ${year - 1} noch nicht erfasst – Erstattungen und Nachzahlungen zählen im Jahr der Zahlung (WEG-Abrechnung → Abrechnungsspitze).`);
   }
   const municipal = out("municipal");
   if (municipal) {

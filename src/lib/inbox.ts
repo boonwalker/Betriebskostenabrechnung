@@ -137,7 +137,15 @@ async function route(
     if (kind === "annual") {
       const annual = { ...annualFromExtraction(x, ctx), sourcePages: doc.pages, heatingPages: x.heating ? (x.heating.pages.length ? x.heating.pages : x.heating.page ? [x.heating.page] : []) : [] };
       const same = (w: { propertyId: string; unitId: string; year: number }) => w.propertyId === property.id && w.unitId === annual.unitId && w.year === annual.year;
-      if (snapshot.wegAnnuals.some(same)) return { year: annual.year, result: `Für ${annual.year} gibt es schon eine WEG-Jahresabrechnung – nur abgelegt.` };
+      const existing = snapshot.wegAnnuals.find(same);
+      if (existing) {
+        // Abrechnungsspitze nachtragen, falls sie noch fehlt
+        if (!existing.settlement && annual.settlement) {
+          update((d) => ({ ...d, wegAnnuals: d.wegAnnuals.map((w) => (w.id === existing.id && !w.settlement ? { ...w, settlement: annual.settlement } : w)) }));
+          return { year: annual.year, result: `Abrechnungsspitze ${annual.year} ergänzt (${annual.settlement.amount > 0 ? "Erstattung" : "Nachzahlung"} ${Math.abs(annual.settlement.amount).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €) – sonst nur abgelegt.` };
+        }
+        return { year: annual.year, result: `Für ${annual.year} gibt es schon eine WEG-Jahresabrechnung – nur abgelegt.` };
+      }
       const extra = ensure(annual.year);
       update((d) => (d.wegAnnuals.some(same) ? d : autoAttach({ ...d, wegAnnuals: [...d.wegAnnuals, annual] }, property.id, annual.year, "heating", heatingSourcePages(annual))));
       // Einzelabrechnung für den Mieter (ohne nicht umlagefähige Zeilen) als erste Anlage

@@ -354,6 +354,15 @@ const WegSchema = z.object({
   reserveContribution: z.number().nullable(),
   annualHausgeld: z.number().nullable(),
   monthlyHausgeld: z.number().nullable(),
+  settlement: z
+    .object({
+      costShare: z.number().nullable(),
+      advances: z.number().nullable(),
+      printedAmount: z.number().nullable(),
+      direction: z.enum(["refund", "due", "unknown"]),
+      dueDate: z.string().nullable(),
+    })
+    .nullable(),
   positions: z.array(
     z.object({
       label: z.string(),
@@ -423,6 +432,7 @@ const WEG_JSON_SCHEMA = {
     "reserveContribution",
     "annualHausgeld",
     "monthlyHausgeld",
+    "settlement",
     "positions",
     "heating",
     "sheet",
@@ -440,6 +450,28 @@ const WEG_JSON_SCHEMA = {
     reserveContribution: { ...nullableNumber, description: "Zuführung zur Erhaltungsrücklage der Wohnung" },
     annualHausgeld: { ...nullableNumber, description: "nur Wirtschaftsplan: Hausgeld pro Jahr" },
     monthlyHausgeld: { ...nullableNumber, description: "nur Wirtschaftsplan: Hausgeld pro Monat" },
+    settlement: {
+      description: "nur Jahresabrechnung: Ergebnis der Einzelabrechnung (Abrechnungsspitze), sonst null",
+      anyOf: [
+        { type: "null" },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["costShare", "advances", "printedAmount", "direction", "dueDate"],
+          properties: {
+            costShare: { ...nullableNumber, description: "„Ihr Kostenanteil“ bzw. Summe der Kosten der Wohnung, auf die das Ergebnis berechnet wird" },
+            advances: { ...nullableNumber, description: "„Ihre (Soll-)Vorschüsse“ / Hausgeldvorauszahlungen, die davon abgezogen werden" },
+            printedAmount: { ...nullableNumber, description: "Abrechnungsspitze/Ergebnis so wie gedruckt, mit Vorzeichen falls gedruckt" },
+            direction: {
+              type: "string",
+              enum: ["refund", "due", "unknown"],
+              description: "refund = Guthaben/Erstattung an den Eigentümer, due = Nachzahlung an die WEG; nur wenn das Dokument es ausdrücklich sagt, sonst unknown",
+            },
+            dueDate: { type: ["string", "null"], description: "Fälligkeit bzw. Auszahlungs-/Einzugstermin als YYYY-MM-DD, nur wenn genannt" },
+          },
+        },
+      ],
+    },
     positions: {
       type: "array",
       items: {
@@ -574,7 +606,7 @@ Regeln:
 - unitAmount ist immer der Anteil der Wohnung, totalAmount der Gesamtbetrag der Gemeinschaft (falls ausgewiesen).
 - Deutsche Zahlen: „1.468,43“ = 1468.43.
 - Die Zuführung zur Erhaltungsrücklage ist bei Jahresabrechnungen meist nicht Teil der Bewirtschaftungskosten: Erfasse sie in reserveContribution und NICHT als Position. Im Wirtschaftsplan ist sie eine Position (isReserve = true).
-- Über-/Unterdeckung, Abrechnungsspitze, Hausgeldzahlungen und Salden sind keine Kostenpositionen – nicht als Position erfassen.
+- Über-/Unterdeckung, Abrechnungsspitze, Hausgeldzahlungen und Salden sind keine Kostenpositionen – nicht als Position erfassen. Das Ergebnis der Einzelabrechnung (Kostenanteil, Vorschüsse, Abrechnungsspitze, ggf. Fälligkeit) gehört in settlement.
 - Heizkosten: Ist eine Heizkostenabrechnung enthalten, erfasse in heating den Anteil der Wohnung, die Bestandteile (Grund-/Verbrauchskosten Heizung und Warmwasser), Verbräuche und ggf. CO2-Angaben. Die Gesamtsumme der Heizkosten der Wohnung erscheint zusätzlich als Position, wenn sie in der Einzelabrechnung als Zeile steht.
 - Übernimm zu jeder Position den Verteilerschlüssel mit Basis (z. B. 49 von 1000 MEA, 1 von 11 WE, 34,766 von 478,182 cbm) und Bemerkungen (z. B. „Rg. v. 19.12.23 und 28.11.24“), falls angegeben. Aus Gesamtdarstellungen der Einnahmen/Ausgaben übernimm nur Bemerkungen zu den Positionen der Einzelabrechnung, keine zusätzlichen Positionen.
 - Übersichten mit Daten anderer Eigentümer (Abrechnungsergebnis aller Wohnungen, Rücklagenanteile) nicht erfassen – nur die angegebene Wohnung.

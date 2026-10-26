@@ -9,6 +9,7 @@ import { COST_CATEGORIES } from "../lib/betrkv";
 import { ALLOCATION_RULE_LABELS, defaultLease } from "../lib/lease";
 import type { AppData, LeaseAgreement, RentPeriod, Tenant } from "../lib/types";
 import { askConfirm } from "../components/dialog";
+import { LeaseUploadSection } from "../components/LeaseDocuments";
 
 export function newTenant(data: AppData, propertyId?: string, unitId?: string): Tenant | null {
   const p = data.properties.find((x) => x.id === propertyId) ?? data.properties[0];
@@ -32,6 +33,10 @@ export function saveTenant(update: PageProps["update"], t: Tenant) {
   update((d) => ({
     ...d,
     tenants: d.tenants.some((x) => x.id === t.id) ? d.tenants.map((x) => (x.id === t.id ? t : x)) : [...d.tenants, t],
+    // ohne Namen hochgeladene Verträge nach dem Mieter benennen
+    documents: d.documents?.map((doc) =>
+      t.leaseDocIds?.includes(doc.id) && /^(Nachtrag zum )?Mietvertrag$/.test(doc.title.trim()) && t.name.trim() ? { ...doc, title: `${doc.title.trim()} ${t.name.trim()}` } : doc,
+    ),
   }));
 }
 
@@ -114,6 +119,7 @@ export default function Tenants({ data, update, openTenant }: PageProps & { open
       {editing && (
         <TenantForm
           data={data}
+          update={update}
           initial={editing}
           onSave={(t) => {
             saveTenant(update, t);
@@ -209,8 +215,23 @@ export function TenantTable({ data, tenants, onEdit, onRemove }: { data: AppData
   );
 }
 
-export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; initial: Tenant; onSave: (t: Tenant) => void; onClose: () => void }) {
+export function TenantForm({
+  data,
+  update,
+  initial,
+  onSave,
+  onClose,
+}: {
+  data: AppData;
+  /** zum Hinterlegen des Mietvertrags in der Belegablage */
+  update?: PageProps["update"];
+  initial: Tenant;
+  onSave: (t: Tenant) => void;
+  onClose: () => void;
+}) {
   const [t, setT] = useState(initial);
+  const isNew = !data.tenants.some((x) => x.id === initial.id);
+  const leaseUpload = update && <LeaseUploadSection data={data} update={update} tenant={t} isNew={isNew} onChange={setT} />;
   const property = data.properties.find((p) => p.id === t.propertyId);
   const history = [...t.rentHistory].sort((a, b) => a.validFrom.localeCompare(b.validFrom));
   const setRent = (id: string, patch: Partial<RentPeriod>) => setT({ ...t, rentHistory: t.rentHistory.map((r) => (r.id === id ? { ...r, ...patch } : r)) });
@@ -219,6 +240,7 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
   return (
     <Modal title={initial.name ? "Mieter bearbeiten" : "Neuer Mieter"} onClose={onClose}>
       <div className="stack">
+        {isNew && leaseUpload}
         <div className="grid">
           <label className="field">
             Name
@@ -338,6 +360,8 @@ export function TenantForm({ data, initial, onSave, onClose }: { data: AppData; 
             Wenn Betriebs- und Heizkosten gemeinsam vorausgezahlt werden, trage den Gesamtbetrag unter „BK-Vorausz.“ ein.
           </p>
         </div>
+
+        {!isNew && leaseUpload}
 
         <div id="vertrag">
           <LeaseSection lease={t.lease ?? null} onChange={(lease) => setT({ ...t, lease })} />

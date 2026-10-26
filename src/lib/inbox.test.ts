@@ -110,7 +110,9 @@ describe("Belegeingang", () => {
     const lease = data.documents!.find((d) => d.kind === "lease")!;
     expect(lease.status).toBe("done");
     expect(lease.result).toContain("Mietvertrag von Mieter WE 09");
-    expect(lease.link).toBe("#/objekte/we09-p?t=we09-t");
+    expect(lease.link).toBe("#/mieter?t=we09-t");
+    // der Vertrag ist im Mieterprofil hinterlegt
+    expect(data.tenants.find((t) => t.id === "we09-t")!.leaseDocIds).toEqual([lease.id]);
   });
 
   it("legt aus einem Mietvertrag Mieter und fehlende Einheit an", async () => {

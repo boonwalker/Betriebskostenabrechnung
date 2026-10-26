@@ -7,6 +7,20 @@ import { releasedTenant } from "../lib/release";
 import type { AppData, Property, Tenant } from "../lib/types";
 import { Balance, Modal, type PageProps } from "./ui";
 import { RentIncreaseSection } from "./RentIncrease";
+import { LeaseDocumentList, leaseDocuments } from "./LeaseDocuments";
+import { ALLOCATION_RULE_LABELS } from "../lib/lease";
+
+/** 1, 2, 3, 5, 6 → „1–3, 5, 6“ */
+const compactNumbers = (ns: number[]) =>
+  ns
+    .reduce<number[][]>((runs, n) => {
+      const last = runs[runs.length - 1];
+      if (last && n === last[last.length - 1] + 1) last.push(n);
+      else runs.push([n]);
+      return runs;
+    }, [])
+    .map((r) => (r.length > 2 ? `${r[0]}–${r[r.length - 1]}` : r.join(", ")))
+    .join(", ");
 
 const AVATAR_COLORS = ["#2f6b73", "#1f3347", "#4f7d5c", "#7a5c8f", "#9a6b3a", "#3d6f9e"];
 
@@ -157,6 +171,7 @@ export function TenantProfile({
           return res ? [{ s, balance: res.balance, released: !!released }] : [];
         })
     : [];
+  const leaseDocs = leaseDocuments(data, tenant);
   const address = former ? tenant.mailingAddress.trim() : tenant.mailingAddress.trim() || property?.address;
 
   return (
@@ -226,6 +241,32 @@ export function TenantProfile({
               </li>
             ))}
           </ul>
+        </section>
+        <section className="profile-lease">
+          <h3>Mietvertrag</h3>
+          {tenant.lease ? (
+            <dl className="profile-facts">
+              <dt>Fundstelle</dt>
+              <dd>{tenant.lease.reference || "–"}</dd>
+              <dt>Betriebskosten</dt>
+              <dd>
+                § 2 Nr. {compactNumbers(tenant.lease.agreedCategories)} BetrKV
+                {tenant.lease.otherCosts.length > 0 && <span className="small muted"> + {tenant.lease.otherCosts.join(", ")}</span>}
+              </dd>
+              <dt>Umlage</dt>
+              <dd>{ALLOCATION_RULE_LABELS[tenant.lease.allocationRule]}</dd>
+              <dt>Fälligkeit</dt>
+              <dd>{tenant.lease.paymentTerm === "30days" ? "30 Tage nach Zugang" : "Ende des Folgemonats nach Zugang"}</dd>
+            </dl>
+          ) : (
+            <p className="muted small" style={{ margin: 0 }}>Betriebskostenvereinbarung noch nicht erfasst.</p>
+          )}
+          <LeaseDocumentList docs={leaseDocs} />
+          {leaseDocs.length === 0 && (
+            <button className="ghost small" style={{ marginTop: 6, paddingLeft: 0 }} onClick={() => onEdit("mietvertrag")}>
+              📄 Originalvertrag hinterlegen
+            </button>
+          )}
         </section>
         <section>
           <h3>Betriebskostenabrechnungen</h3>

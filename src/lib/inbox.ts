@@ -27,7 +27,7 @@ type Update = (fn: (d: AppData) => AppData) => void;
 const patchDoc = (update: Update, id: string, patch: Partial<StoredDocument>) =>
   update((d) => ({ ...d, documents: (d.documents ?? []).map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
 
-async function pageFiles(pages: DocPage[]): Promise<File[]> {
+export async function pageFiles(pages: DocPage[]): Promise<File[]> {
   return Promise.all(
     pages.map(async (p, i) => {
       const blob = await getBlob(p.blobId);
@@ -270,24 +270,8 @@ function routeLease(
   const byStart = start ? inUnit.find((t) => t.moveIn === start) : doc.year ? inUnit.find((t) => t.moveIn.startsWith(String(doc.year))) : undefined;
   const existing = byName ?? byStart;
 
-  const period = (validFrom: string): RentPeriod => ({
-    ...newRentPeriod(validFrom),
-    coldRent: x.coldRent ?? 0,
-    surcharge: x.surcharge || undefined,
-    prepaymentOperating: x.prepaymentOperating ?? 0,
-    prepaymentHeating: x.prepaymentHeating ?? 0,
-  });
-  const lease: LeaseAgreement | null =
-    x.agreedCategories.length || x.otherCosts.length
-      ? {
-          reference: x.reference || doc.title,
-          agreedCategories: [...new Set(x.agreedCategories)].sort((a, b) => a - b),
-          otherCosts: x.otherCosts,
-          allocationRule: x.allocationRule === "weg" ? "weg" : "consumption_mea",
-          propertyTaxIndividual: x.propertyTaxIndividual,
-          paymentTerm: x.paymentTerm === "30days" ? "30days" : "endOfNextMonth",
-        }
-      : null;
+  const period = (validFrom: string) => rentPeriodFromLease(x, validFrom);
+  const lease = leaseFromExtraction(x, doc.title);
 
   if (existing) {
     const done: string[] = [];
@@ -307,10 +291,12 @@ function routeLease(
       patch.deposit = x.deposit;
       done.push("Kaution");
     }
-    if (done.length) update((d) => ({ ...d, tenants: d.tenants.map((t) => (t.id === existing.id ? { ...t, ...patch } : t)) }));
+    // Vertrag im Mieterprofil hinterlegen
+    if (!existing.leaseDocIds?.includes(doc.id)) patch.leaseDocIds = [...(existing.leaseDocIds ?? []), doc.id];
+    if (Object.keys(patch).length) update((d) => ({ ...d, tenants: d.tenants.map((t) => (t.id === existing.id ? { ...t, ...patch } : t)) }));
     return {
       result: `Mietvertrag von ${existing.name}${done.length ? ` – ergänzt: ${done.join(", ")}` : " – bereits erfasste Angaben bleiben unverändert"}. Bitte im Mieterprofil prüfen.`,
-      link: `#/objekte/${property.id}?t=${existing.id}`,
+      link: `#/mieter?t=${existing.id}`,
       year: Number((start ?? existing.moveIn).slice(0, 4)),
     };
   }
@@ -334,6 +320,7 @@ function routeLease(
     deposit: x.deposit ?? 0,
     rentHistory: [period(moveIn)],
     lease,
+    leaseDocIds: [doc.id],
   };
   update((d) => ({
     ...d,
@@ -344,9 +331,34 @@ function routeLease(
     result:
       `Mieter ${tenant.name} angelegt${newUnit ? `, Einheit „${newUnit.name}“ im Objekt ergänzt` : ""}` +
       ` – Miete, Vorauszahlungen und vereinbarte Betriebskosten aus dem Vertrag übernommen. Bitte im Mieterprofil prüfen${newUnit && !newUnit.area ? " und die Wohnfläche ergänzen" : ""}.`,
-    link: `#/objekte/${property.id}?t=${tenant.id}`,
+    link: `#/mieter?t=${tenant.id}`,
     year: Number(moveIn.slice(0, 4)),
   };
+}
+
+/** Mietstand aus dem ausgelesenen Mietvertrag */
+export function rentPeriodFromLease(x: LeaseExtraction, validFrom: string): RentPeriod {
+  return {
+    ...newRentPeriod(validFrom),
+    coldRent: x.coldRent ?? 0,
+    surcharge: x.surcharge || undefined,
+    prepaymentOperating: x.prepaymentOperating ?? 0,
+    prepaymentHeating: x.prepaymentHeating ?? 0,
+  };
+}
+
+/** Betriebskostenvereinbarung aus dem ausgelesenen Mietvertrag (null, wenn keine Kostenarten genannt sind) */
+export function leaseFromExtraction(x: LeaseExtraction, fallbackReference: string): LeaseAgreement | null {
+  return x.agreedCategories.length || x.otherCosts.length
+    ? {
+        reference: x.reference || fallbackReference,
+        agreedCategories: [...new Set(x.agreedCategories)].sort((a, b) => a - b),
+        otherCosts: x.otherCosts,
+        allocationRule: x.allocationRule === "weg" ? "weg" : "consumption_mea",
+        propertyTaxIndividual: x.propertyTaxIndividual,
+        paymentTerm: x.paymentTerm === "30days" ? "30days" : "endOfNextMonth",
+      }
+    : null;
 }
 
 function statementLink(d: AppData, propertyId: string, year: number): string | undefined {

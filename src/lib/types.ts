@@ -201,6 +201,8 @@ export interface Tenant {
   informal?: boolean;
   /** Angaben zur Prüfung einer Mieterhöhung nach § 558 BGB */
   rentReview?: RentReview;
+  /** Mietvertrag und Nachträge als Dokumente der Belegablage (StoredDocument.id) */
+  leaseDocIds?: string[];
 }
 
 /**

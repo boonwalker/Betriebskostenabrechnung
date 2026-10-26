@@ -502,6 +502,7 @@ export default function PropertyDetail({ data, update, propertyId }: PageProps &
       {editingTenant && (
         <TenantForm
           data={data}
+          update={update}
           initial={editingTenant}
           onClose={closeTenant}
           onSave={(t) => {
